@@ -25,7 +25,7 @@ in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 | `onForestMuted` | `#C9D8BE` | Secondary text on forest (6.5:1) |
 | `urgentBg` / `urgentInk` | `#FBE3CF` / `#8A3B0E` | Expires today/tomorrow, spoilage flag (6.3:1) |
 | `noteYellow` / `noteLime` | `#FFF6C7` / `#E4F2C4` | Request sticky notes |
-| `scrim` | `#4C5A4F` | Behind sheets (mockups show it solid; use ~60% `ink` on device) |
+| `scrim` | `#4C5A4F` | Behind sheets. The mockups show it solid; on device it is `ink` at 60% (light) or black at 60% (dark). See the dark table |
 | `chartSaved` | `#277338` | Chart: used + donated |
 | `chartWasted` | `#E8A04C` | Chart: thrown out, waste-reason bars |
 
@@ -56,6 +56,10 @@ and its `onForest` text turns dark.
 | `urgentBg` / `urgentInk` | `#FBE3CF` / `#8A3B0E` | `#4A2614` / `#FFB98A` |
 | `noteYellow` / `noteLime` | `#FFF6C7` / `#E4F2C4` | `#3A3720` / `#2A3A1F` |
 | `chartSaved` / `chartWasted` | `#277338` / `#E8A04C` | `#24783D` / `#C6802F` |
+| `scrim` (behind sheets) | `#13261A` at 60% | `#000000` at 60% |
+
+The dark scrim is black, not dark `ink`: a light-ink scrim would *brighten* the content behind a
+sheet in dark mode. This is the one place pure black is allowed.
 
 Dark contrast was computed, not eyeballed. Ink on ground is 15.2:1. Muted on surface is 6.9:1.
 Tab-inactive on surface is 5.9:1. Forest on surface is 9.9:1. onForest on forest is 9.9:1. Urgent

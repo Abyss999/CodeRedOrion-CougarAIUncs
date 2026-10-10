@@ -16,6 +16,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      # On first init the Timescale image restarts postgres once after tuning;
+      # without a grace period that restart reads as a failed dependency.
+      start_period: 30s
 
   api:
     build: ./backend
