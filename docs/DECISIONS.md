@@ -21,7 +21,7 @@ Newest first. Each entry: date, decision, why, alternatives considered.
   generated and gitignored. *Why:* agents can't safely hand-edit `.pbxproj`, and it merges badly
   across parallel branches.
 - **iOS builds and tests in CI on macOS runners** (`.github/workflows/ios.yml`), free for this
-  public repo — parked in `ci/github-workflows/` until a token with the Workflows permission moves them into `.github/workflows/`. *Why:* gives iOS QA a reproducible gate that doesn't depend on whose Mac is open.
+  public repo. Backend and ML tests run in CI too (`backend.yml`, `ml.yml`). *Why:* gives iOS QA a reproducible gate that doesn't depend on whose Mac is open.
 - **ML training/inference runs off-box** (Colab / GPU), behind `ML_SERVICE_URL`, with a
   **Gemini-vision fallback** in the backend. *Why:* no GPU on the dev server; the demo must not
   depend on a GPU being up.

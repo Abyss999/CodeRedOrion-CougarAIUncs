@@ -17,7 +17,7 @@ orchestrator folds results in here.
 - Impact endpoint matches a hand-computed fixture.
 - Gemini and ML service are stubbed in unit tests; one opt-in live test each.
 
-### iOS QA (`ios/Tests/`, XCTest + XCUITest, CI on macOS)
+### iOS QA (`ios/Tests/`, XCTest + XCUITest, CI on macOS via `.github/workflows/ios.yml`)
 - Flows: sign-in, add food, remove food via the 3-option sheet (incl. waste reason), Social tab,
   Impact Dashboard.
 - App builds cleanly (zero errors); screens match approved designs in `docs/design/`.
