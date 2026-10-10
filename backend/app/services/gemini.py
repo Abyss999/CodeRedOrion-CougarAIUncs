@@ -5,7 +5,7 @@ import json
 
 from flask import current_app
 
-from ..models import CATEGORIES
+from ..models import CATEGORIES, FOOD_GROUPS
 
 
 class UpstreamError(Exception):
@@ -16,7 +16,7 @@ def is_configured() -> bool:
     return bool(current_app.config.get("GEMINI_API_KEY"))
 
 
-def _generate(contents, schema_hint: str):
+def _generate(contents, schema_hint: str, response_schema=None):
     key = current_app.config.get("GEMINI_API_KEY")
     model = current_app.config.get("GEMINI_MODEL")
     if not key or not model:
@@ -30,7 +30,8 @@ def _generate(contents, schema_hint: str):
             model=model,
             contents=contents,
             config=types.GenerateContentConfig(
-                response_mime_type="application/json", system_instruction=schema_hint),
+                response_mime_type="application/json", system_instruction=schema_hint,
+                **({"response_schema": response_schema} if response_schema else {})),
         )
         return json.loads(resp.text)
     except UpstreamError:
@@ -40,8 +41,10 @@ def _generate(contents, schema_hint: str):
 
 
 _ITEM_SCHEMA = (
-    "Return JSON: a list of objects {name:str, category:one of %s, storage:fridge|pantry|freezer, "
-    "quantity:number, unit:str, est_price:number|null}." % ", ".join(CATEGORIES)
+    "Return JSON: a list of objects {name:str, category:one of %s, food_group:one of %s, "
+    "storage:fridge|pantry|freezer, quantity:number, unit:str, est_price:number|null}. "
+    "food_group is the user-facing grouping (fruit vs veggies, protein, dairy, grains, pantry...)."
+    % (", ".join(CATEGORIES), ", ".join(FOOD_GROUPS))
 )
 
 
@@ -54,20 +57,48 @@ def detect_from_image(image: bytes, mime: str, mode: str) -> list[dict]:
     from google.genai import types
 
     hint = ("Identify the food items in the photo and whether each looks fresh or spoiled. "
-            "Return JSON: a list of {name:str, category:one of %s, confidence:number 0-1, "
-            "freshness:fresh|spoiled}." % ", ".join(CATEGORIES))
+            "Return JSON: a list of {name:str, category:one of %s, food_group:one of %s, "
+            "confidence:number 0-1, freshness:fresh|spoiled}." % (", ".join(CATEGORIES), ", ".join(FOOD_GROUPS)))
     part = types.Part.from_bytes(data=image, mime_type=mime)
     prompt = "Single item close-up." if mode == "single" else "Fridge/pantry shelf photo."
     data = _generate([part, prompt], hint)
     return data if isinstance(data, list) else data.get("candidates", [])
 
 
+_RECIPE_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "minutes": {"type": "integer"},
+            "uses_items": {"type": "array", "items": {"type": "string"}},
+            "missing_items": {"type": "array", "items": {"type": "string"}},
+            "steps": {"type": "array", "items": {"type": "string"}},
+            "macros": {
+                "type": "object",
+                "description": "Estimated nutrition per serving.",
+                "properties": {
+                    "kcal": {"type": "integer"},
+                    "protein_g": {"type": "number"},
+                    "carbs_g": {"type": "number"},
+                    "fat_g": {"type": "number"},
+                },
+                "required": ["kcal", "protein_g", "carbs_g", "fat_g"],
+            },
+        },
+        "required": ["title", "minutes", "uses_items", "missing_items", "steps", "macros"],
+    },
+}
+
+
 def suggest_recipes(items: list[dict], max_results: int, dietary: list[str]) -> list[dict]:
     hint = ("Suggest recipes that use up the soonest-expiring items first. Return JSON: a list of "
-            "{title:str, minutes:int, uses_items:[str], missing_items:[str], steps:[str]}.")
+            "{title:str, minutes:int, uses_items:[str], missing_items:[str], steps:[str], "
+            "macros:{kcal:int, protein_g:number, carbs_g:number, fat_g:number} (estimated per serving)}.")
     prompt = json.dumps({"items_soonest_expiring_first": items, "max_results": max_results,
                          "dietary": dietary})
-    data = _generate(prompt, hint)
+    data = _generate(prompt, hint, _RECIPE_SCHEMA)
     data = data if isinstance(data, list) else data.get("recipes", [])
     return data[:max_results]
 

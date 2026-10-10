@@ -37,6 +37,33 @@ CLASS_CATEGORY: dict[str, str] = {
     "juice": "other", "soda": "other", "sauce": "other", "bottle": "other",
     "frozen_food": "frozen",
 }
+FOOD_GROUPS = ("protein", "veggies", "fruit", "dairy", "grains", "pantry", "leftovers", "frozen", "other")
+
+# detector class -> user-facing food group (separate from the spoilage category above).
+CLASS_FOOD_GROUP: dict[str, str] = {
+    "lettuce": "veggies", "spinach": "veggies", "kale": "veggies", "cabbage": "veggies",
+    "broccoli": "veggies", "cauliflower": "veggies", "herbs": "veggies", "strawberry": "fruit",
+    "grapes": "fruit", "tomato": "veggies", "cucumber": "veggies", "bell_pepper": "veggies",
+    "zucchini": "veggies", "mushroom": "veggies", "banana": "fruit", "mango": "fruit",
+    "peach": "fruit", "avocado": "fruit",
+    "apple": "fruit", "orange": "fruit", "lemon": "fruit", "lime": "fruit", "carrot": "veggies",
+    "potato": "veggies", "sweet_potato": "veggies", "onion": "veggies", "garlic": "veggies",
+    "pear": "fruit", "pomegranate": "fruit", "eggplant": "veggies", "beetroot": "veggies",
+    "ginger": "veggies",
+    "milk": "dairy", "cheese": "dairy", "yogurt": "dairy", "butter": "dairy", "cream": "dairy",
+    "egg": "protein",
+    "chicken": "protein", "beef": "protein", "pork": "protein", "sausage": "protein",
+    "bacon": "protein", "ham": "protein",
+    "fish": "protein", "shrimp": "protein",
+    "bread": "grains", "tortilla": "grains",
+    "leftovers": "leftovers",
+    "pasta": "grains", "rice": "grains", "canned_food": "pantry",
+    "juice": "other", "soda": "other", "sauce": "pantry", "bottle": "other",
+    "frozen_food": "frozen",
+}
+assert set(CLASS_FOOD_GROUP) == set(CLASS_CATEGORY), "CLASS_FOOD_GROUP must cover every class"
+assert set(CLASS_FOOD_GROUP.values()) <= set(FOOD_GROUPS)
+
 CLASS_NAMES: list[str] = list(CLASS_CATEGORY)
 CLASS_ID: dict[str, int] = {n: i for i, n in enumerate(CLASS_NAMES)}
 
@@ -96,3 +123,7 @@ def canonical_name(raw: str) -> str | None:
 
 def category_for(name: str) -> str:
     return CLASS_CATEGORY.get(normalize(name), "other")
+
+
+def food_group_for(name: str) -> str:
+    return CLASS_FOOD_GROUP.get(normalize(name), "other")

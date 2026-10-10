@@ -18,6 +18,7 @@ and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in mig
 | group_id | uuid → groups, null | set when the item lives in a group pantry |
 | name | text | |
 | category | text | spoilage group: `produce_leafy`, `produce_hardy`, `dairy`, `meat`, `seafood`, `bakery`, `eggs`, `leftovers`, `pantry_dry`, `frozen`, `other` (final list in `DECISIONS.md`) |
+| food_group | text, null | user-facing group: `protein`, `veggies`, `fruit`, `dairy`, `grains`, `pantry`, `leftovers`, `frozen`, `other` (migration `0003_food_group`; serialized as derived from category+name if null) |
 | storage | text | `fridge` \| `pantry` \| `freezer` |
 | quantity, unit | numeric, text | |
 | est_weight_kg | numeric, null | for CO₂; estimated from quantity/unit when absent |
@@ -36,6 +37,11 @@ Constraints:
 CHECK ((removed_at IS NULL) = (outcome IS NULL))
 CHECK ((outcome = 'thrown_out') = (waste_reason IS NOT NULL))   -- reason required iff thrown out
 ```
+`ck_items_food_group`: `food_group IS NULL OR food_group IN (...the 9 values...)`.
+Migration 0003 backfill: meat/seafood/eggs -> protein; bakery -> grains; pantry_dry -> pantry; dairy,
+leftovers, frozen, other -> same; produce_leafy/produce_hardy -> `fruit` when the lowercased name
+contains a known fruit word (`\m(apple|banana|...)\M`, list in `app/services/food_group.py`), else
+`veggies`. Downgrade drops the constraint and column.
 Also CHECKs on `storage`, `outcome` and `waste_reason` value sets (`ck_items_*`).
 Index: `(owner_id, removed_at, predicted_expiry)`.
 `quantity` defaults 1, `unit` defaults `piece`; `predicted_expiry` is NOT NULL (always predicted).

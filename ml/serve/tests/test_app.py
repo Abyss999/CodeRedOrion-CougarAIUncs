@@ -33,7 +33,7 @@ def test_detect_fridge_contract(client):
     assert set(j) == {"candidates", "model"} and j["model"] == "fake-detector"
     assert len(j["candidates"]) == 2
     for c in j["candidates"]:
-        assert set(c) == {"name", "category", "confidence", "freshness", "bbox"}
+        assert set(c) == {"name", "category", "food_group", "confidence", "freshness", "bbox"}
         assert c["category"] in CATEGORIES and c["freshness"] in ("fresh", "spoiled")
         assert len(c["bbox"]) == 4
     assert j["candidates"][0]["confidence"] >= j["candidates"][1]["confidence"]
@@ -47,7 +47,7 @@ def test_detect_single_returns_top_one_and_default_mode(client):
 def test_detect_null_bbox_and_unknown_category_normalised():
     d = FakeDetector([{"name": "mystery", "category": "weird", "confidence": 0.5, "freshness": "??", "bbox": None}])
     r = post(create_app(d, FakeOCR()).test_client(), "/detect", png(), mode="single")
-    assert r.json["candidates"][0] == {"name": "mystery", "category": "other", "confidence": 0.5,
+    assert r.json["candidates"][0] == {"name": "mystery", "category": "other", "food_group": "other", "confidence": 0.5,
                                        "freshness": "fresh", "bbox": None}
 
 
