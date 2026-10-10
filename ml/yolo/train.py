@@ -12,6 +12,18 @@ DET_MODEL = "yolo26s.pt"      # detector; see docs/ML.md for the size trade-off
 CLS_MODEL = "yolo26n-cls.pt"  # fresh/spoiled crop classifier
 
 
+def pick_device(requested: str = "auto") -> str:
+    """auto -> cuda (device 0) if available, else mps, else cpu. Anything else is passed through."""
+    if requested != "auto":
+        return requested
+    import torch
+    if torch.cuda.is_available():
+        return "0"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
@@ -22,22 +34,26 @@ def main(argv=None):
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--det-model", default=DET_MODEL)
     ap.add_argument("--cls-model", default=CLS_MODEL)
+    ap.add_argument("--cls-batch", type=int, default=64)
+    ap.add_argument("--device", default="auto", help="auto (cuda, then mps, then cpu), or cpu / mps / 0 / 0,1")
     ap.add_argument("--skip-cls", action="store_true")
     a = ap.parse_args(argv)
     from ultralytics import YOLO  # heavy, lazy
     data = Path(a.data)
+    device = pick_device(a.device)
+    print("device:", device)
 
     det = YOLO(a.det_model)
     det.train(data=str(data / "data.yaml"), epochs=a.epochs, imgsz=a.imgsz, batch=a.batch,
-              project=a.project, name="det", exist_ok=True)
-    print("det val:", det.val(data=str(data / "data.yaml"), split="val").box.map50)
+              project=a.project, name="det", exist_ok=True, device=device)
+    print("det val:", det.val(data=str(data / "data.yaml"), split="val", device=device).box.map50)
     det_best = Path(det.trainer.best)
 
     cls_best = None
     if not a.skip_cls:
         cls = YOLO(a.cls_model)
-        cls.train(data=str(data / "cls"), epochs=a.cls_epochs, imgsz=224, batch=64,
-                  project=a.project, name="cls", exist_ok=True)
+        cls.train(data=str(data / "cls"), epochs=a.cls_epochs, imgsz=224, batch=a.cls_batch,
+                  project=a.project, name="cls", exist_ok=True, device=device)
         cls_best = Path(cls.trainer.best)
 
     out = Path(a.project) / "export"; out.mkdir(parents=True, exist_ok=True)

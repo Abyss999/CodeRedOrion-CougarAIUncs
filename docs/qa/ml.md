@@ -78,3 +78,70 @@ Parser verdict: PASS on all three sets. Still text-only: real GLM-OCR output is 
 | Holdout v1 (used) | 12 / 52 | 100% | 100% | 100% | 100% |
 | Holdout v2 (seen via ML-10) | 15 / 71 | 100% | 100% | 100% | 100% |
 Black-box probe (~60 lines, before and after TOTAL): all genuine non-item lines tested (Instant Savings +/-, COUPON +/-, MFR COUPON, CASH TEND, CHANGE, CHANGE DUE, VISA XXXX1234 APPROVED, EBT SNAP TEND, DEBIT TEND, Club Card Savings, You Saved, Bottle Deposit, CRV, Bag Fee) are dropped; real products with weak words in start/middle position are kept. Residuals: ML-12/13/14 (all low). No v3 set was written: 100% on v2 is not evidence of generalisation any more.
+
+---
+
+# 2026-10-10 - Dataset stage QA (branch feat/ml-mps-training, VegQual only)
+
+Scope: `ml/yolo/sources.json`, `mldata/fwr_data` as written by `prepare_dataset.py`. Roboflow sets and the Kaggle set are `pending`, so
+**the dataset contains VegQual only**. No training or inference was run by QA; checks were file reads plus light Python.
+
+## Regression suites (venv-ml, light)
+| Suite | Expected | Got |
+|---|---|---|
+| `ml/serve/tests` | 12 | 12 pass |
+| `ml/ocr/tests` | 89 | 89 pass |
+| `ml/yolo/tests` | 3 | 3 pass |
+| `ml/eval/tests` (from root) | 74 | 74 pass |
+No regressions. (Run before the builder finished; re-run if new yolo tests land.)
+
+## 1. sources.json and mapping
+- Licences recorded for all 4 sources. VegQual: CC BY 4.0, which matches the Roboflow export `data.yaml` (rakib151p/vegmining-i6j82 v6); the figshare page itself was not opened. Fridge sets CC BY 4.0, Kaggle fresh/stale CC0 1.0 (all still `pending`, so unverified by QA).
+- All 14 VegQual source labels are mapped or deliberately dropped: 10 mapped, 4 gourd labels `null` with a stated reason (not in taxonomy), plus `drop_image_if_label` so a mixed gourd image is not left half-labelled. Good.
+- **Freshness mapping correct**: `defected_*` -> `:spoiled`, `fresh_*` -> `:fresh`. Verified on ALL 3,207 kept source images (not just 20): for every label line, class id (via `data.yaml` names), x-centre, and `freshness/*.txt` flag (1 = spoiled) match the source label and the mapping. 0 mismatches, 0 unmatched files. Kept-image count matches an independent recount (3,207 = 4,831 - 1,615 gourd-only - 6 mixed - 3 empty).
+- Crop classifier folders: train fresh 3,370 / spoiled 2,929, val 410 / 358. Fresh counts equal the box counts exactly; spoiled is 2 short in train (likely degenerate tiny crops, not reported).
+- `data.yaml` names (0..56) in the output are **identical** to `ml/yolo/data.yaml`; append-only order unchanged.
+
+## 2. dataset_report.json
+Images: train 2,493 / val 346 / heldout 368 real (+674 synthetic copies = 1,042 held-out rows).
+Boxes (fresh/spoiled), train: bell_pepper 1118/510, eggplant 619/805, potato 880/203, onion 457/1026, tomato 296/387.
+Val: bell_pepper 159/124, eggplant 94/61, potato 74/24, onion 48/102, tomato 35/47.
+Held-out (real images only, all lightings in the file): bell_pepper 105/97, eggplant 70/98, potato 137/16, onion 49/194, tomato 65/50.
+- **classes_with_no_data: 52 of 57** (everything except the 5 above). Only 5 detector classes exist: bell_pepper, eggplant, onion, potato, tomato.
+- Dropped/unmapped: report only gives `1621` (1,615 gourd-only + 6 mixed) lumped into one key, plus 3 "source skipped" entries. The 3 images with empty label files are dropped silently and appear nowhere (ML-20).
+- No group leakage by the `.rf.` stem: 1,324 groups, 0 appear in more than one split.
+- **But near-duplicate leakage exists** (ML-21): 127 of 132 timestamped held-out photos have a train/val photo shot within 10 s (same item, same session).
+
+### Held-out lighting mix (manifest, 1,042 rows)
+| Lighting | real (auto) | synthetic | total images | boxes | **spoiled boxes** |
+|---|---|---|---|---|---|
+| normal | 337 | - | 337 | 725 | **369** |
+| low | **2** | 337 | 339 | 727 | **369** (real: **0**) |
+| warm | 29 | 337 | 366 | 879 | **455** (real: 86) |
+Synthetic copies reuse the same 725 boxes, so there are 369 independent spoiled boxes, in 152 independent photo groups, not 3x that.
+Spoiled by class (normal): eggplant 98, onion 194, tomato 50, potato 16, bell_pepper 11.
+The real warm images (29) are 154 boxes dominated by bell_pepper (149 of 154 boxes are bell pepper, 86 of them spoiled): the auto tagger is flagging orange/red peppers, so real-warm is a different population from normal.
+
+### Are the QA.md thresholds testable?
+- Spoiled recall >= 0.85: n=369 clustered in 152 groups. 95% Wilson CI at 0.85 is about +/-3.6 pts if boxes were independent; wider in truth. Testable **only as a statement about 5 produce classes on plain backgrounds**.
+- Per-class precision >= 0.80: fresh/spoiled over 5 classes, OK in n; but spoiled bell_pepper (11) and potato (16) in the normal set are too small for any per-class claim (CI for 10/11 is 62-98%).
+- Lighting recall drop <= 10 pts: **synthetic only is testable** (paired, n=369 each, SE ~2.6 pts). **Real low: 2 images, 0 spoiled = untestable.** Real warm: 86 spoiled boxes, but mostly one class, confounded.
+- mAP@0.5 >= 0.60 is computed over 5 classes only; it says nothing about the other 52, so passing would overstate the system.
+
+## Bugs found (continue after ML-14)
+| ID | Severity | Summary |
+|---|---|---|
+| ML-15 | **high** | Domain gap. VegQual = 1-2 vegetables on white paper or dark table (Bangladeshi market produce, phone photos). Not fridge shelves, no clutter, no occlusion, no packaging. Spoiled recall measured here will not transfer to the demo (fridge photo). Fridge sets are still pending. |
+| ML-16 | **high** | Class coverage and source confound. 52/57 classes have zero data. All 5 present classes come ONLY from VegQual, and the planned fridge sources add `tomato`, `bell_pepper` (and others) only as `freshness_default: fresh`. Once merged, "spoiled" will correlate with "plain-paper VegQual look" and "fresh" with "fridge look", so the classifier can learn the source rather than rot, and the held-out score will not catch it. No fridge/pantry class (milk, egg, meat, etc.) is trained or evaluable. |
+| ML-17 | **high** (for the lighting threshold) | Real low-light held-out = 2 images / 0 spoiled; real warm = 29 images dominated by bell pepper. The "lighting recall drop <= 10 pts" check can only be run on synthetic copies (x0.35 / colour cast), which are easier than a real dim fridge. A pass would not be evidence for real lighting. |
+| ML-21 | **high** | Near-duplicate leakage: held-out photos have sibling shots from the same session in train/val (127/132 within 10 s). The `.rf.` grouping handles Roboflow augmentations only. Held-out metrics will be optimistic. Fix: group by capture timestamp bucket (e.g. 60 s) or by item/session before the split, or accept and flag it in every reported number. |
+| ML-18 | medium | Per-class spoiled n in normal held-out: bell_pepper 11, potato 16. Per-class spoiled claims are noise; spoiled recall should be reported overall and with the Wilson CI. 369 spoiled boxes are clustered in 152 groups. |
+| ML-19 | medium | Imbalance: potato spoiled 203 train (vs fresh 880), onion spoiled 1026 (vs fresh 457), tomato fresh only 296. Spoiled prior differs per class (eggplant/onion spoiled-heavy, potato/bell_pepper fresh-heavy), so the classifier can lean on class identity. Held-out spoiled share by class differs from train. |
+| ML-22 | medium | Synthetic lighting triples the held-out rows without adding independent samples: any pooled "all lightings" number must not be used as sample size; `detection_metrics.py --manifest` already separates real vs synthetic and QA reports must keep doing so. Also the auto tagger labels reddish/orange produce as `warm` (see ML-17). |
+| ML-20 | low | Report gaps: 3 empty-label images dropped silently; drop reasons not split (gourd-only vs mixed-gourd vs empty); no per-class totals per lighting, no source-by-split table, no mention of 2 spoiled crops missing from `cls/train/spoiled` (2,929 vs 2,931 boxes). |
+
+## Verdict: dataset stage
+**PASS (mechanics): FAIL for evaluation readiness.**
+- PASS: licences recorded, every label mapped or dropped with a reason, freshness mapping verified on all 3,207 kept images (0 errors), taxonomy ids unchanged, no `.rf.`-group leakage, deterministic splits, report and manifest consistent with disk.
+- FAIL (cannot sign off any YOLO threshold from this dataset): ML-15, ML-16, ML-17, ML-21 (all high). Held-out is only 5 produce classes on plain backgrounds, real low light has no samples, and near-duplicates leak across splits. Smoke training for the MPS pipeline is fine; do not treat its metrics as QA numbers.
+- Needed before a real YOLO sign-off: the fridge sets (and fresh/stale Kaggle) merged, a timestamp/session-grouped split, a hand-tagged real low/warm held-out set (at least ~50 spoiled boxes each, outside VegQual), and a few real fridge photos with spoiled items as a final out-of-domain test.
