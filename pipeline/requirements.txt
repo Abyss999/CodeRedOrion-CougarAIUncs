@@ -1,0 +1,7 @@
+# Light deps: everything in pipeline/ except the real GLM-OCR engine runs with these (CPU, no torch).
+pillow>=10.0
+numpy>=1.26
+pyyaml>=6.0
+pytest>=8.0
+# GLM-OCR engine (--engine glm) only, on a GPU box - same stack as ml/serve/requirements.txt:
+#   torch (CUDA build), transformers (version per the zai-org/GLM-OCR model card)
