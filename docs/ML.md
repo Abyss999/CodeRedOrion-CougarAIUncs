@@ -4,6 +4,17 @@ Owner: ML builder. Code: `ml/yolo/`, `ml/ocr/`, `ml/serve/`. Eval lives in `ml/e
 **Nothing here is trained or run on the VPS** (no GPU, ~2 GB free RAM). Training/inference happen on
 Colab or a GPU box; everything is importable and unit-testable on the VPS with Pillow/numpy/Flask only.
 
+## 0. What the owner clicks (Colab, `ml/yolo/train_colab.ipynb`)
+**Gate: do not run it until ML QA has re-verified ML-21 on the session-grouped split** (the notebook also stops itself unless
+`dataset_report.json` has `split_grouping: "session"` and `ml/eval/leakage_check.py` reports 0 held-out images within 300 s of a train/val image).
+1. Runtime -> Change runtime type -> **T4 GPU**.
+2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped).
+3. **Runtime -> Run all** (Drive mount is optional; it only keeps a copy of the run).
+4. Download `export.zip` from the last cell and hand it to the team.
+The notebook downloads VegQual (figshare), the two Roboflow sets (API) and, if Kaggle creds exist, raghavrpotdar; derives a
+`sources.colab.json` from the repo's `sources.json` with `/content/raw/...` roots; runs `prepare_dataset.py`,
+`train.py --device auto` (yolo26s 80 ep + classifier 30 ep) and the export.
+
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
 - Ultralytics docs (docs.ultralytics.com/models) say: "Start with **YOLO26** for a new project"; YOLO11 is the
@@ -18,16 +29,16 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 ## 2. Datasets
 Licences, class lists and sizes verified **2026-10-10** (figshare API for VegQual, Roboflow pages for the two
 fridge sets, Kaggle API for the Kaggle sets). `ml/yolo/sources.json` (committed, no secrets) holds the class maps;
-raw data lives outside the repo (`mldata/raw/<name>`). `prepare_dataset.py` skips sources marked `"pending": true`
+raw data lives outside the repo (`mldata/raw/<name>`). `prepare_dataset.py` skips sources marked `"pending": true` (none now)
 or whose root is missing, drops unmapped labels (listed in `dataset_report.json`), and supports
 `drop_image_if_label` (drops a whole image that contains an unmodelled object).
 
 | Role | Dataset | Licence | Size / classes | Status |
 |---|---|---|---|---|
 | fresh vs defective produce (boxes) | VegQual, figshare article 30596084 (= Roboflow rakib151p/vegmining-i6j82 v6) | **CC BY 4.0** | 4,831 images (train 4,221 / valid 406 / test 204), 14 classes: `defected_/fresh_` x potato, bitter_gourd, brinjal, capsicum, onion, pointed_gourd, tomato (7 defected + 7 fresh; see mapping) | **downloaded** (212 MB) |
-| fridge/pantry items | Fridge objects (wajeeha-workspace) https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo | **CC BY 4.0** | ~963 imgs; lemon, milk, cheese, avocado, butter, pepper, yogurt, bacon, eggs, tomatoes | pending download (Roboflow credentials) |
-| fridge/pantry items | Hien_Fridge (gracelearning) https://universe.roboflow.com/gracelearning/hien_fridge-tathx | **CC BY 4.0** | ~860 imgs; apple, egg, milk_carton, others, soda_can, yogurt_container (`others` dropped) | pending download (Roboflow credentials) |
-| fresh vs stale fruit/veg (whole image) | raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle) | **CC0** | ~1.53 GB; class list not yet verified | pending download (Kaggle credentials); replaces sriramr |
+| fridge/pantry items | Fridge objects (wajeeha-workspace) https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo | **CC BY 4.0** | ~963 imgs; lemon, milk, cheese, avocado, butter, pepper, yogurt, bacon, eggs, tomatoes | downloaded: v1 (963), see Status below |
+| fridge/pantry items | Hien_Fridge (gracelearning) https://universe.roboflow.com/gracelearning/hien_fridge-tathx | **CC BY 4.0** | 1,912 imgs (v12); apple, egg, milk_carton, others, soda_can, yogurt_container (`others` dropped) | downloaded: v12 |
+| fresh vs stale fruit/veg (whole image) | raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle) | **CC0** | ~1.5 GB, 14,683 files; fresh_/stale_ x apple, banana, bitter_gourd, capsicum, orange, tomato | downloaded; replaces sriramr |
 
 **Dropped: `sriramr/fruits-fresh-and-rotten-for-classification`** - the Kaggle API reports its licence as
 "Unknown", so it is not usable. Replacement is the CC0 raghavrpotdar set above.
@@ -59,6 +70,17 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
   (`pepper` mapped to `bell_pepper`, `tomatoes` to `tomato`, `eggs` to `egg`).
 - **Hien_Fridge** - Roboflow Universe, workspace `gracelearning`,
   https://universe.roboflow.com/gracelearning/hien_fridge-tathx . Licence CC BY 4.0. Dropped: the `others` class.
+
+**Status 2026-10-10 (feat/ml-full-data): all four sources are downloaded and enabled** (no `pending`), under
+`mldata/raw/`:
+| Source | Version / format | Images | Licence | Notes |
+|---|---|---|---|---|
+| `vegqual` | figshare 30596084 (= Roboflow v6) | 4,831 (3,207 kept) | CC BY 4.0 | |
+| `fridge_objects` | Roboflow **v1**, exported yolov5pytorch (YOLO txt) | 963 (731/125/107) | CC BY 4.0 | names avocado, bacon, butter, cheese, eggs, lemon, milk, pepper, tomatoes, yogurt match the class_map; all boxes assumed fresh |
+| `hien_fridge` | Roboflow **v12**, yolov8 | 1,912 (1378/363/171; 1,763 kept) | CC BY 4.0 | names apple, egg, milk_carton, others, soda_can, yogurt_container match; `others` dropped; assumed fresh |
+| `fresh_stale_fruits_veg` | Kaggle raghavrpotdar (no version number; downloaded 2026-10-10) | 14,683 files, folder-per-class | **CC0 1.0** | stale -> spoiled, capsicum -> bell_pepper, bitter_gourd dropped (whole image); **`max_per_class: 250`** images per class x freshness (about 2,500 kept, so it does not swamp VegQual 3.2k / fridge 2.9k; chosen by a deterministic hash). Files are augmentations (`name.jpg_0_1039.jpg`) of far fewer originals; `Screen Shot <date> at <time>` names give capture times. |
+Kaggle in the notebook uses the `KAGGLE_API_TOKEN` secret as a Bearer token against the Kaggle REST API
+(`/api/v1/datasets/download/<owner>/<dataset>`).
 
 ## 3. Label design (decision)
 **Two-stage: detector for item NAME + separate crop classifier for fresh/semi_fresh/spoiled.**
@@ -96,9 +118,38 @@ DIR/cls/{train,val}/{fresh,semi_fresh,spoiled}/*.jpg   classifier crops
 DIR/heldout_gt.jsonl           ground truth (below)
 DIR/heldout_manifest.csv       per-image metadata (below)
 DIR/dataset_report.json        counts, dropped source labels, classes with no data
+DIR/class_names.json           trained class id -> canonical taxonomy name (only classes that have data)
 ```
-- Split: deterministic SHA1 of `seed:group`; default 10% heldout / 10% val / 80% train. `group` = source +
-  filename stem before `.rf.` so Roboflow augmentations of one photo never straddle splits (no leakage).
+**ML-16: only classes with data are trained.** `data.yaml` lists the *active* classes (taxonomy order, contiguous ids
+0..k-1) and `dataset_report.json` has `active_classes`. The weights carry those names, `infer.TwoStage` reads `r.names`
+and maps each name through `taxonomy.category_for`, so inference/serve need no id translation (`ml/serve` unchanged).
+`taxonomy.py` is untouched and still provides the canonical names and categories; a name added later appears
+automatically once a source maps to it. Do not mix weights trained on the old 57-class ids with the new ones in the
+same eval without reading `class_names.json`.
+`dataset_report.json` (ML-20) also has: `dropped_images` split by reason (`only_unmodelled_objects`,
+`mixed_with_unmodelled_object`, `all_boxes_unmapped`, `empty_label_file`), `empty_label_images`, `source_by_split`,
+`heldout_images_by_lighting_method` and `heldout_boxes_by_lighting_method_class` (key `lighting/method`, then
+`class/freshness`; report `synthetic` separately from `auto`/`manual`), and `crops` (expected/written/missing with reason).
+- Split (ML-21), in three layers; groups are indivisible and are then assigned to splits:
+  1. **Series / augmentation stem**: filename stem without `.rf.<hash>`, the Kaggle `_0_1039` tail, a `<cls>__<fresh>__`
+     prefix and `Copy of `; trailing digits are stripped so numbered series (`Defected_begun_3`, `_4`) join one group.
+  2. **Capture session**: capture time is *searched* in the name (`IMG20250926100615`, `IMG_20251004_163630`,
+     `20250101_123456`, 13-digit epoch ms in 2014-2033, `Screen Shot 2018-06-08 at 4.59.36 PM`), also in staged PR-B names such as
+     `banana__fresh__IMG_20250101_123456.rf.<sha>.jpg`. Per source and clock format, photos <= `--session-gap` seconds
+     (default **300**) apart are chained into one session. **No span cap** (the old 120 s cap cut sessions and leaked).
+  3. **Perceptual near-duplicates**: 64-bit pHash (`dedup.py`, numpy only; agrees with `imagehash.phash` to <= 2 bits and
+     gives identical "<= 6" decisions on 44,850 test pairs) with Hamming <= `--phash-threshold` (default 6), across all
+     sources, merges groups. A merged component larger than `--max-unit-images` (600) is not stratified; it is forced into
+     train (reported in `grouping.near_duplicates.images_forced_to_train_by_source`).
+  Groups are assigned by **greedy stratified balancing** on class x freshness (+ source + image count): largest weighted groups
+  first, each into the split that minimises the squared relative deficit of its cells, then a repair pass moves the smallest
+  train group holding a missing cell into held-out/val. Cells with >= 10 images should appear in held-out and val. A cell held
+  by ONE group (one capture session) cannot be split without leakage: it stays in train and is listed under
+  `stratification.single_group_cells_kept_in_train_not_measurable`; cells with < 10 images under
+  `not_measurable_cells_lt_min_images` (nothing is dropped silently). `dataset_report.json.leakage_by_source` reports, per
+  source, held-out originals with a train/val timestamp neighbour within 60 s / 300 s and pHash and (independent, coarser)
+  dHash near-duplicates. `--session-gap 0` disables sessions (series grouping only). Fractions are image-count targets, but
+  because sessions are big the real held-out share is lumpy (see the report).
 - **Lighting tag**: auto from mean luma (<70 => `low`) and mean R/B (>1.35 => `warm`), else `normal`
   (`lighting_method=auto`; hand-correct via `--lighting-overrides file.csv` with columns `image,lighting` ->
   `manual`). Because public sets are mostly normal light, every `normal` held-out image also gets a
@@ -121,9 +172,10 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
 
 ## 5. Training on Colab (step by step)
 1. Colab -> GPU runtime. Open `ml/yolo/train_colab.ipynb` (or clone the repo and `cd ml/yolo`).
+   (Quick path: section 0. The steps below are the manual equivalent.)
 2. `pip install -r requirements.txt` (ultralytics==8.4.175). Never paste API keys into cells; use Colab Secrets.
-3. Download the four sources into `/content/raw/<name>` (Roboflow: export "YOLOv8" format; Kaggle CLI). Copy
-   `sources.example.json` -> `sources.json`, fill `class_map` per source.
+3. Download the four sources into `/content/raw/<name>` (Roboflow: YOLO export at the versions in `sources.json`; Kaggle REST with `KAGGLE_API_TOKEN`). Copy
+   use the repo's `sources.json` with the roots rewritten (the notebook does this).
 4. `python prepare_dataset.py --sources sources.json --out /content/fwr_data`; read `dataset_report.json`
    (classes with no data, dropped labels). Fix mapping before training.
 5. `python train.py --data /content/fwr_data` (detector 80 ep, classifier 30 ep, then exports).
@@ -144,6 +196,13 @@ cls crops train 6,299 / val 768), imgsz 640, batch 16:
 These are VegQual-only timings. Estimate for the full merged run (yolo26s, 80 epochs, ~4.7k train images with the two
 Roboflow sets): ~5.5 min/epoch -> **~7.5 h** (range 6.5-9 h) + ~15 min classifier. Scales linearly with images; assumes MPS
 throughput stays constant (no thermal throttling) and similar boxes per image.
+
+### 5c. C4 plumbing check (2026-10-10): contaminated (ML-25), pipeline check only
+`export_predictions.py --device mps` was run with the yolo26n smoke weights (trained on the OLD split, 57-class ids,
+VegQual only) over the new 4-source held-out set into `mldata/runs/smoke_export/` (predictions.jsonl, heldout_gt.jsonl,
+heldout_manifest.csv, class_names.json, dataset_report.json). These predictions are **contaminated (ML-25)**: the smoke
+model saw many of these images, and has never seen the fridge/Kaggle classes. Use them to test the metric plumbing only; do not
+quote any number from them.
 
 ## 6. Running the service on a GPU box
 ```
@@ -180,7 +239,7 @@ tolerated; **voids** (`VOID`/`VOIDED`/`** VOID **`/`ITEM VOID` + name and/or pri
   prep (on synthetic images) and the Flask contract are tested. Ultralytics/transformers API usage in `infer.py`,
   `train.py`, `GlmOcrEngine` is written against docs and unexecuted - expect small fixes on first GPU run
   (notably the GLM-OCR image input via a temp file path and its required transformers version).
-- VegQual is the only dataset wired in so far; the fridge sets and the Kaggle replacement are pending download, and the Kaggle set's class list is unverified.
+- All four sources are downloaded (see section 2).
 - Domain gap: clean-background produce vs cluttered fridge shelves; small fridge sets; ~50 classes will be
   uneven (see `classes_with_no_data`). Freshness for non-produce (milk, meat) has no training signal.
 - `semi_fresh` training signal exists only for AgriFreshNET's 8 produce types; QA reports its precision/recall but does not gate it.

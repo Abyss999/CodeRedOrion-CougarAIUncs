@@ -1,42 +1,112 @@
 {
-  "_comment": "Real sources for the Food Waste Reducer. No secrets. class_map keys = SOURCE labels; value = canonical taxonomy name, 'name:spoiled'/'name:fresh' to force freshness, or null to drop. Sources with \"pending\": true (or a missing root) are skipped by prepare_dataset.py. Roots are outside the repo under mldata/. 'drop_image_if_label' drops an entire image if it contains any listed unmodelled object (so it is not left unlabeled).",
+  "_comment": "Real sources for the Food Waste Reducer. No secrets. class_map keys = SOURCE labels; value = canonical taxonomy name, 'name:spoiled'/'name:fresh' to force freshness, or null to drop. Sources with \"pending\": true (or a missing root) are skipped by prepare_dataset.py (none pending now). 'max_per_class' caps images per class x freshness for 'folders' sources. Roots are outside the repo under mldata/. 'drop_image_if_label' drops an entire image if it contains any listed unmodelled object (so it is not left unlabeled).",
   "sources": [
-    {"name": "vegqual", "kind": "yolo",
-     "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/vegqual/VegQual/VegMining",
-     "license": "CC BY 4.0", "url": "https://figshare.com/articles/dataset/A_Multiclass_Dataset_for_Real-Time_Fresh_and_Defective_Vegetables/30596084",
-     "_note": "Gourds are not taxonomy classes. 1615 of 4831 images are gourd-only (dropped automatically: no mapped boxes). 6 images mix gourds with other vegs; drop_image_if_label removes those so no gourd is left unlabeled.",
-     "drop_image_if_label": ["defected_bitter_gourd", "fresh_bitter_gourd", "defected_pointed_gourd", "fresh_pointed_gourd"],
-     "class_map": {
-       "defected_Potato": "potato:spoiled", "fresh_potato": "potato:fresh",
-       "defected_brinjal": "eggplant:spoiled", "fresh_brinjal": "eggplant:fresh",
-       "defected_capsicum": "bell_pepper:spoiled", "fresh_capsicum": "bell_pepper:fresh",
-       "defected_onion": "onion:spoiled", "fresh_onion": "onion:fresh",
-       "defected_tomato": "tomato:spoiled", "fresh_tomato": "tomato:fresh",
-       "defected_bitter_gourd": null, "fresh_bitter_gourd": null,
-       "defected_pointed_gourd": null, "fresh_pointed_gourd": null
-     }},
-    {"name": "fridge_objects", "kind": "yolo", "pending": true,
-     "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/fridge_objects",
-     "license": "CC BY 4.0", "freshness_default": "fresh",
-     "url": "https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo",
-     "_note": "PENDING DOWNLOAD (Roboflow credentials). Remove \"pending\" once unzipped at root.",
-     "class_map": {
-       "lemon": "lemon", "milk": "milk", "cheese": "cheese", "avocado": "avocado", "butter": "butter",
-       "pepper": "bell_pepper", "yogurt": "yogurt", "bacon": "bacon", "eggs": "egg", "tomatoes": "tomato"
-     }},
-    {"name": "hien_fridge", "kind": "yolo", "pending": true,
-     "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/hien_fridge",
-     "license": "CC BY 4.0", "freshness_default": "fresh",
-     "url": "https://universe.roboflow.com/gracelearning/hien_fridge-tathx",
-     "_note": "PENDING DOWNLOAD (Roboflow credentials). 'others' is dropped (box only, image kept); soda_can -> soda.",
-     "class_map": {
-       "apple": "apple", "egg": "egg", "milk_carton": "milk", "others": null,
-       "soda_can": "soda", "yogurt_container": "yogurt"
-     }},
-    {"name": "fresh_stale_fruits_veg", "kind": "folders", "pending": true,
-     "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/fresh_stale_fruits_veg",
-     "license": "CC0 1.0", "url": "https://www.kaggle.com/datasets/raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables",
-     "_note": "PENDING DOWNLOAD (Kaggle credentials, ~1.53 GB). Replaces sriramr/fruits-fresh-and-rotten-for-classification, whose Kaggle API licence is 'Unknown'. Class list NOT verified: fill class_map after download.",
-     "class_map": {}}
+    {
+      "name": "vegqual",
+      "kind": "yolo",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/vegqual/VegQual/VegMining",
+      "license": "CC BY 4.0",
+      "url": "https://figshare.com/articles/dataset/A_Multiclass_Dataset_for_Real-Time_Fresh_and_Defective_Vegetables/30596084",
+      "_note": "Gourds are not taxonomy classes. 1615 of 4831 images are gourd-only (dropped automatically: no mapped boxes). 6 images mix gourds with other vegs; drop_image_if_label removes those so no gourd is left unlabeled.",
+      "drop_image_if_label": [
+        "defected_bitter_gourd",
+        "fresh_bitter_gourd",
+        "defected_pointed_gourd",
+        "fresh_pointed_gourd"
+      ],
+      "class_map": {
+        "defected_Potato": "potato:spoiled",
+        "fresh_potato": "potato:fresh",
+        "defected_brinjal": "eggplant:spoiled",
+        "fresh_brinjal": "eggplant:fresh",
+        "defected_capsicum": "bell_pepper:spoiled",
+        "fresh_capsicum": "bell_pepper:fresh",
+        "defected_onion": "onion:spoiled",
+        "fresh_onion": "onion:fresh",
+        "defected_tomato": "tomato:spoiled",
+        "fresh_tomato": "tomato:fresh",
+        "defected_bitter_gourd": null,
+        "fresh_bitter_gourd": null,
+        "defected_pointed_gourd": null,
+        "fresh_pointed_gourd": null
+      }
+    },
+    {
+      "name": "fridge_objects",
+      "kind": "yolo",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/fridge_objects",
+      "license": "CC BY 4.0",
+      "freshness_default": "fresh",
+      "url": "https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo",
+      "_note": "Roboflow v1, 963 images (train 731 / valid 125 / test 107), exported as yolov5pytorch (same YOLO txt layout). Names verified against data.yaml: avocado, bacon, butter, cheese, eggs, lemon, milk, pepper, tomatoes, yogurt. No freshness info: all boxes are assumed fresh (detector only, no classifier crops).",
+      "class_map": {
+        "lemon": "lemon",
+        "milk": "milk",
+        "cheese": "cheese",
+        "avocado": "avocado",
+        "butter": "butter",
+        "pepper": "bell_pepper",
+        "yogurt": "yogurt",
+        "bacon": "bacon",
+        "eggs": "egg",
+        "tomatoes": "tomato"
+      },
+      "roboflow": {
+        "workspace": "wajeeha-workspace",
+        "project": "fridge-objects-mtmmo",
+        "version": 1
+      },
+      "export_format": "yolov5pytorch (YOLO txt + data.yaml)"
+    },
+    {
+      "name": "hien_fridge",
+      "kind": "yolo",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/hien_fridge",
+      "license": "CC BY 4.0",
+      "freshness_default": "fresh",
+      "url": "https://universe.roboflow.com/gracelearning/hien_fridge-tathx",
+      "_note": "Roboflow v12, 1,912 images (train 1378 / valid 363 / test 171), exported as yolov8. Names verified against data.yaml: apple, egg, milk_carton, others, soda_can, yogurt_container. 'others' is dropped (box only, image kept). All boxes assumed fresh.",
+      "class_map": {
+        "apple": "apple",
+        "egg": "egg",
+        "milk_carton": "milk",
+        "others": null,
+        "soda_can": "soda",
+        "yogurt_container": "yogurt"
+      },
+      "roboflow": {
+        "workspace": "gracelearning",
+        "project": "hien_fridge-tathx",
+        "version": 12
+      },
+      "export_format": "yolov8"
+    },
+    {
+      "name": "fresh_stale_fruits_veg",
+      "kind": "folders",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/fresh_stale_fruits_veg",
+      "license": "CC0 1.0",
+      "url": "https://www.kaggle.com/datasets/raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables",
+      "_note": "Kaggle raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables, CC0 1.0, folder-per-class, 14,683 files (fresh_/stale_ x apple, banana, bitter_gourd, capsicum, orange, tomato). stale -> spoiled, capsicum -> bell_pepper, bitter_gourd dropped (whole image; not a taxonomy class, bitter_melon comes in a later PR). Files are augmentations ('name.jpg_0_1039.jpg') of far fewer originals and are grouped by original name; 'Screen Shot <date> at <time>' names give capture times. max_per_class=250 caps images per class x freshness (after the cap about 2,500 images, so it does not swamp VegQual 3.2k / fridge 2.9k).",
+      "class_map": {
+        "fresh_apple": "apple:fresh",
+        "stale_apple": "apple:spoiled",
+        "fresh_banana": "banana:fresh",
+        "stale_banana": "banana:spoiled",
+        "fresh_orange": "orange:fresh",
+        "stale_orange": "orange:spoiled",
+        "fresh_tomato": "tomato:fresh",
+        "stale_tomato": "tomato:spoiled",
+        "fresh_capsicum": "bell_pepper:fresh",
+        "stale_capsicum": "bell_pepper:spoiled",
+        "fresh_bitter_gourd": null,
+        "stale_bitter_gourd": null
+      },
+      "max_per_class": 250,
+      "kaggle": {
+        "dataset": "raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables"
+      },
+      "version_note": "Kaggle dataset; no version number exposed (record download date 2026-10-10)."
+    }
   ]
 }

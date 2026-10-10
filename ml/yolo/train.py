@@ -65,6 +65,9 @@ def main(argv=None):
            + (["--cls", str(out / "freshness.pt")] if cls_best else []))
     shutil.copy(data / "heldout_gt.jsonl", out / "heldout_gt.jsonl")
     shutil.copy(data / "heldout_manifest.csv", out / "heldout_manifest.csv")
+    for extra in ("class_names.json", "dataset_report.json"):
+        if (data / extra).exists():
+            shutil.copy(data / extra, out / extra)
     print("artifacts in", out)
 
 
