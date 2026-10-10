@@ -16,7 +16,7 @@ each suite independently before merging.
 | ML: YOLO26 pipeline, receipt OCR, inference service, eval harness | merged #3, parser fixes #8 | parser 97.2 / 100 / 100 on blind set v2 (then 100% after ML-10); contract 14/14. **No model trained yet** |
 | Design: 10 screens (incl. photo review + Recipes) + design system + `Theme.swift` | merged #2, #7 | **awaiting team approval**: https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx (private until the owner shares it) |
 | iOS app | **not started**: only the tab shell + `Theme.swift` | needs Xcode, and design approval first |
-| CI | **parked** in `ci/github-workflows/` (backend, ML, iOS) | the VPS token can't push workflow files |
+| CI | **enabled** in `.github/workflows/` (backend, ML, iOS) | moved from the parked `ci/` folder on the Mac |
 
 ## Done this session
 - Bootstrap (#1): `CLAUDE.md`, the docs set, and the scaffold.
@@ -30,7 +30,7 @@ each suite independently before merging.
   `.env.example` and CI, and an ML CI job was added.
 
 ## Next steps (on the Mac)
-1. **Enable CI.** Move `ci/github-workflows/` to `.github/workflows/` (see `ci/README.md`).
+1. ~~**Enable CI.**~~ Done: workflows live in `.github/workflows/`.
 2. **Set up** per `docs/SETUP.md`: `.env`, `.venv`, `docker compose up -d --build`, then
    `CREATE DATABASE fwr_test`, `flask db upgrade` and the backend suite. **First run of
    `docker compose up` and the first Swift compile both happen here**, because neither was

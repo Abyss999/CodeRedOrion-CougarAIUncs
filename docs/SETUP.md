@@ -55,7 +55,7 @@ Tests from the command line:
 xcodebuild test -project FoodWasteReducer.xcodeproj -scheme FoodWasteReducer \
   -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
-CI runs the same on every PR touching `ios/` once the workflows are enabled (`ci/README.md`).
+CI (`.github/workflows/ios.yml`) runs the same on every PR touching `ios/`.
 
 ### TestFlight
 1. Apple Developer account → set the team in `project.yml` (`DEVELOPMENT_TEAM`) and a unique bundle id.
