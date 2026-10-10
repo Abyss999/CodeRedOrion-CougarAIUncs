@@ -29,6 +29,49 @@ in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 | `chartSaved` | `#277338` | Chart: used + donated |
 | `chartWasted` | `#E8A04C` | Chart: thrown out, waste-reason bars |
 
+### Dark mode
+Every token above is **adaptive**. `Theme.swift` resolves each one per trait collection, so a view
+never branches on color scheme. In dark mode the brand flips: **the lime family is the action
+color**, and forest becomes the deep ground. That's why the `forest` token is light lime in dark,
+and its `onForest` text turns dark.
+
+| Token | Light | Dark |
+|---|---|---|
+| `ground` | `#F4F8E8` | `#0F1A12` |
+| `surface` | `#FFFFFF` | `#18261B` |
+| `lime` | `#D9EC8F` | `#D9EC8F` |
+| `limeTint` | `#EEF5D6` | `#24361F` |
+| `track` | `#E3EDCB` | `#223024` |
+| `hairline` | `#E6EDD6` | `#2A3A2D` |
+| `border` | `#D3E0BF` | `#34483A` |
+| `forest` (primary action, active tab) | `#1F4D2B` | `#B9D871` |
+| `forestMid` | `#3B7046` | `#8FB45A` |
+| `forestChip` | `#2F6B3C` | `#2C4A26` |
+| `ink` | `#13261A` | `#E8F0DA` |
+| `inkSecondary` | `#2B3D30` | `#C9D6BC` |
+| `muted` | `#45584A` | `#9DB09F` |
+| `tabInactive` | `#5C6E5F` | `#8FA391` |
+| `onForest` | `#F4F8E8` | `#13261A` |
+| `onForestMuted` | `#C9D8BE` | `#2F4A2A` |
+| `urgentBg` / `urgentInk` | `#FBE3CF` / `#8A3B0E` | `#4A2614` / `#FFB98A` |
+| `noteYellow` / `noteLime` | `#FFF6C7` / `#E4F2C4` | `#3A3720` / `#2A3A1F` |
+| `chartSaved` / `chartWasted` | `#277338` / `#E8A04C` | `#24783D` / `#C6802F` |
+
+Dark contrast was computed, not eyeballed. Ink on ground is 15.2:1. Muted on surface is 6.9:1.
+Tab-inactive on surface is 5.9:1. Forest on surface is 9.9:1. onForest on forest is 9.9:1. Urgent
+is 8.0:1. The lowest pair is muted on a yellow note, at 5.2:1. The dark chart pair passes every
+colorblind validator check against a dark surface: lightness band 0.48-0.67, protan ΔE 9.2, and
+3:1 against the surface.
+
+### Tab bar on iOS 26 (Liquid Glass)
+iOS 26 renders `TabView` as a floating glass bar. **Recommendation, pending approval:** use the
+**native** glass tab bar rather than recreating the flat bar in the mockups, and keep
+`Theme.Colors.forest` as its tint, which is adaptive and so stays visible on dark glass. The
+center **Add** becomes a regular tab item using the `plus.circle.fill` symbol. Selecting it
+presents the Add sheet and doesn't switch tabs. The raised custom circle in the mockups is
+dropped, because a custom view floating over the glass bar fights the platform and its
+accessibility.
+
 Every text pair above passes WCAG AA, and the ratios were computed rather than eyeballed. The chart pair passes the
 colorblind (protan/deutan/tritan) separation check. `chartWasted` is only 2.1:1 against white, so
 chart values are always labeled.
