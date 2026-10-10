@@ -1,0 +1,16 @@
+{
+ "receipt": "13_bag_fee_and_deposit",
+ "lines": [
+  {
+   "name": "SPARKLING WATER 12PK",
+   "quantity": 1,
+   "price": 5.99
+  },
+  {
+   "name": "BREAD MULTIGRAIN",
+   "quantity": 1,
+   "price": 3.99
+  }
+ ],
+ "total": 10.68
+}

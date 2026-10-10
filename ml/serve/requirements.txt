@@ -1,0 +1,11 @@
+# GPU-side service deps. NOT installed on the VPS (the VPS venv only needs flask/pillow/numpy/pytest).
+# Torch: install the CUDA build matching the GPU box first (https://pytorch.org/get-started/locally/).
+flask==3.1.3
+gunicorn==23.0.0
+pillow==12.3.0
+numpy==2.5.4
+ultralytics==8.4.175
+# GLM-OCR needs a transformers release that knows model type `glm_ocr` and AutoModelForMultimodalLM
+# (model card says "pip install -U transformers accelerate"); pin to the version you verify on the GPU box.
+transformers>=5.0
+accelerate>=1.0

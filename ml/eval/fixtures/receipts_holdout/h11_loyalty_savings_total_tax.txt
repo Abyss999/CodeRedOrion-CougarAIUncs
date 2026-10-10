@@ -1,0 +1,10 @@
+RALPHS
+Card# ******4821
+ORANGE JUICE NFC 52OZ       4.99
+   Card Savings            -1.50
+STRAWBERRIES 1LB            3.99
+ROTISSERIE CHICKEN          6.99
+PEPSI 12PK  T               6.49
+TOTAL SAVINGS               1.50
+SALES TAX                   0.55
+BALANCE DUE                21.51

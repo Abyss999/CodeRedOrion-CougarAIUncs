@@ -1,0 +1,26 @@
+{
+ "receipt": "03_trader_weighted",
+ "lines": [
+  {
+   "name": "Organic Bananas",
+   "quantity": 2.34,
+   "price": 1.85
+  },
+  {
+   "name": "Honeycrisp Apples",
+   "quantity": 1.6,
+   "price": 4.78
+  },
+  {
+   "name": "Whole Milk Gallon",
+   "quantity": 1,
+   "price": 4.49
+  },
+  {
+   "name": "Mandarin Oranges Bag",
+   "quantity": 1,
+   "price": 3.99
+  }
+ ],
+ "total": 15.11
+}

@@ -1,0 +1,9 @@
+PUBLIX
+DELI TURKEY BREAST
+  0.75 lb @ 8.99 /lb         6.74
+SWISS CHEESE SLICED
+  0.50 lb @ 7.49 /lb         3.75
+ROMA TOMATOES
+  1.12 lb @ 1.99 /lb         2.23
+SUBTOTAL                    12.72
+TOTAL                       12.72

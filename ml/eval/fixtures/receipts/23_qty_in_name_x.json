@@ -1,0 +1,21 @@
+{
+ "receipt": "23_qty_in_name_x",
+ "lines": [
+  {
+   "name": "BANANAS",
+   "quantity": 5,
+   "price": 2.45
+  },
+  {
+   "name": "YOGURT CUP",
+   "quantity": 4,
+   "price": 3.16
+  },
+  {
+   "name": "LETTUCE ROMAINE",
+   "quantity": 1,
+   "price": 1.99
+  }
+ ],
+ "total": 7.6
+}

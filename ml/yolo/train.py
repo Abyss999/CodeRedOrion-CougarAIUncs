@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+"""Train detector (food names) + freshness classifier, then export held-out predictions.
+GPU-side only. Equivalent to train_colab.ipynb.
+
+  python train.py --data /content/fwr_data --epochs 80
+"""
+import argparse, shutil, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+DET_MODEL = "yolo26s.pt"      # detector; see docs/ML.md for the size trade-off
+CLS_MODEL = "yolo26n-cls.pt"  # fresh/spoiled crop classifier
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", required=True)
+    ap.add_argument("--project", default="runs")
+    ap.add_argument("--epochs", type=int, default=80)
+    ap.add_argument("--cls-epochs", type=int, default=30)
+    ap.add_argument("--imgsz", type=int, default=640)
+    ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--det-model", default=DET_MODEL)
+    ap.add_argument("--cls-model", default=CLS_MODEL)
+    ap.add_argument("--skip-cls", action="store_true")
+    a = ap.parse_args(argv)
+    from ultralytics import YOLO  # heavy, lazy
+    data = Path(a.data)
+
+    det = YOLO(a.det_model)
+    det.train(data=str(data / "data.yaml"), epochs=a.epochs, imgsz=a.imgsz, batch=a.batch,
+              project=a.project, name="det", exist_ok=True)
+    print("det val:", det.val(data=str(data / "data.yaml"), split="val").box.map50)
+    det_best = Path(det.trainer.best)
+
+    cls_best = None
+    if not a.skip_cls:
+        cls = YOLO(a.cls_model)
+        cls.train(data=str(data / "cls"), epochs=a.cls_epochs, imgsz=224, batch=64,
+                  project=a.project, name="cls", exist_ok=True)
+        cls_best = Path(cls.trainer.best)
+
+    out = Path(a.project) / "export"; out.mkdir(parents=True, exist_ok=True)
+    shutil.copy(det_best, out / "detector.pt")
+    if cls_best:
+        shutil.copy(cls_best, out / "freshness.pt")
+    from export_predictions import main as export
+    export(["--data", str(data), "--det", str(out / "detector.pt"), "--out", str(out / "predictions.jsonl")]
+           + (["--cls", str(out / "freshness.pt")] if cls_best else []))
+    shutil.copy(data / "heldout_gt.jsonl", out / "heldout_gt.jsonl")
+    shutil.copy(data / "heldout_manifest.csv", out / "heldout_manifest.csv")
+    print("artifacts in", out)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,11 @@
+Joe's Deli & Grocery
+Egg sandwich       4.50
+Coffee large       1.75
+Banana             0.50
+Milk quart         2.25
+Bread Wonder       3.49
+                -------
+TOTAL             12.49
+Cash              20.00
+Change             7.51
+Thank u!

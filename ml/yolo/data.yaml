@@ -1,0 +1,63 @@
+# TEMPLATE - prepare_dataset.py writes the real one (with absolute path) into the dataset dir.
+path: .
+train: images/train
+val: images/val
+test: images/heldout
+names:
+  0: lettuce
+  1: spinach
+  2: kale
+  3: cabbage
+  4: broccoli
+  5: cauliflower
+  6: herbs
+  7: strawberry
+  8: grapes
+  9: tomato
+  10: cucumber
+  11: bell_pepper
+  12: zucchini
+  13: mushroom
+  14: banana
+  15: mango
+  16: peach
+  17: avocado
+  18: apple
+  19: orange
+  20: lemon
+  21: lime
+  22: carrot
+  23: potato
+  24: sweet_potato
+  25: onion
+  26: garlic
+  27: pear
+  28: pomegranate
+  29: eggplant
+  30: beetroot
+  31: ginger
+  32: milk
+  33: cheese
+  34: yogurt
+  35: butter
+  36: cream
+  37: egg
+  38: chicken
+  39: beef
+  40: pork
+  41: sausage
+  42: bacon
+  43: ham
+  44: fish
+  45: shrimp
+  46: bread
+  47: tortilla
+  48: leftovers
+  49: pasta
+  50: rice
+  51: canned_food
+  52: juice
+  53: soda
+  54: sauce
+  55: bottle
+  56: frozen_food

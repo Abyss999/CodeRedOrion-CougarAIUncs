@@ -1,0 +1,26 @@
+{
+ "receipt": "17_wegmans_two_line",
+ "lines": [
+  {
+   "name": "Organic Whole Milk",
+   "quantity": 1,
+   "price": 5.29
+  },
+  {
+   "name": "Grass-Fed Butter",
+   "quantity": 2,
+   "price": 9.98
+  },
+  {
+   "name": "Fresh Mozzarella",
+   "quantity": 1,
+   "price": 4.49
+  },
+  {
+   "name": "Baguette",
+   "quantity": 1,
+   "price": 2.99
+  }
+ ],
+ "total": 22.75
+}

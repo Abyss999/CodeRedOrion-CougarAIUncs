@@ -29,3 +29,6 @@ xcuserdata/
 .DS_Store
 .idea/
 .vscode/
+
+# Generated eval output (re-created by ml/eval tests)
+ml/eval/results/

@@ -1,0 +1,21 @@
+{
+ "receipt": "24_grand_total_label",
+ "lines": [
+  {
+   "name": "Frozen Waffles 10ct",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "Maple Syrup",
+   "quantity": 1,
+   "price": 4.99
+  },
+  {
+   "name": "Pork Chops Thick",
+   "quantity": 1,
+   "price": 7.88
+  }
+ ],
+ "total": 16.36
+}

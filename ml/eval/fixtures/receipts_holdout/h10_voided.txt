@@ -1,0 +1,10 @@
+VONS
+LG AVOCADOS 4CT           5.99
+ORGANIC KALE              2.49
+VOID  ORGANIC KALE       -2.49
+CAGE FREE EGGS 18         6.49
+BUTTER SALTED 1LB         4.79
+*** ITEM VOIDED ABOVE ***
+SUBTOTAL                 17.27
+TAX                       0.00
+TOTAL                    17.27

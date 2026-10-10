@@ -1,0 +1,8 @@
+TARGET
+BREAD WHOLE WHEAT         3.29
+CHEDDAR SHARP 8OZ         2.79
+   COUPON 20% OFF       -0.56
+ORANGE JUICE 52OZ         3.99
+SUBTOTAL                  9.51
+TAX                       0.00
+TOTAL                     9.51

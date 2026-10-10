@@ -1,0 +1,26 @@
+{
+ "receipt": "01_safeway_simple",
+ "lines": [
+  {
+   "name": "MILK 2% GAL",
+   "quantity": 1,
+   "price": 4.29
+  },
+  {
+   "name": "LG EGGS 12CT",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "BANANAS ORG",
+   "quantity": 1,
+   "price": 1.87
+  },
+  {
+   "name": "SOURDOUGH LOAF",
+   "quantity": 1,
+   "price": 4.5
+  }
+ ],
+ "total": 14.65
+}

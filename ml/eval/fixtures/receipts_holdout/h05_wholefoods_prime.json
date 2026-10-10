@@ -1,0 +1,26 @@
+{
+ "receipt": "h05_wholefoods_prime",
+ "lines": [
+  {
+   "name": "BLUEBERRIES ORG PINT",
+   "quantity": 1,
+   "price": 5.99
+  },
+  {
+   "name": "SOURDOUGH BATARD",
+   "quantity": 1,
+   "price": 4.49
+  },
+  {
+   "name": "WILD ARUGULA",
+   "quantity": 0.62,
+   "price": 4.95
+  },
+  {
+   "name": "GRASS FED GROUND BEEF 1LB",
+   "quantity": 1,
+   "price": 10.99
+  }
+ ],
+ "total": 25.42
+}

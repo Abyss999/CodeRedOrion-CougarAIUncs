@@ -1,0 +1,31 @@
+{
+ "receipt": "h01_traderjoes",
+ "lines": [
+  {
+   "name": "Cage Free Large Eggs",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "Unexpected Cheddar Cheese",
+   "quantity": 1,
+   "price": 4.49
+  },
+  {
+   "name": "Organic Baby Spinach",
+   "quantity": 1,
+   "price": 2.99
+  },
+  {
+   "name": "Everything But The Bagel Seasoning",
+   "quantity": 1,
+   "price": 2.49
+  },
+  {
+   "name": "Fresh Atlantic Salmon Fillet",
+   "quantity": 1,
+   "price": 9.87
+  }
+ ],
+ "total": 23.83
+}

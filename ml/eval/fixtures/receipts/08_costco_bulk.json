@@ -1,0 +1,26 @@
+{
+ "receipt": "08_costco_bulk",
+ "lines": [
+  {
+   "name": "KS ORG EGGS 24CT",
+   "quantity": 1,
+   "price": 9.99
+  },
+  {
+   "name": "ROTISSERIE CHICKEN",
+   "quantity": 1,
+   "price": 4.99
+  },
+  {
+   "name": "KS BUTTER 4PK",
+   "quantity": 1,
+   "price": 11.49
+  },
+  {
+   "name": "STRAWBERRIES 2LB",
+   "quantity": 1,
+   "price": 7.99
+  }
+ ],
+ "total": 34.46
+}

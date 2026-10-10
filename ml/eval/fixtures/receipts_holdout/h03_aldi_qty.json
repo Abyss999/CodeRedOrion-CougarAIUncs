@@ -1,0 +1,21 @@
+{
+ "receipt": "h03_aldi_qty",
+ "lines": [
+  {
+   "name": "Brioche Buns 8ct",
+   "quantity": 2,
+   "price": 2.38
+  },
+  {
+   "name": "Honeycrisp Apples 3lb",
+   "quantity": 1,
+   "price": 4.99
+  },
+  {
+   "name": "Greek Yogurt Vanilla",
+   "quantity": 3,
+   "price": 2.67
+  }
+ ],
+ "total": 10.04
+}

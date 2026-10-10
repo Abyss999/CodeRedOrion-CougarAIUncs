@@ -1,0 +1,6 @@
+LIDL
+Bananen            1,29
+Vollmilch 1L       0,95
+Joghurt Natur      0,49
+Brot Vollkorn      1,79
+SUMME EUR          4,52

@@ -1,13 +1,16 @@
 # ml/
 
-Experiments for food detection, spoilage classification and receipt OCR.
-**Training and heavy inference run off-box** (Colab or a teammate's GPU), never on the VPS.
+Food detection, spoilage classification and receipt OCR. **Training and heavy inference run off-box**
+(Colab / GPU). Full write-up: [`docs/ML.md`](../docs/ML.md).
 
 | Dir | Owner | What |
 |---|---|---|
-| `yolo/` | ML builder | Dataset prep, training notebook, exported weights (weights are gitignored; link them in `docs/ML.md`) |
-| `ocr/` | ML builder | Receipt pipeline: `zai-org/GLM-OCR` text → Gemini structuring → line items |
-| `serve/` | ML builder | Small inference service the backend calls via `ML_SERVICE_URL` (contract in `docs/API.md`, `POST /items/from-photo`) |
-| `eval/` | ML QA only | Held-out sets, eval scripts, results — thresholds in `docs/QA.md` |
+| `yolo/` | ML builder | `taxonomy.py` (class -> backend category), `prepare_dataset.py`, `train.py`, `train_colab.ipynb`, `infer.py`, `export_predictions.py`, `requirements.txt` (GPU-side, `ultralytics==8.4.175`) |
+| `ocr/` | ML builder | `receipt_pipeline.py`: GLM-OCR backend + deterministic `parse_receipt_text` + optional Gemini hook |
+| `serve/` | ML builder | Flask inference service (`/detect`, `/ocr`, `/health`) with fake + real backends; `Dockerfile`, GPU `requirements.txt` |
+| `eval/` | ML QA only | Held-out sets, eval scripts, results |
 
-Confirm the exact YOLO version (Ultralytics release) before training and record it in `docs/DECISIONS.md`.
+Light tests (run from `ml/`, project venv, no torch/ultralytics needed):
+`../.venv/bin/python -m pytest serve/tests ocr/tests yolo/tests -q`
+
+Dev server with fake backends: `PORT=8000 python -m serve.app` (from `ml/`).

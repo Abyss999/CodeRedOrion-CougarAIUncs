@@ -1,0 +1,21 @@
+{
+ "receipt": "11_lowercase_pos",
+ "lines": [
+  {
+   "name": "apples gala",
+   "quantity": 3,
+   "price": 3.6
+  },
+  {
+   "name": "bread rye",
+   "quantity": 1,
+   "price": 2.8
+  },
+  {
+   "name": "milk oat 1l",
+   "quantity": 1,
+   "price": 2.45
+  }
+ ],
+ "total": 8.85
+}

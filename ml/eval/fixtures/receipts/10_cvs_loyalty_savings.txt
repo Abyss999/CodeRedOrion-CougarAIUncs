@@ -1,0 +1,9 @@
+CVS/pharmacy
+GATORADE 28OZ         1.99
+   ExtraCare Savings  -0.50
+PEANUT BUTTER 16OZ    3.29
+CHEWY GRANOLA BARS    2.50
+SUBTOTAL              7.28
+TAX                   0.45
+TOTAL                 7.73
+YOU SAVED             0.50

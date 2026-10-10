@@ -1,0 +1,26 @@
+{
+ "receipt": "06_subtotal_vs_total_tax",
+ "lines": [
+  {
+   "name": "365 ORG SPINACH 10OZ",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "SALMON FILLET",
+   "quantity": 1,
+   "price": 12.99
+  },
+  {
+   "name": "AVOCADO HASS",
+   "quantity": 1,
+   "price": 1.5
+  },
+  {
+   "name": "ALMOND MILK UNSWEET",
+   "quantity": 1,
+   "price": 3.29
+  }
+ ],
+ "total": 23.08
+}

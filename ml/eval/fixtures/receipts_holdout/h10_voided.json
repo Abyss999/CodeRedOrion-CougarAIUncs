@@ -1,0 +1,21 @@
+{
+ "receipt": "h10_voided",
+ "lines": [
+  {
+   "name": "LG AVOCADOS 4CT",
+   "quantity": 1,
+   "price": 5.99
+  },
+  {
+   "name": "CAGE FREE EGGS 18",
+   "quantity": 1,
+   "price": 6.49
+  },
+  {
+   "name": "BUTTER SALTED 1LB",
+   "quantity": 1,
+   "price": 4.79
+  }
+ ],
+ "total": 17.27
+}

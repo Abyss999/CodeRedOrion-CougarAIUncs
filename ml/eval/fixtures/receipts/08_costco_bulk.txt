@@ -1,0 +1,8 @@
+COSTCO WHOLESALE #1002
+E 1234567 KS ORG EGGS 24CT      9.99
+E 7654321 ROTISSERIE CHICKEN    4.99
+E 1112223 KS BUTTER 4PK        11.49
+E 9998887 STRAWBERRIES 2LB      7.99
+SUBTOTAL                       34.46
+TAX                             0.00
+**** TOTAL                     34.46

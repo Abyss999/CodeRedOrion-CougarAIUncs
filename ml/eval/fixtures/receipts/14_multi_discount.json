@@ -1,0 +1,26 @@
+{
+ "receipt": "14_multi_discount",
+ "lines": [
+  {
+   "name": "YOGURT STRAWBERRY 6OZ",
+   "quantity": 1,
+   "price": 0.89
+  },
+  {
+   "name": "YOGURT STRAWBERRY 6OZ",
+   "quantity": 1,
+   "price": 0.89
+  },
+  {
+   "name": "YOGURT STRAWBERRY 6OZ",
+   "quantity": 1,
+   "price": 0.89
+  },
+  {
+   "name": "CHICKEN BROTH 32OZ",
+   "quantity": 1,
+   "price": 2.19
+  }
+ ],
+ "total": 3.97
+}

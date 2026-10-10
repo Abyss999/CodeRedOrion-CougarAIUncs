@@ -1,0 +1,36 @@
+{
+ "receipt": "h12_whole_numbers_and_long",
+ "lines": [
+  {
+   "name": "2 PK GALA APPLES",
+   "quantity": 1,
+   "price": 3.0
+  },
+  {
+   "name": "GREEN ONIONS",
+   "quantity": 3,
+   "price": 7.5
+  },
+  {
+   "name": "RED BELL PEPPER",
+   "quantity": 0.85,
+   "price": 2.12
+  },
+  {
+   "name": "BEEF CHUCK ROAST",
+   "quantity": 1,
+   "price": 12.4
+  },
+  {
+   "name": "COTTAGE CHEESE 16OZ",
+   "quantity": 1,
+   "price": 2.79
+  },
+  {
+   "name": "FROZEN BROCCOLI 12OZ",
+   "quantity": 1,
+   "price": 1.5
+  }
+ ],
+ "total": 29.31
+}

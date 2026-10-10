@@ -1,0 +1,26 @@
+{
+ "receipt": "15_heb_sale_tags",
+ "lines": [
+  {
+   "name": "PICO DE GALLO",
+   "quantity": 1,
+   "price": 2.98
+  },
+  {
+   "name": "LIMES 1LB",
+   "quantity": 1,
+   "price": 1.24
+  },
+  {
+   "name": "TORTILLAS CORN 30CT",
+   "quantity": 1,
+   "price": 1.89
+  },
+  {
+   "name": "CILANTRO BUNCH",
+   "quantity": 1,
+   "price": 0.68
+  }
+ ],
+ "total": 6.79
+}

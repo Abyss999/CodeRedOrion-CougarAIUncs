@@ -1,0 +1,21 @@
+{
+ "receipt": "19_ocr_noisy_spacing",
+ "lines": [
+  {
+   "name": "MILK 2% GAL",
+   "quantity": 1,
+   "price": 4.29
+  },
+  {
+   "name": "EGGS LARGE DOZ",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "SPINACH BABY",
+   "quantity": 1,
+   "price": 2.99
+  }
+ ],
+ "total": 11.27
+}

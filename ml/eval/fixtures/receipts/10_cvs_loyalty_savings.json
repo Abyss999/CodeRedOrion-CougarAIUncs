@@ -1,0 +1,21 @@
+{
+ "receipt": "10_cvs_loyalty_savings",
+ "lines": [
+  {
+   "name": "GATORADE 28OZ",
+   "quantity": 1,
+   "price": 1.99
+  },
+  {
+   "name": "PEANUT BUTTER 16OZ",
+   "quantity": 1,
+   "price": 3.29
+  },
+  {
+   "name": "CHEWY GRANOLA BARS",
+   "quantity": 1,
+   "price": 2.5
+  }
+ ],
+ "total": 7.73
+}

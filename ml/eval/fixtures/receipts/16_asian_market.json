@@ -1,0 +1,26 @@
+{
+ "receipt": "16_asian_market",
+ "lines": [
+  {
+   "name": "NAPA CABBAGE",
+   "quantity": 3.2,
+   "price": 2.21
+  },
+  {
+   "name": "TOFU FIRM 14OZ",
+   "quantity": 1,
+   "price": 1.79
+  },
+  {
+   "name": "SHRIMP RAW 1LB",
+   "quantity": 1,
+   "price": 8.99
+  },
+  {
+   "name": "JASMINE RICE 5LB",
+   "quantity": 1,
+   "price": 7.49
+  }
+ ],
+ "total": 20.48
+}

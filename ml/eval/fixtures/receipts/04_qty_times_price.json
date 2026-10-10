@@ -1,0 +1,26 @@
+{
+ "receipt": "04_qty_times_price",
+ "lines": [
+  {
+   "name": "GREEK YOGURT",
+   "quantity": 3,
+   "price": 3.75
+  },
+  {
+   "name": "BANANAS",
+   "quantity": 2,
+   "price": 1.98
+  },
+  {
+   "name": "RIBEYE STEAK",
+   "quantity": 1,
+   "price": 5.49
+  },
+  {
+   "name": "LIMES",
+   "quantity": 4,
+   "price": 2.0
+  }
+ ],
+ "total": 13.22
+}
