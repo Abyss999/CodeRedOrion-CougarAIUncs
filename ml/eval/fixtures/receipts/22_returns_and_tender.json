@@ -1,0 +1,21 @@
+{
+ "receipt": "22_returns_and_tender",
+ "lines": [
+  {
+   "name": "CHICKEN WINGS 2LB",
+   "quantity": 1,
+   "price": 7.99
+  },
+  {
+   "name": "RANCH DRESSING",
+   "quantity": 1,
+   "price": 2.89
+  },
+  {
+   "name": "CELERY STALKS",
+   "quantity": 1,
+   "price": 1.79
+  }
+ ],
+ "total": 12.67
+}

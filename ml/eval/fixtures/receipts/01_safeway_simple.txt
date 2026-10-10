@@ -1,0 +1,13 @@
+SAFEWAY
+1234 MARKET ST  SAN FRANCISCO CA
+03/14/2026 10:42AM  STORE 0412
+--------------------------------
+MILK 2% GAL              4.29
+LG EGGS 12CT             3.99
+BANANAS ORG              1.87
+SOURDOUGH LOAF           4.50
+SUBTOTAL                14.65
+TAX                      0.00
+TOTAL                   14.65
+VISA ****1234
+THANK YOU FOR SHOPPING

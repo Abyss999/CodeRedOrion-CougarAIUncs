@@ -1,0 +1,26 @@
+{
+ "receipt": "h02_heb_bogo",
+ "lines": [
+  {
+   "name": "SLC ORG CHKN STRIPS 12OZ",
+   "quantity": 1,
+   "price": 6.49
+  },
+  {
+   "name": "ORG CHKN STRIPS 12OZ",
+   "quantity": 1,
+   "price": 6.49
+  },
+  {
+   "name": "BLUEBONNET BUTTER 1LB",
+   "quantity": 1,
+   "price": 3.98
+  },
+  {
+   "name": "TX PEACHES 2 LB",
+   "quantity": 1,
+   "price": 4.98
+  }
+ ],
+ "total": 15.45
+}

@@ -1,0 +1,21 @@
+{
+ "receipt": "05_coupon_discount",
+ "lines": [
+  {
+   "name": "BREAD WHOLE WHEAT",
+   "quantity": 1,
+   "price": 3.29
+  },
+  {
+   "name": "CHEDDAR SHARP 8OZ",
+   "quantity": 1,
+   "price": 2.79
+  },
+  {
+   "name": "ORANGE JUICE 52OZ",
+   "quantity": 1,
+   "price": 3.99
+  }
+ ],
+ "total": 9.51
+}

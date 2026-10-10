@@ -1,0 +1,31 @@
+{
+ "receipt": "h06_bodega",
+ "lines": [
+  {
+   "name": "Egg sandwich",
+   "quantity": 1,
+   "price": 4.5
+  },
+  {
+   "name": "Coffee large",
+   "quantity": 1,
+   "price": 1.75
+  },
+  {
+   "name": "Banana",
+   "quantity": 1,
+   "price": 0.5
+  },
+  {
+   "name": "Milk quart",
+   "quantity": 1,
+   "price": 2.25
+  },
+  {
+   "name": "Bread Wonder",
+   "quantity": 1,
+   "price": 3.49
+  }
+ ],
+ "total": 12.49
+}

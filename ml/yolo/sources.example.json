@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to sources.json. Each 'root' is where you downloaded+unzipped the dataset. class_map keys are the SOURCE label strings; value is a canonical taxonomy name, 'name:spoiled' to force freshness, or null to drop. Class lists below were NOT verifiable from the build host (Roboflow/figshare return 403 to bots) - open each dataset, read its data.yaml names, and extend class_map. Unmapped labels are dropped and listed in dataset_report.json.",
+  "sources": [
+    {"name": "fridge_objects", "kind": "yolo", "root": "/content/raw/fridge_objects",
+     "license": "CC BY 4.0", "freshness_default": "fresh",
+     "url": "https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo", "class_map": {}},
+    {"name": "hien_fridge", "kind": "yolo", "root": "/content/raw/hien_fridge",
+     "license": "CC BY 4.0", "freshness_default": "fresh",
+     "url": "https://universe.roboflow.com/gracelearning/hien_fridge-tathx", "class_map": {}},
+    {"name": "vegqual", "kind": "yolo", "root": "/content/raw/vegqual",
+     "license": "CHECK on figshare (not verified)",
+     "url": "https://figshare.com/articles/dataset/A_Multiclass_Dataset_for_Real-Time_Fresh_and_Defective_Vegetables/30596084",
+     "class_map": {}},
+    {"name": "fresh_rotten_fruits", "kind": "folders", "root": "/content/raw/fresh_rotten_fruits",
+     "license": "CHECK on Kaggle page (not verified)",
+     "url": "https://www.kaggle.com/datasets/sriramr/fruits-fresh-and-rotten-for-classification",
+     "class_map": {}}
+  ]
+}

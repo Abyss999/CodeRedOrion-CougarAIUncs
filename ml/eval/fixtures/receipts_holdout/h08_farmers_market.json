@@ -1,0 +1,26 @@
+{
+ "receipt": "h08_farmers_market",
+ "lines": [
+  {
+   "name": "Tomatoes heirloom 2lb",
+   "quantity": 1,
+   "price": 6.0
+  },
+  {
+   "name": "Sweet corn",
+   "quantity": 6,
+   "price": 4.5
+  },
+  {
+   "name": "Honey jar",
+   "quantity": 1,
+   "price": 9.0
+  },
+  {
+   "name": "Eggs dozen",
+   "quantity": 1,
+   "price": 5.5
+  }
+ ],
+ "total": 25.0
+}

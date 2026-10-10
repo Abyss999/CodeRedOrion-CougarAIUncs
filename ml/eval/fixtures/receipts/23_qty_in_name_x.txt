@@ -1,0 +1,5 @@
+FOOD LION
+BANANAS X5          2.45
+YOGURT CUP X4       3.16
+LETTUCE ROMAINE     1.99
+TOTAL               7.60

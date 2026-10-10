@@ -1,0 +1,13 @@
+WALMART SUPERCENTER
+STORE #2231  (555) 010-7788
+GV WHL MILK GAL       078742013251 F   3.58
+GV LARGE EGG 18       078742127217 F   4.62
+BANANAS               000000040111 F   0.92
+CHKN BRST BNLS        026024410018 F   9.74
+FROZ PEAS 12OZ        078742231471 F   1.28
+SUBTOTAL                              20.14
+TAX 1  6.250 %                         0.00
+TOTAL                                 20.14
+CASH TEND                             40.00
+CHANGE DUE                            19.86
+# ITEMS SOLD 5

@@ -1,0 +1,31 @@
+{
+ "receipt": "h09_multipage",
+ "lines": [
+  {
+   "name": "CHEDDAR CHEESE BLOCK",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "TURKEY SLICES 9OZ",
+   "quantity": 1,
+   "price": 4.29
+  },
+  {
+   "name": "HUMMUS CLASSIC",
+   "quantity": 1,
+   "price": 2.99
+  },
+  {
+   "name": "RED GRAPES SEEDLESS",
+   "quantity": 1,
+   "price": 3.77
+  },
+  {
+   "name": "LUNCHMEAT HAM 8OZ",
+   "quantity": 1,
+   "price": 3.49
+  }
+ ],
+ "total": 18.53
+}

@@ -1,0 +1,8 @@
+KROGER
+01/09/2026
+3 @ 1.25  GREEK YOGURT      3.75
+2 @ 0.99  BANANAS           1.98
+1 @ 5.49  RIBEYE STEAK      5.49
+4 @ 0.50  LIMES             2.00
+  SUBTOTAL                 13.22
+  TOTAL                    13.22

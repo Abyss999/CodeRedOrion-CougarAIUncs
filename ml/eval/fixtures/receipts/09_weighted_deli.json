@@ -1,0 +1,21 @@
+{
+ "receipt": "09_weighted_deli",
+ "lines": [
+  {
+   "name": "DELI TURKEY BREAST",
+   "quantity": 0.75,
+   "price": 6.74
+  },
+  {
+   "name": "SWISS CHEESE SLICED",
+   "quantity": 0.5,
+   "price": 3.75
+  },
+  {
+   "name": "ROMA TOMATOES",
+   "quantity": 1.12,
+   "price": 2.23
+  }
+ ],
+ "total": 12.72
+}

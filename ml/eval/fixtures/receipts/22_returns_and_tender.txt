@@ -1,0 +1,11 @@
+SAFEWAY
+CHICKEN WINGS 2LB        7.99
+RANCH DRESSING           2.89
+CELERY STALKS            1.79
+SUBTOTAL                12.67
+TAX                      0.00
+TOTAL                   12.67
+DEBIT TEND              12.67
+CHANGE                   0.00
+REWARDS POINTS EARNED      12
+CARD BALANCE            57.30

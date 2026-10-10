@@ -1,0 +1,8 @@
+Lucky Supermarket
+Chicken Thighs Bone-In	$8.47
+Baby Carrots 1lb	$1.99
+Cottage Cheese 16oz	$3.19
+Frozen Pizza Margherita	$5.99
+Subtotal	$19.64
+Tax	$0.00
+Total	$19.64

@@ -1,0 +1,14 @@
+SAVE MART
+01 BANANAS ORGANIC        1.29
+02 GROUND BEEF 80/20      6.99
+03 YELLOW ONIONS          1.79
+04 CANNED BLACK BEANS     0.99
+05 CANNED BLACK BEANS     0.99
+06 SHREDDED CHEESE        3.49
+07 SOUR CREAM             1.99
+08 TORTILLAS FLOUR        2.49
+09 SALSA MEDIUM           2.99
+10 PAPER TOWELS  T        6.99
+SUBTOTAL                 30.00
+TAX                       0.60
+TOTAL                    30.60

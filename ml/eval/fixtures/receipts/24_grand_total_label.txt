@@ -1,0 +1,8 @@
+Meijer
+Frozen Waffles 10ct      3.49
+Maple Syrup              4.99
+Pork Chops Thick         7.88
+Items: 3
+Merchandise Total       16.36
+Sales Tax                0.00
+GRAND TOTAL             16.36

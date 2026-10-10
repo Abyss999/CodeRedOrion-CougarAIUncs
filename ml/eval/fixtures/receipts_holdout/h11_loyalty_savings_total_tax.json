@@ -1,0 +1,26 @@
+{
+ "receipt": "h11_loyalty_savings_total_tax",
+ "lines": [
+  {
+   "name": "ORANGE JUICE NFC 52OZ",
+   "quantity": 1,
+   "price": 4.99
+  },
+  {
+   "name": "STRAWBERRIES 1LB",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "ROTISSERIE CHICKEN",
+   "quantity": 1,
+   "price": 6.99
+  },
+  {
+   "name": "PEPSI 12PK",
+   "quantity": 1,
+   "price": 6.49
+  }
+ ],
+ "total": 21.51
+}

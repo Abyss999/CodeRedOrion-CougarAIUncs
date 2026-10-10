@@ -1,0 +1,31 @@
+{
+ "receipt": "02_walmart_tax_upc",
+ "lines": [
+  {
+   "name": "GV WHL MILK GAL",
+   "quantity": 1,
+   "price": 3.58
+  },
+  {
+   "name": "GV LARGE EGG 18",
+   "quantity": 1,
+   "price": 4.62
+  },
+  {
+   "name": "BANANAS",
+   "quantity": 1,
+   "price": 0.92
+  },
+  {
+   "name": "CHKN BRST BNLS",
+   "quantity": 1,
+   "price": 9.74
+  },
+  {
+   "name": "FROZ PEAS 12OZ",
+   "quantity": 1,
+   "price": 1.28
+  }
+ ],
+ "total": 20.14
+}

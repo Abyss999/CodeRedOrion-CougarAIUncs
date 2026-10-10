@@ -1,0 +1,26 @@
+{
+ "receipt": "07_aldi_short",
+ "lines": [
+  {
+   "name": "BUTTER UNSALTED",
+   "quantity": 1,
+   "price": 3.15
+  },
+  {
+   "name": "CREAM CHEESE",
+   "quantity": 1,
+   "price": 1.89
+  },
+  {
+   "name": "SPAGHETTI",
+   "quantity": 1,
+   "price": 0.95
+  },
+  {
+   "name": "TOMATO SAUCE",
+   "quantity": 1,
+   "price": 1.19
+  }
+ ],
+ "total": 7.18
+}

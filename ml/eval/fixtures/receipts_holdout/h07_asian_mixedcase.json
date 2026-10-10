@@ -1,0 +1,31 @@
+{
+ "receipt": "h07_asian_mixedcase",
+ "lines": [
+  {
+   "name": "Fresh Bok Choy",
+   "quantity": 2.15,
+   "price": 2.77
+  },
+  {
+   "name": "Silken Tofu 16oz",
+   "quantity": 1,
+   "price": 1.99
+  },
+  {
+   "name": "Lee Kum Kee Oyster Sauce",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "Pork Belly Sliced",
+   "quantity": 1.4,
+   "price": 8.39
+  },
+  {
+   "name": "Jasmine Rice 10lb",
+   "quantity": 1,
+   "price": 14.99
+  }
+ ],
+ "total": 31.63
+}

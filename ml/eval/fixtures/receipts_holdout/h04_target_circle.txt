@@ -1,0 +1,10 @@
+TARGET
+Good & Gather Organic Milk      4.19
+Good & Gather Baby Carrots      1.89
+Market Pantry Spaghetti         1.29
+Up&Up Paper Towels  T           7.99
+   Target Circle 10% Off       -0.80
+SUBTOTAL                       14.56
+T = CA TAX 8.75%                0.70
+TOTAL                          15.26
+AMEX ENDING 1005               15.26

@@ -1,0 +1,6 @@
+SAFEWAY
+M ILK  2 %  GAL           4 .29
+EGGS  LARGE  DOZ          3.99
+SPINACH  BABY             2.99
+SUBTOTAL                 11.27
+TOTAL                    11.27

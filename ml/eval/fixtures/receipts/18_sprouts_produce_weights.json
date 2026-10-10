@@ -1,0 +1,26 @@
+{
+ "receipt": "18_sprouts_produce_weights",
+ "lines": [
+  {
+   "name": "ORG KALE BUNCH",
+   "quantity": 1,
+   "price": 2.49
+  },
+  {
+   "name": "BROCCOLI CROWN",
+   "quantity": 1.45,
+   "price": 2.89
+  },
+  {
+   "name": "YELLOW ONIONS",
+   "quantity": 3.0,
+   "price": 2.97
+  },
+  {
+   "name": "SWEET POTATO",
+   "quantity": 2.1,
+   "price": 2.71
+  }
+ ],
+ "total": 11.06
+}

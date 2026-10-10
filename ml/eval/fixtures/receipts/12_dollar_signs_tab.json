@@ -1,0 +1,26 @@
+{
+ "receipt": "12_dollar_signs_tab",
+ "lines": [
+  {
+   "name": "Chicken Thighs Bone-In",
+   "quantity": 1,
+   "price": 8.47
+  },
+  {
+   "name": "Baby Carrots 1lb",
+   "quantity": 1,
+   "price": 1.99
+  },
+  {
+   "name": "Cottage Cheese 16oz",
+   "quantity": 1,
+   "price": 3.19
+  },
+  {
+   "name": "Frozen Pizza Margherita",
+   "quantity": 1,
+   "price": 5.99
+  }
+ ],
+ "total": 19.64
+}

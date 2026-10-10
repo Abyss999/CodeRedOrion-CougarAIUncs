@@ -1,0 +1,56 @@
+{
+ "receipt": "20_big_receipt_tax_flag",
+ "lines": [
+  {
+   "name": "BANANAS ORGANIC",
+   "quantity": 1,
+   "price": 1.29
+  },
+  {
+   "name": "GROUND BEEF 80/20",
+   "quantity": 1,
+   "price": 6.99
+  },
+  {
+   "name": "YELLOW ONIONS",
+   "quantity": 1,
+   "price": 1.79
+  },
+  {
+   "name": "CANNED BLACK BEANS",
+   "quantity": 1,
+   "price": 0.99
+  },
+  {
+   "name": "CANNED BLACK BEANS",
+   "quantity": 1,
+   "price": 0.99
+  },
+  {
+   "name": "SHREDDED CHEESE",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "SOUR CREAM",
+   "quantity": 1,
+   "price": 1.99
+  },
+  {
+   "name": "TORTILLAS FLOUR",
+   "quantity": 1,
+   "price": 2.49
+  },
+  {
+   "name": "SALSA MEDIUM",
+   "quantity": 1,
+   "price": 2.99
+  },
+  {
+   "name": "PAPER TOWELS",
+   "quantity": 1,
+   "price": 6.99
+  }
+ ],
+ "total": 30.6
+}

@@ -1,0 +1,26 @@
+{
+ "receipt": "h04_target_circle",
+ "lines": [
+  {
+   "name": "Good & Gather Organic Milk",
+   "quantity": 1,
+   "price": 4.19
+  },
+  {
+   "name": "Good & Gather Baby Carrots",
+   "quantity": 1,
+   "price": 1.89
+  },
+  {
+   "name": "Market Pantry Spaghetti",
+   "quantity": 1,
+   "price": 1.29
+  },
+  {
+   "name": "Up&Up Paper Towels",
+   "quantity": 1,
+   "price": 7.99
+  }
+ ],
+ "total": 15.26
+}

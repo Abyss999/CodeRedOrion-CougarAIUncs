@@ -1,0 +1,9 @@
+WEGMANS
+Item                      Qty    Price
+Organic Whole Milk          1     5.29
+Grass-Fed Butter            2     9.98
+Fresh Mozzarella            1     4.49
+Baguette                    1     2.99
+                  Subtotal     22.75
+                       Tax      0.00
+                     Total     22.75

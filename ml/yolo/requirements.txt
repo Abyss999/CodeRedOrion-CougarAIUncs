@@ -1,0 +1,7 @@
+# GPU-side ONLY (Colab / GPU box). NOT installed on the VPS.
+# Verified on PyPI 2026-10-10: 8.4.175 is the latest Ultralytics release; docs.ultralytics.com/models
+# says "start with YOLO26 for a new project". LICENCE: Ultralytics is AGPL-3.0.
+ultralytics==8.4.175
+pyyaml>=6.0
+pillow>=10.0
+numpy>=1.26

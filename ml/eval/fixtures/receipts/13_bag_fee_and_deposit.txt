@@ -1,0 +1,8 @@
+SAFEWAY
+SPARKLING WATER 12PK        5.99
+CRV DEPOSIT                 0.60
+BREAD MULTIGRAIN            3.99
+PAPER BAG FEE               0.10
+SUBTOTAL                   10.68
+TAX                         0.00
+TOTAL                      10.68
