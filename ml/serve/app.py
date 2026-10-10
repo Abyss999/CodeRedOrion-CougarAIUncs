@@ -1,7 +1,7 @@
 """Inference service. Contract (fixed; backend codes against it):
 
   POST /detect  multipart image, form mode=fridge|single
-     -> {"candidates":[{name,category,confidence,freshness,bbox|null}], "model": str}
+     -> {"candidates":[{name,category,food_group,confidence,freshness,bbox|null}], "model": str}
   POST /ocr     multipart image
      -> {"lines":[{name,quantity,price}], "total": float|null, "raw_text": str}
   GET  /health  -> {"status":"ok", ...}
@@ -18,7 +18,7 @@ from werkzeug.exceptions import HTTPException
 
 from ocr.receipt_pipeline import gemini_structure, parse_receipt_text
 from .backends import detector_from_env, ocr_from_env
-from .categories import CATEGORIES
+from .categories import CATEGORIES, FOOD_GROUPS, food_group_for
 
 log = logging.getLogger("fwr.serve")
 MAX_FRIDGE_CANDIDATES = 50
@@ -51,6 +51,8 @@ def _clean_candidate(d: dict) -> dict:
     bbox = d.get("bbox")
     return {"name": str(d["name"]),
             "category": cat if cat in CATEGORIES else "other",
+            "food_group": (d.get("food_group") if d.get("food_group") in FOOD_GROUPS
+                           else food_group_for(str(d["name"]))),
             "confidence": round(float(d.get("confidence", 0.0)), 4),
             "freshness": "spoiled" if d.get("freshness") == "spoiled" else "fresh",
             "bbox": [round(float(v), 1) for v in bbox] if bbox else None}

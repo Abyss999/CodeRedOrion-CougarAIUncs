@@ -64,6 +64,22 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   stay `403`; non-members of the group get `403`. `PATCH` stays owner-only. If the item's open
   listing was claimed and `recipient_id` is omitted, the claimer becomes `recipient_id`.
 
+## Food groups (`food_group`)
+`food_group` is the user-facing grouping: `protein | veggies | fruit | dairy | grains | pantry |
+leftovers | frozen | other`. It is separate from the spoilage `category` (which still drives expiry and
+CO2e). Returned on every item response and every candidate (parse-text, from-photo, from-receipt,
+barcode). `POST /items` and `PATCH /items/:id` accept it (invalid -> `400 validation_error`); when
+omitted on create it is derived from `category` + name (meat/seafood/eggs -> protein, bakery -> grains,
+pantry_dry -> pantry, dairy/leftovers/frozen/other -> same name, produce_* -> `fruit` if the name is a
+known fruit else `veggies`). A `PATCH` that changes `category` without `food_group` re-derives it.
+Candidates use the ML service's `food_group` when present, else Gemini's (validated), else the heuristic.
+- ✅ `GET /items?group_by=food_group` (only valid value; anything else -> `400`) →
+  `200 {sections: [{food_group, items: [item…]}]}`. Sections follow the Fridge design order
+  (protein, veggies, fruit, dairy, then grains, pantry, leftovers, frozen, other); **empty sections
+  are omitted**; items within a section sort by `predicted_expiry` ascending (nulls last). Other
+  filters (`storage`, `include_removed`) still apply. Without `group_by` the response is unchanged
+  (`{items: [...]}`).
+
 ## Adding food
 Candidates are **not saved** until `POST /items`. Every candidate also carries a suggested
 `storage`, `quantity`, `unit`, `est_price`, `predicted_expiry` and `expiry_source` so the client can
@@ -152,8 +168,10 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
 
 ## Recipes, impact, tips
 - ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str]}` → `200 {recipes: [{title,
-  minutes, uses_items, missing_items, steps}]}` built from the caller's 20 soonest-expiring active
-  items. With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
+  minutes, uses_items, missing_items, steps, macros, macros_estimated}]}` built from the caller's 20 soonest-expiring active
+  items. `macros` = `{kcal: int, protein_g, carbs_g, fat_g}` per serving, estimated by Gemini
+  (validated: kcal 0-3000, grams 0-300, numeric); missing/invalid -> `macros: null` (no error).
+  `macros_estimated` is always `true`. With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
 - ✅ `GET /impact?range=week|month|all` (default `all`; week=last 7 days, month=last 30; bad → 400) →
   `{saved: {count, kg, money, co2e_kg}, wasted: {count, kg, money, co2e_kg}, waste_rate, weekly:
   [{week (date of bucket start), saved, wasted}]}`. `saved` = `used`+`donated` removals, `wasted` =

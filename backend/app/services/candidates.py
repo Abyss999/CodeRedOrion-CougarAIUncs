@@ -1,6 +1,6 @@
 """Normalise raw candidates (ML / Gemini / OFF) and attach a predicted expiry."""
 from ..models import CATEGORIES
-from . import expiry
+from . import expiry, food_group
 
 _DEFAULT_STORAGE = {"frozen": "freezer", "pantry_dry": "pantry"}
 
@@ -20,9 +20,10 @@ def normalize(raw: dict) -> dict | None:
     storage = raw.get("storage")
     if storage not in ("fridge", "pantry", "freezer"):
         storage = _DEFAULT_STORAGE.get(category, "fridge")
+    fg = food_group.resolve(raw.get("food_group"), category, name)
     exp, src = expiry.predict(category, storage)
     out = {
-        "name": name, "category": category, "storage": storage,
+        "name": name, "category": category, "food_group": fg, "storage": storage,
         "quantity": _num(raw.get("quantity"), 1.0), "unit": str(raw.get("unit") or "piece"),
         "est_price": _num(raw.get("est_price") if "est_price" in raw else raw.get("price")),
         "predicted_expiry": exp.isoformat(), "expiry_source": src,

@@ -11,6 +11,8 @@ CATEGORIES = (
     "produce_leafy", "produce_hardy", "dairy", "meat", "seafood", "bakery",
     "eggs", "leftovers", "pantry_dry", "frozen", "other",
 )
+FOOD_GROUPS = ("protein", "veggies", "fruit", "dairy", "grains", "pantry", "leftovers",
+               "frozen", "other")
 STORAGES = ("fridge", "pantry", "freezer")
 SOURCES = ("photo", "single_photo", "text", "barcode", "receipt", "manual")
 EXPIRY_SOURCES = ("default", "gemini", "user")
@@ -43,6 +45,7 @@ class Item(db.Model):
     group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id"), nullable=True)
     name = db.Column(db.Text, nullable=False)
     category = db.Column(db.Text, nullable=False)
+    food_group = db.Column(db.Text, nullable=True)
     storage = db.Column(db.Text, nullable=False)
     quantity = db.Column(db.Numeric, nullable=False, default=1)
     unit = db.Column(db.Text, nullable=False, default="piece")
@@ -61,6 +64,8 @@ class Item(db.Model):
         CheckConstraint("(removed_at IS NULL) = (outcome IS NULL)", name="ck_items_removed_iff_outcome"),
         CheckConstraint("(outcome = 'thrown_out') = (waste_reason IS NOT NULL)",
                         name="ck_items_reason_iff_thrown_out"),
+        CheckConstraint("food_group IS NULL OR food_group IN ('protein','veggies','fruit','dairy',"
+                        "'grains','pantry','leftovers','frozen','other')", name="ck_items_food_group"),
         Index("ix_items_owner_removed_expiry", "owner_id", "removed_at", "predicted_expiry"),
     )
 
