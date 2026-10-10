@@ -2,11 +2,13 @@
 
 PostgreSQL + TimescaleDB, one database. Relational tables for state; the `food_events`
 **hypertable** is the append-only log the Impact Dashboard is computed from.
-Status: **planned** — the backend builder creates these as Alembic migrations in Wave 1.
+Status: **implemented** in migration `0001_initial` (users, items, share_listings, food_events).
+Social tables other than `share_listings` are still planned; `items.group_id` and
+`share_listings.group_id` are plain nullable uuids until the `groups` table exists.
 
 ## Relational tables
 ### users
-`id uuid pk`, `email citext unique`, `password_hash`, `display_name`, `created_at`
+`id uuid pk (gen_random_uuid())`, `email citext unique` (lowercased by the API), `password_hash`, `display_name`, `created_at`
 
 ### items
 | Column | Type | Notes |
@@ -34,7 +36,9 @@ Constraints:
 CHECK ((removed_at IS NULL) = (outcome IS NULL))
 CHECK ((outcome = 'thrown_out') = (waste_reason IS NOT NULL))   -- reason required iff thrown out
 ```
+Also CHECKs on `storage`, `outcome` and `waste_reason` value sets (`ck_items_*`).
 Index: `(owner_id, removed_at, predicted_expiry)`.
+`quantity` defaults 1, `unit` defaults `piece`; `predicted_expiry` is NOT NULL (always predicted).
 
 ### Social
 - `friendships(user_id, friend_id, status pending|accepted, created_at)` — pk `(user_id, friend_id)`
@@ -57,12 +61,16 @@ CREATE TABLE food_events (
   outcome       text,                 -- remove only: used | donated | thrown_out
   waste_reason  text,                 -- remove + thrown_out only
   co2e_kg       numeric               -- remove only: est_weight_kg × category factor
+  -- id uuid default gen_random_uuid(); PRIMARY KEY (id, time): a hypertable PK must include the
+  -- partition column, so a single-column PK on id is impossible.
+  -- CHECK (outcome = 'thrown_out') = (waste_reason IS NOT NULL); CHECK event_type IN (...)
 );
 SELECT create_hypertable('food_events', by_range('time'));
-CREATE INDEX ON food_events (user_id, time DESC);
+CREATE INDEX ix_food_events_user_time ON food_events (user_id, time DESC);
 ```
 - Written **in the same transaction** as the state change it records.
-- Events are never updated or deleted.
+- Events are never updated or deleted. `item_id` has no FK (hypertables can't be FK targets cheaply and events must outlive items).
+- `share` events are written by `POST /share`; `expiry_warning` is reserved (nothing writes it yet).
 - `co2e_kg` uses per-category factors (source in `DECISIONS.md`). For `used`/`donated` it is
   CO₂e **avoided**; for `thrown_out` it is CO₂e **wasted**.
 
