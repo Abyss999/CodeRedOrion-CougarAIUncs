@@ -1,0 +1,11 @@
+Walgreens
+Store #5521
+SKITTLES BAG 14OZ           3.99
+GREEK YOGURT 4PK            4.79
+VOIDED ITEM  GREEK YOGURT 4PK  -4.79
+PEANUT BUTTER CREAMY        3.49
+DEL MONTE CORN CAN          1.29
+OATMEAL INSTANT 10CT        3.79
+Subtotal                   12.56
+Total Tax                   0.00
+Total                      12.56

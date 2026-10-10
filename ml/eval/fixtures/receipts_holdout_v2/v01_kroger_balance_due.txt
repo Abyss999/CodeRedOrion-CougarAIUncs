@@ -1,0 +1,13 @@
+KROGER
+Fuel Points Member
+SIMPLE TRUTH ORG MILK       5.49
+HNY NUT CHEERIOS 12OZ       4.29
+KRO LG EGGS 18CT            3.99
+BANANAS
+  1.30 lb @ $0.59/lb        0.77
+KRO SHRP CHEDDAR 8OZ        2.50
+   Instant Savings         -1.00
+SAVINGS TOTAL               1.00
+SUBTOTAL                   17.04
+Total Tax                   0.00
+Balance Due                16.04

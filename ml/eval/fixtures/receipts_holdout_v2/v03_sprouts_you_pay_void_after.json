@@ -1,0 +1,26 @@
+{
+ "receipt": "v03_sprouts_you_pay_void_after",
+ "lines": [
+  {
+   "name": "ORG GALA APPLES",
+   "quantity": 2.04,
+   "price": 4.06
+  },
+  {
+   "name": "BULK ALMONDS RAW",
+   "quantity": 0.55,
+   "price": 4.39
+  },
+  {
+   "name": "ORG AVOCADO",
+   "quantity": 1,
+   "price": 1.5
+  },
+  {
+   "name": "CHIA SEEDS 12OZ",
+   "quantity": 1,
+   "price": 5.99
+  }
+ ],
+ "total": 15.94
+}

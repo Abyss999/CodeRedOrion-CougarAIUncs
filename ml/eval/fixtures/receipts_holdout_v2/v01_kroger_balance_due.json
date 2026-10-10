@@ -1,0 +1,31 @@
+{
+ "receipt": "v01_kroger_balance_due",
+ "lines": [
+  {
+   "name": "SIMPLE TRUTH ORG MILK",
+   "quantity": 1,
+   "price": 5.49
+  },
+  {
+   "name": "HNY NUT CHEERIOS 12OZ",
+   "quantity": 1,
+   "price": 4.29
+  },
+  {
+   "name": "KRO LG EGGS 18CT",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "BANANAS",
+   "quantity": 1.3,
+   "price": 0.77
+  },
+  {
+   "name": "KRO SHRP CHEDDAR 8OZ",
+   "quantity": 1,
+   "price": 2.5
+  }
+ ],
+ "total": 16.04
+}

@@ -1,0 +1,31 @@
+{
+ "receipt": "v12_publix_mixedcase_total_due",
+ "lines": [
+  {
+   "name": "Sweet Baby Peppers 1lb",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "Ground Turkey 93/7",
+   "quantity": 1,
+   "price": 5.49
+  },
+  {
+   "name": "Barilla Penne 16oz",
+   "quantity": 1,
+   "price": 1.79
+  },
+  {
+   "name": "Cabot Cheddar Slices",
+   "quantity": 1,
+   "price": 3.29
+  },
+  {
+   "name": "Dozen Eggs Large",
+   "quantity": 1,
+   "price": 2.99
+  }
+ ],
+ "total": 17.55
+}

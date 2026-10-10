@@ -1,0 +1,31 @@
+{
+ "receipt": "v07_99ranch_mixedcase_void_nomatch",
+ "lines": [
+  {
+   "name": "Napa Cabbage",
+   "quantity": 3.1,
+   "price": 2.14
+  },
+  {
+   "name": "Fresh Shrimp 21/25",
+   "quantity": 1.05,
+   "price": 10.49
+  },
+  {
+   "name": "Instant Ramen 5pk",
+   "quantity": 1,
+   "price": 4.25
+  },
+  {
+   "name": "Soy Milk Unsweetened",
+   "quantity": 1,
+   "price": 2.99
+  },
+  {
+   "name": "Pocky Strawberry",
+   "quantity": 1,
+   "price": 1.79
+  }
+ ],
+ "total": 19.17
+}

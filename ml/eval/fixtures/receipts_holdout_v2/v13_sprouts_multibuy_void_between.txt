@@ -1,0 +1,10 @@
+SPROUTS #77
+4 @ 2 for $5 ORG BANANAS    10.00
+ORG BABY KALE 5OZ           3.99
+VOID  ORG BABY KALE 5OZ    -3.99
+ORG BABY KALE 5OZ           3.99
+LACROIX 8PK                 4.99
+FRESH PASTA RAVIOLI         5.49
+Subtotal                   24.47
+TOTAL SAVINGS               0.00
+AMOUNT DUE                 24.47

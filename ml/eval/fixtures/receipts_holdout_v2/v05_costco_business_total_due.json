@@ -1,0 +1,31 @@
+{
+ "receipt": "v05_costco_business_total_due",
+ "lines": [
+  {
+   "name": "KS CHICKEN BREAST",
+   "quantity": 1,
+   "price": 17.89
+  },
+  {
+   "name": "KS PAPER TOWEL 12CT",
+   "quantity": 1,
+   "price": 22.99
+  },
+  {
+   "name": "FRESH MOZZ 2LB",
+   "quantity": 1,
+   "price": 8.49
+  },
+  {
+   "name": "ORG SALAD KIT",
+   "quantity": 1,
+   "price": 4.99
+  },
+  {
+   "name": "KS BACON 4PK",
+   "quantity": 1,
+   "price": 15.99
+  }
+ ],
+ "total": 72.19
+}

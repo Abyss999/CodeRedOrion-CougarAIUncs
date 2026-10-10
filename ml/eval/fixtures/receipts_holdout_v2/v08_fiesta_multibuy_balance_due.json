@@ -1,0 +1,36 @@
+{
+ "receipt": "v08_fiesta_multibuy_balance_due",
+ "lines": [
+  {
+   "name": "TORTILLAS CORN 30CT",
+   "quantity": 1,
+   "price": 2.19
+  },
+  {
+   "name": "LIMES",
+   "quantity": 3,
+   "price": 7.5
+  },
+  {
+   "name": "AVOCADO HASS LG",
+   "quantity": 1,
+   "price": 1.25
+  },
+  {
+   "name": "POLLO ASADO 2LB",
+   "quantity": 1,
+   "price": 11.4
+  },
+  {
+   "name": "QUESO FRESCO 10OZ",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "CHORIZO LINK",
+   "quantity": 1,
+   "price": 4.49
+  }
+ ],
+ "total": 30.82
+}

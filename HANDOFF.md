@@ -13,8 +13,8 @@ each suite independently before merging.
 |---|---|---|
 | Backend core (auth, items, **removal flow**, events, impact, tips, AI endpoints) | merged #4 | 100 tests, 92% coverage |
 | Backend social (friends, groups, group pantries, Food Pantry, requests) | merged #5 | 158 tests total, 94% coverage |
-| ML: YOLO26 pipeline, receipt OCR, inference service, eval harness | merged #3 | parser 98.1 / 100 / 91.7 on a blind holdout; contract 14/14. **No model trained yet** |
-| Design: 8 key screens + design system + `Theme.swift` | merged #2 | **awaiting team approval**: https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx (private until the owner shares it) |
+| ML: YOLO26 pipeline, receipt OCR, inference service, eval harness | merged #3, parser fixes #8 | parser 97.2 / 100 / 100 on blind set v2 (then 100% after ML-10); contract 14/14. **No model trained yet** |
+| Design: 10 screens (incl. photo review + Recipes) + design system + `Theme.swift` | merged #2, #7 | **awaiting team approval**: https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx (private until the owner shares it) |
 | iOS app | **not started**: only the tab shell + `Theme.swift` | needs Xcode, and design approval first |
 | CI | **parked** in `ci/github-workflows/` (backend, ML, iOS) | the VPS token can't push workflow files |
 
@@ -24,6 +24,7 @@ each suite independently before merging.
   - QA sent two failures back: **BE-1**, a 500 on `/impact` for new users, and the **OCR parser** at 84.9% line recall. Both were fixed and re-verified before merge.
   - ML QA added a **blind holdout** so the parser's numbers aren't overfit.
 - Wave 3: backend social (#5), with a per-user visibility test matrix.
+- After the checkpoint: photo-review and Recipes screens (#7), and receipt-parser fixes ML-7 to ML-10 (#8), verified on a new blind set.
 - Checkpoint: `DECISIONS.md` (YOLO26, CO₂e factors, shelf-life table, design choices), QA results
   folded into `QA.md`, and updates to `SETUP`/`ARCHITECTURE`. `TEST_DATABASE_URL` was added to
   `.env.example` and CI, and an ML CI job was added.
@@ -60,7 +61,8 @@ each suite independently before merging.
 ## QA status
 - **Backend:** PASS, 158/158 with 94% coverage. No open bugs.
 - **ML:** parser, service contract and harness PASS. **YOLO is not evaluable yet.** Open bugs:
-  ML-7 and ML-8 (medium), ML-9 (low). None of them blocks the demo.
+  ML-11 to ML-14, all low. Both holdouts have now been used for fixing, so the next parser change
+  needs a fresh blind set v3.
 - **iOS and integration:** not run yet.
 
 The full log and bug list are in [`docs/QA.md`](docs/QA.md).

@@ -69,7 +69,8 @@ def _norm(out):
 
 
 HOLDOUT = os.path.join(EVAL_DIR, "fixtures", "receipts_holdout")
-SETS = {"original": FIX, "holdout": HOLDOUT}
+HOLDOUT_V2 = os.path.join(EVAL_DIR, "fixtures", "receipts_holdout_v2")
+SETS = {"original": FIX, "holdout": HOLDOUT, "holdout_v2": HOLDOUT_V2}
 
 
 def receipts(d=FIX):
@@ -108,12 +109,16 @@ def test_holdout_has_at_least_12_receipts():
     assert len(receipts(HOLDOUT)) >= 12
 
 
+def test_holdout_v2_has_15_receipts():
+    assert len(receipts(HOLDOUT_V2)) >= 15
+
+
 def test_parser_never_crashes(evaluation):
     assert evaluation["ocr"]["crashes"] == {}
 
 
 def test_parser_meets_thresholds(evaluation):
-    """Separate gate per set (original 24 / blind holdout 12). Holdout skips the >=20 sample-size rule."""
+    """Separate gate per set (original 24 / holdout v1 12 / blind holdout v2 15). Holdout skips the >=20 sample-size rule."""
     ocr = dict(evaluation["ocr"])
     if ocr["n_receipts"] < 20:
         ocr["n_receipts"] = 20  # size rule applies to the QA set only; the holdout is a generalisation check

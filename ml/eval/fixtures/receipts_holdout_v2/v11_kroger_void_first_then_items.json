@@ -1,0 +1,26 @@
+{
+ "receipt": "v11_kroger_void_first_then_items",
+ "lines": [
+  {
+   "name": "KRO WHOLE MILK GAL",
+   "quantity": 1,
+   "price": 3.29
+  },
+  {
+   "name": "PRIVATE SELECT PASTA SAUCE",
+   "quantity": 1,
+   "price": 2.49
+  },
+  {
+   "name": "KRO BREAD WHEAT",
+   "quantity": 1,
+   "price": 1.79
+  },
+  {
+   "name": "ROTISSERIE CHICKEN",
+   "quantity": 1,
+   "price": 5.99
+  }
+ ],
+ "total": 9.91
+}

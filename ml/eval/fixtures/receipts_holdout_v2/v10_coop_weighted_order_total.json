@@ -1,0 +1,26 @@
+{
+ "receipt": "v10_coop_weighted_order_total",
+ "lines": [
+  {
+   "name": "Bulk Rolled Oats",
+   "quantity": 1.8,
+   "price": 2.68
+  },
+  {
+   "name": "Local Honey 12oz",
+   "quantity": 1,
+   "price": 10.99
+  },
+  {
+   "name": "Organic Carrots 2lb",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "Co-op Basics Lentils",
+   "quantity": 1,
+   "price": 2.29
+  }
+ ],
+ "total": 18.43
+}
