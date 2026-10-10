@@ -11,13 +11,21 @@ def create_app(config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///:memory:")
     app.config["JWT_SECRET"] = os.environ.get("JWT_SECRET", "")
+    app.config["GEMINI_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
+    app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "")
+    app.config["ML_SERVICE_URL"] = os.environ.get("ML_SERVICE_URL", "")
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
     if config:
         app.config.update(config)
 
     db.init_app(app)
     migrate.init_app(app, db)
 
-    from .routes.health import bp as health_bp
+    from . import models  # noqa: F401  (register tables for Alembic)
+    from .errors import register_error_handlers
+    from .routes import auth, health, insights, items, share
 
-    app.register_blueprint(health_bp)
+    register_error_handlers(app)
+    for mod in (health, auth, items, share, insights):
+        app.register_blueprint(mod.bp)
     return app
