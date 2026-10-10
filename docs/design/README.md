@@ -27,6 +27,16 @@ system body type).
 **Approval:** record who approved and the date here before Wave 2 (iOS) starts. Changes requested
 on the canvas get mirrored back into `screens/` and `DESIGN_SYSTEM.md`.
 
+## Owner feedback round 1 (2026-10-10), applied
+- **Sign in:** less empty space. A value-points card now sits between the headline and the buttons.
+- **Fridge:** items are grouped by **food group** (protein, veggies, fruit, ...), each with an icon. No emoji. Home's list uses the same icons.
+- **Photo review:** every detected item has a **quantity stepper**. Expiry moved into the meta line.
+- **Recipes:** **macros** per serving (kcal / protein / carbs / fat) on the best match, and kcal + protein on the other suggestions.
+
+These need two backend additions (see `docs/API.md` once built):
+- `food_group` on items and candidates.
+- `macros` on recipe suggestions.
+
 ## Interaction notes for iOS
 - **Removal is one or two taps.** Swipe left on a row to reveal **Remove**, which opens the sheet.
   *Used it* and *Gave it away* finish immediately. *Threw it away* goes to the reason grid, where
