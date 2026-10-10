@@ -2,6 +2,10 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — Training data (Mac, stage 2)
+- **Datasets and licences, verified on each source page:** fridge_objects (Roboflow, wajeeha workspace), hien_fridge (Roboflow, gracelearning) and VegQual (figshare 30596084) are all **CC BY 4.0**, which requires attribution (see `docs/ML.md` "Attributions" and the README). The fresh/stale fruit set is **raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle, CC0)**.
+- **Dropped `sriramr/fruits-fresh-and-rotten-for-classification`.** The Kaggle API reports its licence as "Unknown", so we can't confirm our use is allowed. `muhammad0subhan/fruit-and-vegetable-disease-healthy-vs-rotten` (CC0) was also rejected: at 5.2 GB it breaks the 8 GB disk budget on the Mac.
+
 ## 2026-10-10 — Wave 1 decisions (backend core, ML, design)
 - **YOLO26 via `ultralytics==8.4.175`.** That was the latest on PyPI on 2026-10-10, and Ultralytics' docs recommend YOLO26 for new projects (YOLO11 is the mature fallback). It is **AGPL-3.0**: fine for this public repo, but it matters if the code is ever closed. Details are in `docs/ML.md`.
 - **Two-stage vision.** The detector predicts food *names* (about 50 classes, `ml/yolo/taxonomy.py`), and a separate `yolo26n-cls` classifier labels each crop fresh or spoiled. *Why:* the fridge datasets have no freshness labels and the produce datasets have no fridge scenes. The consequence is that spoiled recall is effectively a produce-only number.
@@ -35,5 +39,4 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 
 ## Open — to decide and record here
 - **Gemini model id** (`GEMINI_MODEL`): pick the current Flash-class model once a key exists.
-- **Dataset class maps:** `ml/yolo/sources.example.json` starts empty because Roboflow and figshare blocked the agent's fetches. Open each dataset page, confirm its licence and classes, and fill in the maps before training.
 - **Demo connectivity:** how the phone reaches the API (same Wi-Fi as a laptop, a tunnel, or a hosted backend).

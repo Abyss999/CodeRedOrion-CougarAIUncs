@@ -16,21 +16,49 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 - Also record in `docs/DECISIONS.md` (orchestrator-owned): "YOLO26 via ultralytics==8.4.175, AGPL-3.0".
 
 ## 2. Datasets
-The build host could not open Roboflow/figshare pages (HTTP 403 to bots) so **class lists and some
-licences below are NOT verified**: open each page, read `data.yaml` `names`, and fill the `class_map` in
-`ml/yolo/sources.json`. `prepare_dataset.py` drops unmapped labels and lists them in `dataset_report.json`.
+Licences, class lists and sizes verified **2026-10-10** (figshare API for VegQual, Roboflow pages for the two
+fridge sets, Kaggle API for the Kaggle sets). `ml/yolo/sources.json` (committed, no secrets) holds the class maps;
+raw data lives outside the repo (`mldata/raw/<name>`). `prepare_dataset.py` skips sources marked `"pending": true`
+or whose root is missing, drops unmapped labels (listed in `dataset_report.json`), and supports
+`drop_image_if_label` (drops a whole image that contains an unmodelled object).
 
-| Role | Dataset | URL | Licence | Notes |
+| Role | Dataset | Licence | Size / classes | Status |
 |---|---|---|---|---|
-| fridge/pantry items | Fridge objects (wajeeha-workspace) | https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo | CC BY 4.0 (per search snippet) | ~963 imgs; classes unverified |
-| fridge/pantry items | Hien_Fridge (gracelearning) | https://universe.roboflow.com/gracelearning/hien_fridge-tathx | CC BY 4.0 (per snippet) | ~860 imgs, 6 classes; unverified |
-| fresh vs defective produce (boxes) | VegQual - Multiclass Dataset for Real-Time Fresh and Defective Vegetables | https://figshare.com/articles/dataset/A_Multiclass_Dataset_for_Real-Time_Fresh_and_Defective_Vegetables/30596084 | **not verified - check figshare** | 14 vegetables, YOLO txt boxes; count conflicts (4,736 annotated images per record vs 2,032 images/4,736 instances per author) |
-| fresh vs rotten fruit (whole-image) | Fruits fresh and rotten for classification (Kaggle, sriramr) | https://www.kaggle.com/datasets/sriramr/fruits-fresh-and-rotten-for-classification | **not verified - check Kaggle** | folder-per-class, apples/bananas/oranges fresh+rotten; used as `kind: folders` |
+| fresh vs defective produce (boxes) | VegQual, figshare article 30596084 (= Roboflow rakib151p/vegmining-i6j82 v6) | **CC BY 4.0** | 4,831 images (train 4,221 / valid 406 / test 204), 14 classes: `defected_/fresh_` x potato, bitter_gourd, brinjal, capsicum, onion, pointed_gourd, tomato (7 defected + 7 fresh; see mapping) | **downloaded** (212 MB) |
+| fridge/pantry items | Fridge objects (wajeeha-workspace) https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo | **CC BY 4.0** | ~963 imgs; lemon, milk, cheese, avocado, butter, pepper, yogurt, bacon, eggs, tomatoes | pending download (Roboflow credentials) |
+| fridge/pantry items | Hien_Fridge (gracelearning) https://universe.roboflow.com/gracelearning/hien_fridge-tathx | **CC BY 4.0** | ~860 imgs; apple, egg, milk_carton, others, soda_can, yogurt_container (`others` dropped) | pending download (Roboflow credentials) |
+| fresh vs stale fruit/veg (whole image) | raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle) | **CC0** | ~1.53 GB; class list not yet verified | pending download (Kaggle credentials); replaces sriramr |
+
+**Dropped: `sriramr/fruits-fresh-and-rotten-for-classification`** - the Kaggle API reports its licence as
+"Unknown", so it is not usable. Replacement is the CC0 raghavrpotdar set above.
+
+**VegQual mapping.** `defected_X` -> `X:spoiled`, `fresh_X` -> `X:fresh` (the code does not treat "defected" as a
+spoiled word, so the map is explicit); brinjal -> `eggplant`, capsicum -> `bell_pepper`. **Bitter gourd and pointed
+gourd are not taxonomy classes.** Dropping only their labels would leave real, unlabeled objects in images, which the
+detector learns as background. 1,615 images are gourd-only (they end up with no boxes and are skipped automatically);
+only 6 images mix gourds with other vegetables, and those are removed entirely via `drop_image_if_label`. Net: no
+unlabeled gourds in the training data.
 
 Also seen, not wired in: Roboflow "Fridge food detection" (greeshannotate, 114 imgs, CC BY 4.0, too small);
 Mendeley fresh/rotten tomatoes (CC BY 4.0 via Roboflow). Add as extra `sources` entries if class coverage is thin.
 Honest expectation: public fridge sets are small and non-US; fresh-vs-rotten sets are mostly isolated
 produce on clean backgrounds. Expect a domain gap on real fridge photos (see limitations); the Gemini fallback exists for that.
+VegQual alone only covers 5 detector classes (potato, eggplant, bell_pepper, onion, tomato) - the fridge sets are
+needed for dairy/eggs/meat.
+
+### Attributions (CC BY 4.0)
+All changes below: relabelled into our own taxonomy (`ml/yolo/taxonomy.py`); fresh/spoiled split out of the
+detector classes into a separate crop classifier; merged with the other sources; images re-encoded to JPEG and split
+into train/val/heldout (plus synthetic low/warm-light copies of held-out images).
+- **VegQual: A Multiclass Dataset for Real-Time Fresh and Defective Vegetables** - figshare article 30596084,
+  https://figshare.com/articles/dataset/A_Multiclass_Dataset_for_Real-Time_Fresh_and_Defective_Vegetables/30596084
+  (also Roboflow `rakib151p/vegmining-i6j82` v6, workspace rakib151p). Licence CC BY 4.0. Dropped: bitter gourd and
+  pointed gourd classes (and the 6 images mixing them with other vegetables).
+- **Fridge objects** - Roboflow Universe, workspace `wajeeha-workspace`,
+  https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo . Licence CC BY 4.0. Dropped: none planned
+  (`pepper` mapped to `bell_pepper`, `tomatoes` to `tomato`, `eggs` to `egg`).
+- **Hien_Fridge** - Roboflow Universe, workspace `gracelearning`,
+  https://universe.roboflow.com/gracelearning/hien_fridge-tathx . Licence CC BY 4.0. Dropped: the `others` class.
 
 ## 3. Label design (decision)
 **Two-stage: detector for item NAME + separate crop classifier for fresh/spoiled.**
@@ -95,6 +123,20 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
    Give the last three to ML QA (`ml/eval/`); weights are gitignored - share via Drive/release and link here.
 CLI equivalent of the notebook: `train.py`. Same code path: `infer.TwoStage` is used for export and serving.
 
+## 5b. Training on Apple Silicon (MPS), measured 2026-10-10
+`train.py --device auto|mps|cuda-index|cpu` (default auto: cuda, then mps, then cpu). Venv and data live outside
+the repo in `mldata/` (`.venv-train`, `fwr_data`, `runs/`). Weights `yolo26n.pt`, `yolo26s.pt`, `yolo26n-cls.pt` downloaded fine.
+Smoke runs used **VegQual only** (3,207 images after dropping gourd images: train 2,493 / val 346 / heldout 368;
+cls crops train 6,299 / val 768), imgsz 640, batch 16:
+| Run | s/epoch |
+|---|---|
+| yolo26n det, MPS | ~105-116 (epoch 1 incl. val 116) |
+| yolo26s det, MPS | ~173 (1 epoch incl. val) |
+| yolo26n-cls, MPS, 224px, batch 64 | ~22-26 |
+These are VegQual-only timings. Estimate for the full merged run (yolo26s, 80 epochs, ~4.7k train images with the two
+Roboflow sets): ~5.5 min/epoch -> **~7.5 h** (range 6.5-9 h) + ~15 min classifier. Scales linearly with images; assumes MPS
+throughput stays constant (no thermal throttling) and similar boxes per image.
+
 ## 6. Running the service on a GPU box
 ```
 cd ml
@@ -130,7 +172,7 @@ tolerated; **voids** (`VOID`/`VOIDED`/`** VOID **`/`ITEM VOID` + name and/or pri
   prep (on synthetic images) and the Flask contract are tested. Ultralytics/transformers API usage in `infer.py`,
   `train.py`, `GlmOcrEngine` is written against docs and unexecuted - expect small fixes on first GPU run
   (notably the GLM-OCR image input via a temp file path and its required transformers version).
-- Dataset class lists/licences marked unverified above; `class_map`s start empty.
+- VegQual is the only dataset wired in so far; the fridge sets and the Kaggle replacement are pending download, and the Kaggle set's class list is unverified.
 - Domain gap: clean-background produce vs cluttered fridge shelves; small fridge sets; ~50 classes will be
   uneven (see `classes_with_no_data`). Freshness for non-produce (milk, meat) has no training signal.
 - Synthetic lighting is an approximation of real low/warm light. Auto lighting tags can misfire on red/orange-heavy scenes.

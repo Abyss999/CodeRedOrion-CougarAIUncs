@@ -87,10 +87,21 @@ def iter_folders(src: dict):
 def collect(sources: list[dict], skipped: Counter):
     recs = []
     for src in sources:
+        if src.get("pending") or not Path(src["root"]).is_dir():
+            print(f"[prepare] skipping source {src['name']!r}: root missing or marked pending ({src['root']})",
+                  file=sys.stderr)
+            skipped[f"{src['name']}:<source skipped, root missing>"] += 1
+            continue
         it = iter_yolo(src) if src["kind"] == "yolo" else iter_folders(src)
         cmap = src.get("class_map", {})
         assumed = src.get("freshness_default")  # e.g. "fresh" for fridge sets without freshness info
+        # labels we do not model but which are real objects: drop the WHOLE image if one is present,
+        # so they are never left unlabeled (an unlabeled object trains as background).
+        drop_img = set(src.get("drop_image_if_label", []))
         for ip, boxes in it:
+            if drop_img and any(b[0] in drop_img for b in boxes):
+                skipped[f"{src['name']}:<image dropped, contains unmodelled object>"] += 1
+                continue
             out = []
             for raw, xc, yc, w, h in boxes:
                 name, fr = resolve(raw, cmap)
