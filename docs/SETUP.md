@@ -33,7 +33,16 @@ curl http://127.0.0.1:5055/health         # {"status":"ok"}
 docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"   # DB shell
 ```
 Ports bind to `127.0.0.1` only: API `5055`, DB `5433` (5433 avoids clashing with a local Postgres).
-Migrations (once the backend has them): `cd backend && ../.venv/bin/flask --app wsgi db upgrade`.
+Migrations: `cd backend && ../.venv/bin/flask --app wsgi db upgrade`. This creates the
+`timescaledb` and `citext` extensions, all tables, and the `food_events` hypertable.
+
+**Backend tests need their own database.** The suite drops and rebuilds its schema by running the
+migrations, so it refuses to run unless `TEST_DATABASE_URL` is set and differs from `DATABASE_URL`.
+Create the database once:
+```bash
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'CREATE DATABASE fwr_test'
+cd backend && ../.venv/bin/pytest -q --cov=app      # about 40 s; concurrent runs queue on an advisory lock
+```
 
 ## 4. iOS
 ```bash
@@ -56,6 +65,13 @@ CI runs the same on every PR touching `ios/` once the workflows are enabled (`ci
 The API must be reachable from the phone for TestFlight builds (see open questions in `HANDOFF.md`).
 
 ## 5. ML (off-box)
+Light, CPU-only tests (no torch) run anywhere:
+```bash
+python3.12 -m venv .venv-ml && .venv-ml/bin/pip install pytest flask pillow numpy
+(cd ml && for d in serve ocr yolo; do ../.venv-ml/bin/python -m pytest $d/tests -q; done)
+.venv-ml/bin/python -m pytest ml/eval/tests -q        # QA harness + receipt-parser gates
+```
+
 Training and heavy inference run on a GPU (Colab or a teammate's machine), **not** on a shared
 server. See `ml/README.md` and `docs/ML.md` (created by the ML builder). Point the backend at the
 inference service with `ML_SERVICE_URL`; leave it empty to use the Gemini-vision fallback.
@@ -70,7 +86,7 @@ servers and skills are not picked up mid-session.
 | **Ponytail** (plugin) | In Claude Code: `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` | Keeps agent code minimal |
 | **taste-skill** | `npx skills add https://github.com/Leonxlnx/taste-skill` | UI generation (anti-generic design) |
 | **SQL MCP (Postgres)** | Recommended: Postgres MCP Pro in restricted (read-only) mode — `claude mcp add postgres -- uvx postgres-mcp --access-mode=restricted` with `DATABASE_URI=postgresql://fwr:<pw>@127.0.0.1:5433/fwr` in its env. **Confirm the current command against the project's README before installing.** | QA / debugging queries |
-| **Claude Design MCP** | **TBD — confirm the server name and install command** (`claude mcp add …`), then record the exact command here | Screen designs in `docs/design/` |
+| **Claude Design** | No install needed. The screens were made on a Claude Design canvas from claude.ai, https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx, and are mirrored in `docs/design/screens/`. If you also want a design MCP server, record its exact `claude mcp add` command here | Screen designs in `docs/design/` |
 | web-design-guidelines (end of project only) | `npx skills add vercel-labs/agent-skills --skill web-design-guidelines` | Final UI review |
 | Impeccable (end of project only) | per its README | `/impeccable critique`, `/impeccable polish` — **never during generation** |
 

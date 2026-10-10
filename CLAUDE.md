@@ -49,8 +49,12 @@ Current state: [`HANDOFF.md`](HANDOFF.md).
   outside your paths goes back to the orchestrator as a request.
 - Each builder works in its own git worktree. Its paired QA agent starts **at the same time** in
   the same worktree and writes only in its own QA paths, so it tests the code as it changes.
-- **One heavy run at a time** (Docker builds, full test suites, model inference) — parallel runs
-  have run machines out of memory before.
+- **One heavy run at a time** (Docker builds, full test suites, model inference). Parallel runs
+  have run machines out of memory before. **Watch the disk too:** the TimescaleDB image alone is
+  2.7 GB, and pulling it onto a nearly full shared server filled the disk on 2026-10-10.
+- **Backend tests own `TEST_DATABASE_URL`.** The suite drops and rebuilds that schema and holds an
+  advisory lock while it runs. Builders use `DATABASE_URL` for their own checks and never touch
+  the test database.
 
 ## QA process and the merge gate
 - Pairs: **Backend QA**, **iOS QA**, **ML QA** run alongside their builder; **Integration QA** runs
@@ -73,8 +77,9 @@ Current state: [`HANDOFF.md`](HANDOFF.md).
 - Details: [`docs/SCHEMA.md`](docs/SCHEMA.md), [`docs/API.md`](docs/API.md).
 
 ## Design and UI
-- **Design first:** key screens are produced with the Claude Design MCP + taste-skill, saved under
-  `docs/design/`, and approved before iOS builds them.
+- **Design first:** key screens are produced on a Claude Design canvas with taste-skill
+  (https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx), mirrored into `docs/design/screens/`, and
+  **approved by the team before iOS builds them** (record the approval in `docs/design/README.md`).
 - Claude Design output is not SwiftUI — translate each design into native views, and take every
   color, spacing and type value from `ios/App/Theme.swift`, which mirrors
   [`docs/design/DESIGN_SYSTEM.md`](docs/design/DESIGN_SYSTEM.md). No ad-hoc hex values in views.
