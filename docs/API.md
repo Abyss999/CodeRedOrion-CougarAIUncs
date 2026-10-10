@@ -1,6 +1,6 @@
 # API (v0 contract)
 
-Status: ✅ = implemented in Wave 1 (backend core). Social endpoints are Wave 3 (planned). Base URL:
+Status: ✅ = implemented in Wave 1 (backend core). Social endpoints are Wave 3 (✅ implemented, migration `0002_social`). Base URL:
 `http://127.0.0.1:5055`. JSON in/out, `snake_case`, ISO-8601 UTC timestamps (`...Z`). Auth:
 `Authorization: Bearer <jwt>` (HS256, 30-day expiry) on everything except `/health` and `/auth/*`.
 Errors always: `{"error": {"code": "...", "message": "..."}}` (including 404/405/413/500).
@@ -10,10 +10,10 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 |---|---|---|
 | 400 | `validation_error` | Bad/missing fields, e.g. `waste_reason` on a non-`thrown_out` removal |
 | 401 | `unauthorized`, `invalid_credentials` | Missing/invalid/expired token; bad login |
-| 403 | `forbidden` | Authenticated but not your item |
+| 403 | `forbidden` | Authenticated but not your item / not a member of that group / not the owner or author |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
 | 405 | `method_not_allowed` | |
-| 409 | `already_removed`, `already_shared`, `email_taken` | Conflict |
+| 409 | `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed` | Conflict |
 | 413 | `payload_too_large` | Upload over 10 MB |
 | 500 | `internal_error` | Unhandled error |
 | 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts unavailable or not configured |
@@ -35,9 +35,9 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
 `source` ∈ `photo|single_photo|text|barcode|receipt|manual`.
 
 - ✅ `GET /items?storage=fridge|pantry|freezer&include_removed=false` → `200 {items}` sorted by
-  `predicted_expiry`, then `added_at`. Only the caller's items. Invalid `storage` → 400.
+  `predicted_expiry`, then `added_at`. Only the caller's **personal** items (`group_id` null; group-pantry items are listed by `GET /groups/:id/pantry`). Invalid `storage` → 400.
 - ✅ `POST /items` `{items: [{name, category?, storage?, quantity?, unit?, est_price?, est_weight_kg?,
-  predicted_expiry?, source?}]}` → `201 {items}` (1-100 items). Defaults: category `other`, storage
+  predicted_expiry?, source?, group_id?}], group_id?}` → `201 {items}` (1-100 items). A top-level `group_id` applies to every item; a per-item `group_id` overrides it. A group `group_id` puts the item in that group's pantry; caller must be a member (`403` otherwise, `404` unknown group; nothing written). Defaults: category `other`, storage
   `fridge`, quantity 1, unit `piece`, source `manual`. Invalid enum/negative number → 400 and nothing
   is written. One `add` event per item, same transaction. If `predicted_expiry` is omitted the
   backend predicts it: Gemini batch estimate when configured (`expiry_source=gemini`), else the
@@ -58,7 +58,11 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   `outcome`, `waste_reason`, `removed_after_expiry` (removed date > `predicted_expiry`); writes
   exactly one `remove` event (`co2e_kg`, weight, price, outcome, reason); on `donated`, marks the
   item's open share listing `fulfilled` (+`recipient_id`, `fulfilled_at`). `recipient_id` must be
-  an existing user (else 400). A 4xx writes no event.
+  an existing user (else 400). A 4xx writes no event. **Group-pantry items (`group_id` set) can be
+  removed by any member of that group**; the `remove` event's `user_id` is the *remover* and carries
+  the item's `group_id`, so impact is credited to whoever removed it. Personal items of other users
+  stay `403`; non-members of the group get `403`. `PATCH` stays owner-only. If the item's open
+  listing was claimed and `recipient_id` is omitted, the claimer becomes `recipient_id`.
 
 ## Adding food
 Candidates are **not saved** until `POST /items`. Every candidate also carries a suggested
@@ -75,11 +79,76 @@ post it straight back.
 - ✅ `GET /items/barcode/:code` (6-14 digits, else 400) → `200 {candidate}` (Open Food Facts, adds
   `barcode`, `brand`, `quantity_text`); `404 not_found` unknown product; `502` OFF unreachable.
 
-## Share (minimal, Wave 1)
+## Share / Food Pantry
+`listing` = `{id, item_id, owner_id, group_id, status (open|fulfilled|cancelled), recipient_id,
+claimed_by, created_at, fulfilled_at}`.
 - ✅ `POST /share` `{item_id, group_id?}` → `201 {listing}` (`status=open`; writes a `share` event).
-  `403` not your item; `404`; `409 already_removed` / `409 already_shared`.
-  `listing` = `{id, item_id, owner_id, group_id, status, recipient_id, created_at, fulfilled_at}`.
-  `GET /share` and the Food Pantry are Wave 3.
+  No `group_id` = shared to the owner's accepted friends; `group_id` = shared to that group only.
+  `403` not your item / not a member of `group_id`; `404` unknown item or group; `409
+  already_removed` / `already_shared`; `400` for a group-pantry item (those cannot be shared).
+- ✅ `GET /share` → `200 {listings: [...]}` — the Food Pantry, newest first. Open listings whose
+  item is still active, **excluding your own**, that are either (a) a friends-listing by one of your
+  accepted friends or (b) in one of your groups. Listings claimed by someone else are hidden; ones
+  you claimed show with `claimed_by_me: true`. Each entry: `{id, item_id, owner_id, owner_name,
+  group_id, status, claimed_by_me, created_at, source: {type: "friend"|"group", name}, item: {name,
+  category, quantity, unit, predicted_expiry}}` (`source.name` = owner's display name for `friend`,
+  group name for `group`).
+- ✅ `DELETE /share/:id` → `200 {listing}` (`status=cancelled`). Owner only: `403` for a viewer who
+  can see it, `404` if invisible/unknown, `409 listing_closed` if not open.
+- ✅ `POST /share/:id/claim` → `200 {listing}` (`claimed_by` = you). `404` if you cannot see the
+  listing, `400` your own, `409 already_claimed`, `409 listing_closed` (not open / item removed).
+  The owner then removes the item with `outcome=donated` (optionally `recipient_id`; defaults to the
+  claimer), which sets the listing `fulfilled`.
+
+## Friends
+Friendship is one row, requester → target; once accepted it is symmetric. Entry shape:
+`{user_id (the other person), display_name, status, created_at}`.
+- ✅ `POST /friends` `{email}` → `201 {friend}` (`status=pending`). `404` unknown email, `400` self /
+  missing email, `409 already_friends` / `409 request_pending` (in either direction).
+- ✅ `POST /friends/:user_id/accept` → `200 {friend}` (`status=accepted`). Only the target can accept:
+  `404` when there is no pending request *from* `:user_id` to you.
+- ✅ `GET /friends` → `200 {friends: [...], incoming: [...], outgoing: [...]}` (accepted; pending
+  received; pending sent).
+- ✅ `DELETE /friends/:user_id` → `204`. Removes the relationship in either direction and either
+  status (unfriend / cancel / decline); `404` if none exists. Visibility ends immediately.
+
+## Groups
+`group` = `{id, name, role (owner|member — yours), member_count, invite_code, created_by,
+created_at}`; `GET /groups/:id` adds `members: [{user_id, display_name, role, joined_at}]`. Invite
+codes are 8 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (no 0/O/1/I/L); joining is
+case-insensitive and ignores spaces/dashes.
+- ✅ `POST /groups` `{name (1-60 chars)}` → `201 {group}` (creator = `owner`).
+- ✅ `GET /groups` → `200 {groups}` (mine only).
+- ✅ `GET /groups/:id` → `200 {group}`; `404` unknown, **`403` not a member**.
+- ✅ `POST /groups/join` `{invite_code}` → `200 {group}`; `404` bad code, `409 already_member`.
+- ✅ `POST /groups/:id/leave` → `200 {left: true}`; `404` unknown, `403` not a member. If the owner
+  leaves, the longest-standing member becomes owner. The leaver's open listings and requests in that
+  group are cancelled. A group whose last member leaves is kept but unreachable.
+- ✅ `GET /groups/:id/pantry` → `200 {items}` — the group's active items by `predicted_expiry`, each
+  an item plus `added_by` (display name). `404` unknown, `403` not a member.
+
+## Request board
+`request` = `{id, author_id, author_name, group_id, group_name, text, status (open|fulfilled|
+cancelled), fulfilled_by, fulfilled_by_name, created_at, source: {type: "me"|"friend"|"group",
+name}}` — `source` drives the sticky-note header (`me` → your display name, `friend` → author's name,
+`group` → group name).
+- ✅ `POST /requests` `{text (1-280 chars), group_id?}` → `201 {request}`. No `group_id` = visible to
+  your friends. `403` not a member of `group_id`, `404` unknown group, `400` bad text.
+- ✅ `GET /requests` → `200 {requests}` — open only, newest first: your own, friends' non-group
+  requests, and requests in your groups.
+- ✅ `POST /requests/:id/fulfil` → `200 {request}` (`status=fulfilled`, `fulfilled_by` = you). `404`
+  if you cannot see it, `403` your own, `409 request_closed` if not open.
+- ✅ `DELETE /requests/:id` → `200 {request}` (`status=cancelled`). Author only: `403` for a viewer
+  who can see it, `404` invisible/unknown, `409 request_closed` if not open.
+
+## Visibility rules (security core)
+- Friend-scoped things (friends-listings, group-less requests) are visible only to **accepted**
+  friends of the author, plus the author. Pending requests grant nothing; unfriending revokes at once.
+- Group-scoped things are visible only to current members of that group.
+- **Resource ids** (listing, request) you may not see return **`404`**, same as nonexistent, so
+  existence does not leak. **Group-addressed endpoints** (`/groups/:id…`, a `group_id` in a body)
+  return `404` for an unknown group and **`403`** for a group you are not in.
+- Acting on a visible resource you lack the right for (cancel someone else's listing/request) is `403`.
 
 ## Recipes, impact, tips
 - ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str]}` → `200 {recipes: [{title,
@@ -94,9 +163,3 @@ post it straight back.
 - ✅ `GET /tips` → `200 {tips: [{code, message}]}`. Based on the last 90 days of `thrown_out` events
   (top reason, most-wasted item, most-wasted category) plus items expiring within 2 days. Zero data
   → one `getting_started` tip.
-
-## Social (Wave 3)
-- `GET/POST /friends`, `DELETE /friends/:id`
-- `GET/POST /groups`, `POST /groups/:id/join`, `GET /groups/:id/pantry`
-- `GET /share` (Food Pantry: friends' + groups' open listings)
-- `GET/POST /requests` (sticky-note board), `POST /requests/:id/fulfil`

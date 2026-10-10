@@ -23,9 +23,9 @@ def create_app(config: dict | None = None) -> Flask:
 
     from . import models  # noqa: F401  (register tables for Alembic)
     from .errors import register_error_handlers
-    from .routes import auth, health, insights, items, share
+    from .routes import auth, friends, groups, health, insights, items, requests, share
 
     register_error_handlers(app)
-    for mod in (health, auth, items, share, insights):
+    for mod in (health, auth, items, share, insights, friends, groups, requests):
         app.register_blueprint(mod.bp)
     return app
