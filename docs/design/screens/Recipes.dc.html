@@ -37,6 +37,14 @@ a{color:#1F4D2B}a:hover{color:#13261A}
         <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2F6B3C; color: #F4F8E8">Spinach, 1 day</span>
         <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2F6B3C; color: #F4F8E8">Yogurt, 3 days</span>
       </div>
+      <dl aria-label="Macros per serving" style="margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; background: #2F6B3C; border-radius: 14px; overflow: hidden">
+        <sc-for list="{{macros}}" as="m" hint-placeholder-count="4">
+          <div style="background: #1F4D2B; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 1px">
+            <dd style="margin: 0; font-family: Outfit, sans-serif; font-size: 18px; font-weight: 600; color: #F4F8E8">{{m.value}}</dd>
+            <dt style="font-size: 11px; color: #C9D8BE">{{m.label}}</dt>
+          </div>
+        </sc-for>
+      </dl>
       <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #C9D8BE">
         <span>35 min · 2 servings · need: 1 lemon</span>
         <a href="#" style="color: #D9EC8F; font-weight: 600">Cook it</a>
@@ -79,10 +87,16 @@ a{color:#1F4D2B}a:hover{color:#13261A}
 class Component extends DCLogic {
 renderVals() {
 return {
+macros: [
+{ value: '540', label: 'kcal' },
+{ value: '46 g', label: 'protein' },
+{ value: '14 g', label: 'carbs' },
+{ value: '33 g', label: 'fat' }
+],
 more: [
-{ title: 'Spinach and cheddar omelette', meta: '15 min · nothing to buy', uses: 'Uses 3' },
-{ title: 'Strawberry yogurt overnight oats', meta: '10 min, plus overnight · need: oats', uses: 'Uses 2' },
-{ title: 'Sourdough panzanella', meta: '20 min · need: tomatoes', uses: 'Uses 1' }
+{ title: 'Spinach and cheddar omelette', meta: '15 min · 410 kcal · 27 g protein', uses: 'Uses 3' },
+{ title: 'Strawberry yogurt overnight oats', meta: '10 min + overnight · 380 kcal · 21 g protein', uses: 'Uses 2' },
+{ title: 'Sourdough panzanella', meta: '20 min · 330 kcal · 9 g protein', uses: 'Uses 1' }
 ]
 };
 }

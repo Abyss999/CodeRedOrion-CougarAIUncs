@@ -112,7 +112,11 @@ chart values are always labeled.
 ## Components
 | Component | Seen in | Notes |
 |---|---|---|
-| `ItemRow` | Home, Fridge | 40 pt initial avatar (`limeTint`) + name + meta + `ExpiryBadge`; swipe action `Remove` on `forest` |
+| `ItemRow` | Home, Fridge | 40 pt **food-group icon** tile (`limeTint`, `forest` stroke) + name + meta + `ExpiryBadge`; swipe action `Remove` on `forest` |
+| `FoodGroupSection` | Fridge | The Fridge list is **grouped by food group** (Protein, Veggies, Fruit, Dairy, Grains, Pantry, Leftovers, Frozen, Other). The header has the group icon, name and count, and rows within a group are sorted by expiry. Storage (Fridge / Pantry / Freezer) stays the segmented control above |
+| `QuantityStepper` | Photo review | `limeTint` pill: − / value with unit / +. 40 pt tall, with a 44 pt hit target via `contentShape`. The value shows the unit ("1.4 lb", "1 bag", "12") |
+| `MacroStrip` | Recipes hero | Four equal cells (kcal, protein, carbs, fat) **per serving**, labelled as estimates in the recipe detail. Rows show "kcal · protein" in their meta line |
+| `ValuePoints` | Sign in | A card of three icon + title + one-line rows between the headline and the buttons |
 | `ExpiryBadge` | Home, Fridge | Today / 1 day use `urgent`; 2+ days use `limeTint`/`forest` |
 | `SpoilageFlag` | Fridge | Meta line in `urgentInk`: "Photo check: looks spoiled" |
 | `StorageSegmented` | Fridge | Fridge / Pantry / Freezer |
@@ -127,6 +131,20 @@ chart values are always labeled.
 | `StatTile`, `ImpactHero` | Impact | Hero on forest; tiles on surface |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |
+
+**Food-group icons** (stroke style, matching the mockups; use the closest SF Symbol, or ship these as
+template assets if SF has no match):
+
+| Group | Mockup glyph | SF Symbol candidate |
+|---|---|---|
+| Protein | drumstick | `fork.knife` (no drumstick in SF), so ship the mockup glyph as an asset |
+| Veggies | carrot | `carrot` |
+| Fruit | apple | `apple.logo` must NOT be used (it's a trademark), so ship the mockup glyph as an asset |
+| Dairy | milk carton | `waterbottle` is not a match, so ship the mockup glyph as an asset |
+| Grains | bread | `birthday.cake` is not a match, so ship an asset |
+| Pantry / Leftovers / Frozen / Other | jar / box / snowflake / circle | an asset / `takeoutbag.and.cup.and.straw` / `snowflake` / `circle.grid.2x2` |
+
+Never emoji.
 
 **Icons:** use SF Symbols on iOS, with stroke-style equivalents of the mockup glyphs (`house`,
 `frying.pan`, `plus`, `refrigerator`, `person.2`, `camera`, `barcode.viewfinder`, `doc.text`,

@@ -33,15 +33,19 @@ a{color:#1F4D2B}a:hover{color:#13261A}
 
     <ul style="list-style: none; margin: 0; padding: 0; background: #FFFFFF; border-radius: 16px">
       <sc-for list="{{found}}" as="f" hint-placeholder-count="6">
-        <li style="border-bottom: 1px solid #E6EDD6">
-          <label style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; min-height: 44px">
+        <li style="border-bottom: 1px solid #E6EDD6; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px">
+          <label style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px">
             <input type="checkbox" checked="{{f.checked}}" style="width: 22px; height: 22px; accent-color: #1F4D2B; margin: 0; flex-shrink: 0">
             <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
               <span style="font-size: 16px; font-weight: 600">{{f.name}}</span>
               <span style="{{f.metaStyle}}">{{f.meta}}</span>
             </span>
-            <span style="{{f.badgeStyle}}">{{f.when}}</span>
           </label>
+          <div role="group" aria-label="{{f.qtyLabel}}" style="display: flex; align-items: center; background: #EEF5D6; border-radius: 12px; flex-shrink: 0">
+            <button aria-label="Less" style="width: 36px; height: 40px; border: 0; background: transparent; color: #1F4D2B; font-size: 20px; font-weight: 600">−</button>
+            <span style="min-width: 44px; text-align: center; font-size: 14px; font-weight: 600; color: #13261A">{{f.qty}}</span>
+            <button aria-label="More" style="width: 36px; height: 40px; border: 0; background: transparent; color: #1F4D2B; font-size: 20px; font-weight: 600">+</button>
+          </div>
         </li>
       </sc-for>
     </ul>
@@ -58,18 +62,17 @@ a{color:#1F4D2B}a:hover{color:#13261A}
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
 renderVals() {
-const meta = 'font-size: 13px; color: #45584A';
+const meta = 'font-size: 13px; color: #45584A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis';
 const warn = 'font-size: 13px; color: #8A3B0E; font-weight: 500';
-const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #EEF5D6; color: #1F4D2B; white-space: nowrap';
-const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap';
+const f = (name, m, qty, opts) => Object.assign({ name, meta: m, qty, qtyLabel: 'Quantity of ' + name, metaStyle: meta, checked: true }, opts || {});
 return {
 found: [
-{ name: 'Baby spinach', meta: 'Leafy greens · Fridge', metaStyle: meta, when: '5 days', badgeStyle: soon, checked: true },
-{ name: 'Greek yogurt', meta: 'Dairy · Fridge', metaStyle: meta, when: '10 days', badgeStyle: soon, checked: true },
-{ name: 'Chicken thighs', meta: 'Meat · Fridge', metaStyle: meta, when: '3 days', badgeStyle: soon, checked: true },
-{ name: 'Strawberries', meta: 'Looks spoiled. Toss it?', metaStyle: warn, when: 'Check', badgeStyle: urgent, checked: false },
-{ name: 'Cheddar', meta: 'Dairy · not sure, tap to fix', metaStyle: meta, when: '10 days', badgeStyle: soon, checked: true },
-{ name: 'Eggs', meta: 'Eggs · Fridge', metaStyle: meta, when: '28 days', badgeStyle: soon, checked: true }
+f('Baby spinach', 'Veggies · use in 5 days', '1 bag'),
+f('Greek yogurt', 'Dairy · use in 10 days', '1 tub'),
+f('Chicken thighs', 'Protein · use in 3 days', '1.4 lb'),
+f('Strawberries', 'Looks spoiled. Toss it?', '1 pack', { metaStyle: warn, checked: false }),
+f('Cheddar', 'Dairy · not sure, tap to fix', '8 oz'),
+f('Eggs', 'Protein · use in 28 days', '12')
 ]
 };
 }
