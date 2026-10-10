@@ -11,6 +11,6 @@ struct RootTabView: View {
             Text("Fridge / Pantry").tabItem { Label("Fridge", systemImage: "refrigerator") }
             Text("Social").tabItem { Label("Social", systemImage: "person.2") }
         }
-        .tint(Theme.Colors.primaryDeep)
+        .tint(Theme.Colors.forest)
     }
 }

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Remove item: waste reason</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
+a{color:#1F4D2B}a:hover{color:#13261A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #4C5A4F; display: flex; flex-direction: column; justify-content: flex-end">
+  <section role="dialog" aria-modal="true" aria-labelledby="rr-title" style="background: #F4F8E8; border-radius: 28px 28px 0 0; padding: 10px 20px 40px; display: flex; flex-direction: column; gap: 18px">
+    <div style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #C3D1B3"></div>
+    <header style="display: flex; align-items: center; gap: 10px">
+      <a href="RemoveSheet.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+      <div>
+        <h2 id="rr-title" style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 22px">Why did it go?</h2>
+        <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Baby spinach · one tap and you're done</p>
+      </div>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
+        <button style="min-height: 96px; border: 0; border-radius: 16px; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF; padding: 14px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; text-align: left; color: #13261A">
+          <span style="font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">{{r.label}}</span>
+          <span style="font-size: 13px; color: #45584A">{{r.hint}}</span>
+        </button>
+      </sc-for>
+    </div>
+
+    <p style="margin: 0; padding: 12px 14px; border-radius: 14px; background: #EEF5D6; font-size: 14px; line-height: 1.45; color: #2B3D30">Your reasons shape your tips. Spinach was forgotten twice before, so next time we'll remind you on day 3.</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {
+reasons: [
+{ label: 'Expired', hint: 'Went off before I got to it' },
+{ label: 'Forgot about it', hint: 'Lost at the back' },
+{ label: "Didn't like it", hint: 'Not for me' },
+{ label: 'Other', hint: 'Something else' }
+]
+};
+}
+}
+</script>
+</body>
+</html>
