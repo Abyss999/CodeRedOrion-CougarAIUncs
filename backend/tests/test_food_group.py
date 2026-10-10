@@ -153,29 +153,104 @@ def test_post_default_category_other_derives_valid_group(client, user):
     assert r.status_code == 201 and items_of(r)[0]["food_group"] in GROUPS
 
 
+def _patch(client, user, it, **body):
+    return client.patch(f"/items/{it['id']}", json=body, headers=user["headers"])
+
+
+def _body(r):
+    b = r.get_json()
+    return b.get("item", b)
+
+
+def _stored_group(client, user, it):
+    return next(i for i in client.get("/items", headers=user["headers"]).get_json()["items"]
+                if i["id"] == it["id"])["food_group"]
+
+
 def test_patch_food_group_valid_and_invalid(client, user, make_item):
     it = make_item(user)
     assert "food_group" in it
-    r = client.patch(f"/items/{it['id']}", json={"food_group": "frozen"}, headers=user["headers"])
-    assert r.status_code == 200
-    b = r.get_json(); b = b.get("item", b)
-    assert b["food_group"] == "frozen"
-    for bad in ["bogus", "", 3, None]:
-        r = client.patch(f"/items/{it['id']}", json={"food_group": bad}, headers=user["headers"])
-        if bad is None:
-            assert r.status_code in (200, 400)  # null on PATCH is unspecified; must not 500
-        else:
-            _err(r)
-    again = client.get("/items", headers=user["headers"]).get_json()["items"][0]
-    assert again["food_group"] in GROUPS
+    r = _patch(client, user, it, food_group="frozen")
+    assert r.status_code == 200 and _body(r)["food_group"] == "frozen"
+    for bad in ["bogus", "", 3, ["dairy"], True]:
+        _err(_patch(client, user, it, food_group=bad))
+    assert _stored_group(client, user, it) == "frozen"  # rejected writes changed nothing
 
 
-def test_patch_category_without_food_group_keeps_valid_group(client, user, make_item):
+def test_patch_category_only_rederives_group(client, user, make_item):
+    it = make_item(user, name="Thing", category="dairy")
+    assert it["food_group"] == "dairy"
+    r = _patch(client, user, it, category="meat")
+    assert r.status_code == 200 and _body(r)["food_group"] == "protein"
+    assert _stored_group(client, user, it) == "protein"
+
+
+def test_patch_category_only_overrides_earlier_explicit_group(client, user, make_item):
+    it = make_item(user, name="Thing", category="dairy", food_group="pantry")
+    assert it["food_group"] == "pantry"
+    assert _body(_patch(client, user, it, category="frozen"))["food_group"] == "frozen"
+
+
+def test_patch_category_to_produce_uses_name(client, user, make_item):
+    it = make_item(user, name="Banana", category="other")
+    assert _body(_patch(client, user, it, category="produce_hardy"))["food_group"] == "fruit"
+    it2 = make_item(user, name="Kale", category="other")
+    assert _body(_patch(client, user, it2, category="produce_leafy"))["food_group"] == "veggies"
+
+
+def test_patch_category_and_group_explicit_wins(client, user, make_item):
+    it = make_item(user, name="Thing", category="dairy")
+    r = _patch(client, user, it, category="meat", food_group="pantry")
+    assert r.status_code == 200 and _body(r)["food_group"] == "pantry"
+    assert _body(r)["category"] == "meat" and _stored_group(client, user, it) == "pantry"
+
+
+def test_patch_category_and_invalid_group_400_nothing_written(client, user, make_item):
+    it = make_item(user, name="Thing", category="dairy")
+    _err(_patch(client, user, it, category="meat", food_group="bogus"))
+    got = next(i for i in client.get("/items", headers=user["headers"]).get_json()["items"] if i["id"] == it["id"])
+    assert got["category"] == "dairy" and got["food_group"] == "dairy"
+
+
+def test_patch_invalid_category_400(client, user, make_item):
     it = make_item(user, category="dairy")
-    r = client.patch(f"/items/{it['id']}", json={"category": "meat"}, headers=user["headers"])
-    assert r.status_code == 200
-    b = r.get_json(); b = b.get("item", b)
-    assert b["food_group"] in GROUPS  # whether it re-derives or keeps is unspecified
+    _err(_patch(client, user, it, category="bogus"))
+    assert _stored_group(client, user, it) == "dairy"
+
+
+def test_patch_food_group_only_kept_and_category_untouched(client, user, make_item):
+    it = make_item(user, name="Thing", category="dairy")
+    r = _patch(client, user, it, food_group="pantry")
+    assert _body(r)["food_group"] == "pantry" and _body(r)["category"] == "dairy"
+    # an unrelated PATCH keeps the custom group
+    r = _patch(client, user, it, quantity=3)
+    assert r.status_code == 200 and _body(r)["food_group"] == "pantry"
+
+
+def test_patch_same_category_without_group_rederives(client, user, make_item):
+    """Documented rule: any category in the body without food_group re-derives (a manual group is reset)."""
+    it = make_item(user, name="Thing", category="dairy", food_group="pantry")
+    assert _body(_patch(client, user, it, category="dairy"))["food_group"] == "dairy"
+
+
+def test_patch_name_only_keeps_group(client, user, make_item):
+    """Builder's documented choice (name change does not re-derive); asserted as: group is unchanged."""
+    it = make_item(user, name="Thing", category="other", food_group="pantry")
+    r = _patch(client, user, it, name="Banana")
+    assert r.status_code == 200 and _body(r)["food_group"] == "pantry"
+
+
+def test_patch_food_group_null_never_500(client, user, make_item):
+    it = make_item(user, name="Thing", category="dairy", food_group="pantry")
+    r = _patch(client, user, it, food_group=None)
+    assert r.status_code in (200, 400), r.get_data(as_text=True)
+    if r.status_code == 400:
+        _err(r)
+        assert _stored_group(client, user, it) == "pantry"
+    else:
+        assert _stored_group(client, user, it) in GROUPS
+    # null together with a category change must not 500 either
+    assert _patch(client, user, it, category="meat", food_group=None).status_code in (200, 400)
 
 
 def test_patch_food_group_other_user_403(client, user, user2, make_item):
@@ -307,7 +382,7 @@ def test_parse_text_invalid_gemini_food_group_falls_back(client, user, monkeypat
 
 def test_parse_text_raw_gemini_path_with_invalid_food_group(app, client, user, monkeypatch):
     """Stub one level lower (gemini._generate) so the real parse_text + normalize run."""
-    monkeypatch.setattr(gemini, "_generate", lambda contents, hint: [
+    monkeypatch.setattr(gemini, "_generate", lambda contents, hint, *a, **k: [
         {"name": "Whole milk", "category": "dairy", "food_group": "not-a-group", "quantity": 2, "unit": "carton"},
         {"name": "Eggs", "category": "eggs", "quantity": 12, "unit": "piece"},
         {"name": "Spinach", "category": "produce_leafy", "food_group": "veggies"}])
@@ -348,7 +423,6 @@ def test_from_receipt_candidates_have_food_group(app, client, user, monkeypatch)
     assert r.status_code == 200
     cs = r.get_json()["candidates"]
     assert len(cs) == 2 and all(c["food_group"] in GROUPS for c in cs)
-    # name-only receipt lines have no category; a valid group (even "other") is the contract
 
 
 class _Resp:

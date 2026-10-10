@@ -71,7 +71,16 @@ CO2e). Returned on every item response and every candidate (parse-text, from-pho
 barcode). `POST /items` and `PATCH /items/:id` accept it (invalid -> `400 validation_error`); when
 omitted on create it is derived from `category` + name (meat/seafood/eggs -> protein, bakery -> grains,
 pantry_dry -> pantry, dairy/leftovers/frozen/other -> same name, produce_* -> `fruit` if the name is a
-known fruit else `veggies`). A `PATCH` that changes `category` without `food_group` re-derives it.
+known fruit else `veggies`).
+**PATCH rules:** (1) an explicit `food_group` always wins (valid value, else `400`), including when
+`category` is sent in the same request; (2) `category` without `food_group` re-derives `food_group`
+from the new category + current name (this overwrites a previous manual choice); (3) a `name`-only
+change does **not** re-derive (the user's grouping is left alone); `name` + `category` re-derives. Sending `"food_group": null` returns `400` (to clear a manual group, send `category` again so it re-derives).
+Receipt lines (`from-receipt`) have no category, so `food_group` comes from a deterministic keyword
+match on whole, case-insensitive name tokens (with receipt abbreviations such as `CHKN`, `GRND BF`,
+`YGRT`, `BRD`, `FROZ` expanded): frozen, then pantry modifiers (juice, sauce, broth, soup, peanut
+butter...), dairy, protein, grains, fruit, common vegetables, other pantry staples; no match -> `other`.
+No Gemini call is involved. Tables: `backend/app/services/food_group.py`.
 Candidates use the ML service's `food_group` when present, else Gemini's (validated), else the heuristic.
 - ✅ `GET /items?group_by=food_group` (only valid value; anything else -> `400`) →
   `200 {sections: [{food_group, items: [item…]}]}`. Sections follow the Fridge design order
@@ -181,3 +190,20 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
 - ✅ `GET /tips` → `200 {tips: [{code, message}]}`. Based on the last 90 days of `thrown_out` events
   (top reason, most-wasted item, most-wasted category) plus items expiring within 2 days. Zero data
   → one `getting_started` tip.
+
+## Gemini usage logging
+Every Gemini call (`parse_text`, `detect`, `recipes`, `shelf_life`) writes one INFO line on the
+logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compose logs api`):
+
+    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
+
+Tokens come from the response's `usage_metadata` (`output_tokens` includes thinking tokens); they are
+`null` when it is missing, and on `status=error` when the call failed. Prompts, response text, user
+data and the API key are never logged. Cost report:
+
+    docker compose logs api | python scripts/gemini_cost.py
+    python scripts/gemini_cost.py api.log --price gemini-2.5-flash=0.30,2.50 --default-price 0.30,2.50
+
+`scripts/gemini_cost.py` prints calls, errors, tokens and USD per model + purpose and a total. Its
+price table (USD per 1M input/output tokens) is a placeholder dated 2026-10-10 and must be verified
+against Google's pricing page; override per model with `--price MODEL=IN,OUT`.
