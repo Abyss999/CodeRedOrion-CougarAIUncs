@@ -1,0 +1,42 @@
+# XcodeGen spec. Generate the project with `xcodegen generate` (from ios/).
+# The .xcodeproj is gitignored — edit this file, never the generated project.
+name: FoodWasteReducer
+options:
+  bundleIdPrefix: com.coderedorion
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  FoodWasteReducer:
+    type: application
+    platform: iOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+      properties:
+        UILaunchScreen: {}
+        CFBundleDisplayName: Food Waste Reducer
+        NSCameraUsageDescription: Take photos of your fridge, food and receipts to add items.
+  FoodWasteReducerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests/UnitTests]
+    dependencies:
+      - target: FoodWasteReducer
+  FoodWasteReducerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/UITests]
+    dependencies:
+      - target: FoodWasteReducer
+schemes:
+  FoodWasteReducer:
+    build:
+      targets:
+        FoodWasteReducer: all
+    test:
+      targets: [FoodWasteReducerTests, FoodWasteReducerUITests]
