@@ -1,0 +1,36 @@
+{
+ "receipt": "v04_safeway_multibuy_order_total",
+ "lines": [
+  {
+   "name": "BONELESS CHICKEN BRST",
+   "quantity": 1,
+   "price": 9.84
+  },
+  {
+   "name": "SPARKLING WATER",
+   "quantity": 2,
+   "price": 2.67
+  },
+  {
+   "name": "CLEMENTINES",
+   "quantity": 4,
+   "price": 10.0
+  },
+  {
+   "name": "O ORGANICS SPINACH 10OZ",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "LUCERNE 2% MILK GAL",
+   "quantity": 1,
+   "price": 4.29
+  },
+  {
+   "name": "SIGNATURE SELECT BREAD",
+   "quantity": 1,
+   "price": 2.19
+  }
+ ],
+ "total": 29.98
+}

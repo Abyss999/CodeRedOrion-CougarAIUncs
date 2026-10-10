@@ -13,21 +13,42 @@ _PRICE_END = re.compile(r"(?P<neg1>-)?\$?\s?(?P<amt>\d{1,5}[.,]\d{2})\s*(?P<neg2
 _PRICE_ONLY = re.compile(r"^\s*(?P<neg1>-)?\$?\s?(?P<amt>\d{1,5}[.,]\d{2})\s*(?P<neg2>-)?\s*(?P<flag>[A-Za-z]{1,2})?\s*$")
 _WEIGHT = re.compile(r"(?P<w>\d+(?:\.\d+)?)\s*(?P<u>lbs?|kg|oz|g)\b\.?\s*(?:@|x)\s*\$?\s*(?P<unit>\d+(?:\.\d+)?)", re.I)
 _QTY_AT = re.compile(r"(?<![\d.])(?P<q>\d{1,3})\s*(?:@|x|X|×)\s*\$?\s*(?P<unit>\d+\.\d{2})\b")
+_MULTIBUY = re.compile(r"(?<![\d.])(?P<q>\d{1,3})\s*(?:@|x|X|×)\s*(?P<m>\d{1,2})\s*(?:/|for\b)\s*\$?\s*(?P<x>\d+(?:\.\d{1,2})?)", re.I)
+_VOID = re.compile(r"\bvoid(?:ed)?\b", re.I)
 _LEAD_CODE = re.compile(r"^\W*(?:[A-Za-z]{1,2}\s+)?\d{4,14}\s+")
 _TRAIL_CODE = re.compile(r"\s+\d{8,14}[A-Za-z]?\s*$")
 _TRAIL_FLAG = re.compile(r"\s+[A-Z]{1,2}$")
 _ANY_TOTAL = re.compile(r"\btotal\b", re.I)
 
 _SUBTOTAL = re.compile(r"\bsub\s*-?\s*total\b", re.I)
-_TOTAL_PREFIX = re.compile(r"^\W*(grand\s+total|total\s+due|amount\s+due|balance\s+due|summe|gesamt(?:summe)?|zu\s+zahlen|total(?!\s+(?:savings|saved|items|discount|number|coupon|tax|points|qty|purchase\s+tax)))\b", re.I)
+_TOTAL_PREFIX = re.compile(r"^\W*(grand\s+total|order\s+total|total\s+due|total\s+to\s+pay|amount\s+due|amount\s+to\s+pay|balance\s+(?:due|to\s+pay)|you\s+pay|summe|gesamt(?:summe)?|zu\s+zahlen|total(?!\s+(?:savings|saved|items|discount|number|coupon|tax|points|qty|purchase\s+tax)))\b", re.I)
 _TAX = re.compile(r"\b(sales\s+)?tax\b|\bgst\b|\bhst\b|\bvat\b", re.I)
-_SKIP = re.compile(
-    r"\b(coupon|discount|savings?|saved|you\s+saved|mfr|manufacturer|promo(tion)?|instant|member|club\s*card|"
-    r"rewards?|points|bottle\s+deposit|crv|bag\s+fee|"
-    r"visa|master\s*card|mastercard|amex|discover|debit|credit|cash|change(\s+due)?|tender|approved|auth(orization)?|"
-    r"card\s*#|acct|account|ref\s*#|trans(action)?|terminal|cashier|store\s*#?|tel(ephone)?|phone|"
-    r"thank|welcome|receipt|survey|items?\s+sold|item\s+count|number\s+of\s+items|www\.|\.com|ebt|snap|"
-    r"tare|barcode|invoice|order\s*#|register|lane|sc\s*\d+)\b", re.I)
+# Non-item lines. STRONG phrases are unambiguous labels and skip anywhere in the line. WEAK words are
+# ordinary English that real products also contain ("Instant Oatmeal", "Credit Card Cookies"), so they
+# only skip a line when the amount is negative, or the word ENDS the label (the line is *named* by it:
+# "MEMBER DISCOUNT 0.50", "CASH TEND 20.00"), or a card/account mask is present.
+_SKIP_STRONG = re.compile(
+    r"\b(you\s+saved|instant\s+savings|mfr|manufacturer|bottle\s+deposit|crv|bag\s+fee|change\s+due|"
+    r"approved|authorization|card\s*#|acct|account\s*#|ref\s*#|transaction|terminal|cashier|store\s*#?\s*\d|"
+    r"thank|survey|receipt|items?\s+sold|item\s+count|number\s+of\s+items|ebt|barcode|invoice|"
+    r"order\s*#|sc\s*\d+|points\s+(?:earned|balance|today|redeemed)|(?:fuel|reward)\s+points)\b|www\.|\.com\b", re.I)
+_SKIP_WEAK_END = re.compile(
+    r"\b(coupons?|discounts?|savings?|saved|promo(?:tion)?s?|instant|members?|club(?:\s+card)?|rewards?|points|"
+    r"cash|change|credit(?:\s+card)?|debit(?:\s+card)?|visa|master\s*card|amex|discover|tender|tend|payment|"
+    r"snap|tel(?:ephone)?|phone|trans|register|lane|welcome|tare|auth)$", re.I)
+_SKIP_WEAK_ANY = re.compile(_SKIP_WEAK_END.pattern[:-1], re.I)
+_CARD_MASK = re.compile(r"[*xX#]{2,}\s*\d{3,4}\b|\b(?:x{3,}|\*{3,})\s*\d{3,4}\b", re.I)
+
+
+def _is_skip(ln: str, m_end) -> bool:
+    if _SKIP_STRONG.search(ln) or _CARD_MASK.search(ln):
+        return True
+    label = ln[:m_end.start()] if m_end else ln
+    if m_end and (m_end.group("neg1") or m_end.group("neg2")) and _SKIP_WEAK_ANY.search(label):
+        return True  # negative amount + coupon/discount-ish word: an adjustment, not a product
+    return bool(_SKIP_WEAK_END.search(re.sub(r"[^A-Za-z]+", " ", label).strip()))
+
+
 _DATE = re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?\b", re.I)
 _PHONE = re.compile(r"\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}")
 
@@ -46,6 +67,23 @@ def _clean_name(s: str) -> str:
     s = re.sub(r"\s{2,}", " ", s).strip(" -:.\t$")
     s = re.sub(r"\s+[A-Z]$", "", s)  # stray tax flag left behind
     return s.strip()
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+
+
+def _similar(a: str, b: str) -> bool:
+    a, b = _norm(a), _norm(b)
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    from difflib import SequenceMatcher
+    ta, tb = set(a.split()), set(b.split())
+    if len(ta & tb) / len(ta | tb) >= 0.5:  # same words, different order
+        return True
+    return SequenceMatcher(None, a, b).ratio() >= 0.6
 
 
 def _has_name(s: str) -> bool:
@@ -86,6 +124,25 @@ def parse_receipt_text(text: str) -> dict:
         i += 1
         m_end = _PRICE_END.search(ln)
 
+        # ---- voided item: cancel the matching earlier line (never crash if none matches)
+        if _VOID.search(ln):
+            pending = None
+            body = _VOID.sub(" ", ln)
+            body = re.sub(r"[*#]+", " ", body)
+            mv = _PRICE_END.search(body)
+            vprice = abs(_money(mv)) if mv else None
+            vname = _clean_name(body[:mv.start()] if mv else body)
+            if not _has_name(vname):
+                vname = ""
+            for idx in range(len(items) - 1, -1, -1):
+                it = items[idx]
+                price_ok = vprice is None or (it["price"] is not None and abs(abs(it["price"]) - vprice) < 0.005)
+                name_ok = (not vname) or _similar(vname, it["name"])
+                if price_ok and name_ok and (vname or vprice is not None):
+                    del items[idx]
+                    break
+            continue
+
         # ---- totals / subtotal / tax (label may be split from its amount by OCR)
         if _SUBTOTAL.search(ln):
             after_subtotal = True; pending = None; continue
@@ -103,7 +160,7 @@ def parse_receipt_text(text: str) -> dict:
             after_subtotal = True; pending = None; continue
         if _ANY_TOTAL.search(ln):  # "Merchandise Total", "Item Total": summary, never an item
             pending = None; continue
-        if after_subtotal or _SKIP.search(ln) or _PHONE.search(ln) or (_DATE.search(ln) and not m_end):
+        if after_subtotal or _is_skip(ln, m_end) or _PHONE.search(ln) or (_DATE.search(ln) and not m_end):
             pending = None; continue
 
         # ---- weighted item:  [NAME]  1.23 lb @ $2.99/lb  [3.68]
@@ -129,6 +186,22 @@ def parse_receipt_text(text: str) -> dict:
             if pending and p >= 0:
                 emit(pending["name"], pending.get("qty", 1.0), p, pending["raw"] + " | " + ln)
             pending = None
+            continue
+
+        # ---- multi-buy:  3 @ 2/$5.00  GREEN ONIONS  7.50   (also "N @ M for $X")
+        mb = _MULTIBUY.search(ln)
+        if mb:
+            q, per, tot = float(mb.group("q")), float(mb.group("m")), float(mb.group("x"))
+            has_price = bool(m_end and m_end.start() >= mb.end())
+            price = _money(m_end) if has_price else (round(q / per * tot, 2) if per else None)
+            head = _clean_name(ln[:mb.start()])
+            if not _has_name(head):
+                tail = ln[mb.end():m_end.start()] if has_price else ln[mb.end():]
+                head = _clean_name(tail)
+            if _has_name(head):
+                emit(head, q, price, ln)
+            elif pending:
+                emit(pending["name"], q, price, pending["raw"] + " | " + ln)
             continue
 
         # ---- qty x unit

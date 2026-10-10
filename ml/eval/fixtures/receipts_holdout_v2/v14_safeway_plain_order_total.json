@@ -1,0 +1,31 @@
+{
+ "receipt": "v14_safeway_plain_order_total",
+ "lines": [
+  {
+   "name": "Deli Rotisserie Chicken",
+   "quantity": 1,
+   "price": 7.99
+  },
+  {
+   "name": "LUCERNE BUTTER 1LB",
+   "quantity": 1,
+   "price": 4.49
+  },
+  {
+   "name": "O ORGANICS APPLESAUCE",
+   "quantity": 1,
+   "price": 3.29
+  },
+  {
+   "name": "SIGNATURE FROZEN PEAS",
+   "quantity": 1,
+   "price": 1.99
+  },
+  {
+   "name": "GALA APPLES",
+   "quantity": 2.35,
+   "price": 4.21
+  }
+ ],
+ "total": 21.97
+}

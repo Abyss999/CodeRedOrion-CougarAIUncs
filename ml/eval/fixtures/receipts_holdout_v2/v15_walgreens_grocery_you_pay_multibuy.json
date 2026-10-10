@@ -1,0 +1,26 @@
+{
+ "receipt": "v15_walgreens_grocery_you_pay_multibuy",
+ "lines": [
+  {
+   "name": "GATORADE 20OZ",
+   "quantity": 2,
+   "price": 2.67
+  },
+  {
+   "name": "LAYS CLASSIC 8OZ",
+   "quantity": 1,
+   "price": 4.29
+  },
+  {
+   "name": "NATURE VALLEY BARS",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "BANANA",
+   "quantity": 1,
+   "price": 0.35
+  }
+ ],
+ "total": 11.07
+}

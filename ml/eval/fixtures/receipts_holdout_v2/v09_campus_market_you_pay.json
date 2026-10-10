@@ -1,0 +1,31 @@
+{
+ "receipt": "v09_campus_market_you_pay",
+ "lines": [
+  {
+   "name": "Grab&Go Chicken Wrap",
+   "quantity": 1,
+   "price": 6.25
+  },
+  {
+   "name": "Fuji Apple",
+   "quantity": 1,
+   "price": 0.99
+  },
+  {
+   "name": "Chobani Greek Yogurt",
+   "quantity": 1,
+   "price": 1.89
+  },
+  {
+   "name": "Cold Brew 12oz",
+   "quantity": 1,
+   "price": 3.25
+  },
+  {
+   "name": "Trail Mix Single",
+   "quantity": 1,
+   "price": 1.79
+  }
+ ],
+ "total": 14.17
+}

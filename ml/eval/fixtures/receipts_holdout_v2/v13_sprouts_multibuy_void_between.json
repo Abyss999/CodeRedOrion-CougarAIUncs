@@ -1,0 +1,26 @@
+{
+ "receipt": "v13_sprouts_multibuy_void_between",
+ "lines": [
+  {
+   "name": "ORG BANANAS",
+   "quantity": 4,
+   "price": 10.0
+  },
+  {
+   "name": "ORG BABY KALE 5OZ",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "LACROIX 8PK",
+   "quantity": 1,
+   "price": 4.99
+  },
+  {
+   "name": "FRESH PASTA RAVIOLI",
+   "quantity": 1,
+   "price": 5.49
+  }
+ ],
+ "total": 24.47
+}

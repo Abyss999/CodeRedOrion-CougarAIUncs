@@ -1,0 +1,31 @@
+{
+ "receipt": "v02_publix_amount_due_bogo",
+ "lines": [
+  {
+   "name": "PUBLIX SUB DELI TURKEY",
+   "quantity": 1,
+   "price": 8.99
+  },
+  {
+   "name": "PBX SMOKED GOUDA 6OZ",
+   "quantity": 1,
+   "price": 4.19
+  },
+  {
+   "name": "PBX SMOKED GOUDA 6OZ",
+   "quantity": 1,
+   "price": 4.19
+  },
+  {
+   "name": "GV CUBAN BREAD",
+   "quantity": 1,
+   "price": 2.25
+  },
+  {
+   "name": "BLUEBERRIES 6OZ",
+   "quantity": 1,
+   "price": 3.5
+  }
+ ],
+ "total": 18.93
+}

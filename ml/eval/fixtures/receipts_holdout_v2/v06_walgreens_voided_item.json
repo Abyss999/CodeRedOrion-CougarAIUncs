@@ -1,0 +1,26 @@
+{
+ "receipt": "v06_walgreens_voided_item",
+ "lines": [
+  {
+   "name": "SKITTLES BAG 14OZ",
+   "quantity": 1,
+   "price": 3.99
+  },
+  {
+   "name": "PEANUT BUTTER CREAMY",
+   "quantity": 1,
+   "price": 3.49
+  },
+  {
+   "name": "DEL MONTE CORN CAN",
+   "quantity": 1,
+   "price": 1.29
+  },
+  {
+   "name": "OATMEAL INSTANT 10CT",
+   "quantity": 1,
+   "price": 3.79
+  }
+ ],
+ "total": 12.56
+}
