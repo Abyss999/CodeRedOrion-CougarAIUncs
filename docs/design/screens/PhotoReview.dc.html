@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review photo results</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
+a{color:#1F4D2B}a:hover{color:#13261A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F8E8; display: flex; flex-direction: column">
+  <main style="flex: 1; overflow: hidden; padding: 56px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: center; gap: 10px">
+      <a href="AddSheet.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF; flex-shrink: 0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+      <div>
+        <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 24px">We found 6 items</h1>
+        <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Untick anything we got wrong. Tap a row to edit.</p>
+      </div>
+    </header>
+
+    <div style="height: 120px; border-radius: 16px; background: #E3EDCB; display: flex; align-items: center; justify-content: center; gap: 8px; color: #45584A; font-size: 14px; font-weight: 500">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+      [Your fridge photo, with boxes on each item]
+    </div>
+
+    <ul style="list-style: none; margin: 0; padding: 0; background: #FFFFFF; border-radius: 16px">
+      <sc-for list="{{found}}" as="f" hint-placeholder-count="6">
+        <li style="border-bottom: 1px solid #E6EDD6">
+          <label style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; min-height: 44px">
+            <input type="checkbox" checked="{{f.checked}}" style="width: 22px; height: 22px; accent-color: #1F4D2B; margin: 0; flex-shrink: 0">
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+              <span style="font-size: 16px; font-weight: 600">{{f.name}}</span>
+              <span style="{{f.metaStyle}}">{{f.meta}}</span>
+            </span>
+            <span style="{{f.badgeStyle}}">{{f.when}}</span>
+          </label>
+        </li>
+      </sc-for>
+    </ul>
+
+    <a href="#" style="align-self: flex-start; font-size: 15px; font-weight: 600">+ Add something we missed</a>
+  </main>
+
+  <footer style="padding: 12px 20px 34px; background: #F4F8E8; border-top: 1px solid #E6EDD6; display: flex; flex-direction: column; gap: 8px">
+    <p style="margin: 0; font-size: 13px; color: #45584A; text-align: center">Expiry dates are estimates from typical shelf life. You can change any of them.</p>
+    <a href="Fridge.dc.html" style="text-decoration: none; height: 56px; border-radius: 16px; background: #1F4D2B; color: #F4F8E8; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">Add 5 items</a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const meta = 'font-size: 13px; color: #45584A';
+const warn = 'font-size: 13px; color: #8A3B0E; font-weight: 500';
+const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #EEF5D6; color: #1F4D2B; white-space: nowrap';
+const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap';
+return {
+found: [
+{ name: 'Baby spinach', meta: 'Leafy greens · Fridge', metaStyle: meta, when: '5 days', badgeStyle: soon, checked: true },
+{ name: 'Greek yogurt', meta: 'Dairy · Fridge', metaStyle: meta, when: '10 days', badgeStyle: soon, checked: true },
+{ name: 'Chicken thighs', meta: 'Meat · Fridge', metaStyle: meta, when: '3 days', badgeStyle: soon, checked: true },
+{ name: 'Strawberries', meta: 'Looks spoiled. Toss it?', metaStyle: warn, when: 'Check', badgeStyle: urgent, checked: false },
+{ name: 'Cheddar', meta: 'Dairy · not sure, tap to fix', metaStyle: meta, when: '10 days', badgeStyle: soon, checked: true },
+{ name: 'Eggs', meta: 'Eggs · Fridge', metaStyle: meta, when: '28 days', badgeStyle: soon, checked: true }
+]
+};
+}
+}
+</script>
+</body>
+</html>

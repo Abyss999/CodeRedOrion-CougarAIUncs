@@ -74,6 +74,9 @@ chart values are always labeled.
 | `AddSheet` | Add | Hero tile (fridge photo) + 2×2 tiles (one item, type/say, barcode, receipt) |
 | `PantryWidget` | Social | `lime` card, collapsed chips preview, expands in place |
 | `RequestNote` | Social | Sticky note: source header, text, who/when, "I have it" |
+| `DetectedItemRow` | Photo review | Checkbox (44 pt row) + name + category/storage or a warning meta line + `ExpiryBadge` |
+| `FilterChip` | Recipes | 36 pt pill. Selected uses `forest`/`onForest`; unselected is outlined |
+| `RecipeHero`, `RecipeRow` | Recipes, Home | Hero on `forest` with expiring-item chips (`forestChip`); rows with a "Uses N" badge |
 | `StatTile`, `ImpactHero` | Impact | Hero on forest; tiles on surface |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |
