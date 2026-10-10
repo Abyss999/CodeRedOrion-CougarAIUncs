@@ -1,5 +1,5 @@
 {
-  "_comment": "Lighting presets for pipeline/transformation/lighting_aug.py. Each value is a [min, max] range sampled per image (seeded). Casts are kept moderate on purpose: fresh vs semi_fresh is partly a colour cue, so a heavy warm cast could turn a fresh label into a lie. Tune here, not in code.",
+  "_comment": "Lighting presets for pipeline/transformation/lighting_aug.py. Each value is a [min, max] range sampled per image (seeded). Casts are kept moderate on purpose: freshness is partly a colour cue, so a heavy warm cast could turn a label into a lie. low, warm and mixed are NOT in the default set (same families as the synthetic held-out copies); see lighting_aug.HELDOUT_FAMILY_PRESETS. Tune here, not in code.",
   "low":    {"gain": [0.25, 0.5], "gamma": [1.0, 1.25], "noise": [2.0, 5.0]},
   "warm":   {"kelvin": [2600, 3600], "strength": [0.5, 0.85], "gain": [0.85, 1.0]},
   "cool":   {"kelvin": [7500, 10000], "strength": [0.5, 0.85], "green": [1.0, 1.04], "gain": [0.95, 1.1]},

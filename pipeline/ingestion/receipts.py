@@ -33,7 +33,7 @@ from ocr.receipt_pipeline import parse_receipt_text  # noqa: E402  (ml/ on sys.p
 
 KIND = "receipt"
 UNSUPPORTED = {".heic", ".heif", ".pdf"}
-LINE_COLS = ["receipt_id", "line_no", "name", "quantity", "price", "canonical", "category", "match", "source_file"]
+LINE_COLS = ["receipt_id", "line_no", "name", "quantity", "price", "canonical", "category", "food_group", "match", "source_file"]
 ENGINES = {"fake": "pipeline.timeout.worker:sidecar_engine", "glm": "pipeline.timeout.worker:glm_engine"}
 MODEL_IDS = {"fake": "sidecar-text", "glm": "zai-org/GLM-OCR"}
 

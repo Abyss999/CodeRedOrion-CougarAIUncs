@@ -16,7 +16,7 @@ from pipeline.ingestion.ledger import Ledger
 from pipeline.shots.preview import contact_sheet
 from pipeline.transformation import lighting_aug as LA
 from pipeline.transformation.stage import prepare, collect_sources
-from .conftest import build_drop, make_jpeg
+from .conftest import HAS_SEMI, build_drop, make_jpeg, needs_semi
 
 
 @pytest.fixture(scope="module")
@@ -38,17 +38,13 @@ def _md5_tree(root):
 def test_prepare_outputs(world):
     dirs, rep = world
     P = dirs["prepared"]
-    assert rep["boxes_by_freshness"]["semi_fresh"] > 0 and rep["boxes_by_freshness"]["spoiled"] > 0
-    for s in ("train", "val"):
-        assert list((P / "cls" / s / "semi_fresh").glob("*.jpg")), s
+    boxes = lambda fr: sum(v for sp in rep["splits"].values() for k, v in sp.items() if k.endswith(f"/{fr}"))
+    assert boxes("fresh") > 0 and boxes("spoiled") > 0
     codes = set()
     for s in ("train", "val", "heldout"):
         for f in (P / "freshness" / s).glob("*.txt"):
             codes.add(f.read_text().split()[0])
-    assert codes == {"0", "1", "2"}
-    # a semi_fresh pineapple image carries code 2
-    f = next(p for p in (P / "freshness" / "train").glob("*.txt") if "pineapple" in p.name)
-    assert f.read_text().split()[0] == "2"
+    assert codes == ({"0", "1", "2"} if HAS_SEMI else {"0", "1"})
     assert (P / "data.yaml").exists() and (P / "dataset_report.json").exists()
 
 
@@ -65,6 +61,17 @@ def test_no_group_straddles_splits(world):
     assert len(by_group) == len({r["group"] for r in man})
     assert all(len(v) == 1 for v in by_group.values()), {g: v for g, v in by_group.items() if len(v) > 1}
     assert any(r["is_source_aug"] == "1" for r in man)
+
+
+@needs_semi
+def test_prepare_semi_fresh_class(world):
+    dirs, rep = world
+    P = dirs["prepared"]
+    assert sum(v for sp in rep["splits"].values() for k, v in sp.items() if k.endswith("/semi_fresh")) > 0
+    for s in ("train", "val"):
+        assert list((P / "cls" / s / "semi_fresh").glob("*.jpg")), s
+    f = next(p for p in (P / "freshness" / "train").glob("*.txt") if "pineapple" in p.name)
+    assert f.read_text().split()[0] == "2"  # a semi_fresh pineapple image carries code 2
 
 
 def test_prepare_refuses_nonempty_without_replace(world):
@@ -156,6 +163,7 @@ def test_variants_labels_and_counts(aug):
     for r in crops:
         v, o = Path(r["image"]), Path(r["variant_of"])
         assert v.parent == o.parent and v.parent.name in ("fresh", "semi_fresh", "spoiled")
+        assert HAS_SEMI or v.parent.name != "semi_fresh"
     # report consistent with disk
     c = rep["counts"]
     assert sum(v for k, v in c.items() if k.endswith(":images")) == len(det)
@@ -192,6 +200,26 @@ def test_refuse_nonempty_replace_unknown_preset(world, tmp_path):
     (out / "stale").write_text("x")
     LA.augment(dirs["prepared"], out, per_image=1, include_crops=False, replace=True)
     assert not (out / "stale").exists()
+
+
+def test_default_presets_exclude_heldout_family(world, tmp_path):
+    dirs, _ = world
+    specs = LA.load_presets()
+    assert set(LA.HELDOUT_FAMILY_PRESETS) == {"low", "warm", "mixed"}
+    assert set(LA.default_presets(specs)) == set(specs) - {"low", "warm", "mixed"}
+    rep = LA.augment(dirs["prepared"], tmp_path / "d", per_image=4, include_crops=False)
+    used = {r["preset"] for r in csv.DictReader(open(tmp_path / "d" / "augment_manifest.csv"))}
+    assert used == {"cool", "bright", "shadow", "spot"} and rep["heldout_family_presets_used"] == []
+    assert rep["lighting_signoff"].startswith("n/a")
+
+
+def test_opt_in_presets_flag_the_report(world, tmp_path):
+    dirs, _ = world
+    rep = LA.augment(dirs["prepared"], tmp_path / "all", per_image=7, presets=["all"], include_crops=False)
+    assert set(rep["presets"]) == set(LA.load_presets())
+    assert rep["heldout_family_presets_used"] == ["low", "warm", "mixed"]
+    assert rep["lighting_signoff"].startswith("none")
+    assert json.loads((tmp_path / "all" / "augment_report.json").read_text())["lighting_signoff"].startswith("none")
 
 
 def test_presets_subset_and_per_image_clamped(world, tmp_path):

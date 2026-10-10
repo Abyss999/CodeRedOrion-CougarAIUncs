@@ -8,7 +8,10 @@ staged layout that ml/yolo/prepare_dataset.py reads as a `kind: folders` source.
 
 The '.rf.' in the filename is deliberate: prepare_dataset.group_key() keeps every file that shares
 the part before '.rf.' in ONE split, so a photo and the dataset's own augmentations of it (or a
-burst of near-identical shots) never straddle train/heldout.
+duplicate shots) never straddle train/heldout. The <group> keeps the FULL original capture timestamp
+token when the source name has one (IMG_YYYYMMDD_HHMMSS, 13-digit epoch ms, ...), e.g.
+`banana__fresh__IMG_20250101_123456.rf.<sha>.jpg`, so a time-based session grouping in prepare_dataset
+(parse_capture_time, a re.search over the part before '.rf.') can still read it. Never truncate it.
 """
 from __future__ import annotations
 import csv
@@ -28,7 +31,7 @@ import taxonomy as T  # noqa: E402  (on sys.path via config)
 
 ADAPTERS = {"agrifreshnet": agrifreshnet, "folders": generic}
 MANIFEST_COLS = ["image", "source_dir", "source_file", "item", "canonical", "freshness", "category",
-                 "age_days_min", "age_days_max", "group", "is_source_aug", "sha1", "width", "height", "licence"]
+                 "source_freshness", "age_days_min", "age_days_max", "group", "is_source_aug", "sha1", "width", "height", "licence"]
 
 
 class ExtractError(RuntimeError):
@@ -96,6 +99,7 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
         class_map = json.loads((out / "source.json").read_text()).get("class_map", {})
     # pass 1: parse folders + hash files, so duplicates and cross-class label conflicts are known up front
     plan: list[tuple[Path, str, dict, str, str]] = []  # (file, sha, parsed, canonical, cls_dir)
+    src_cls: dict[Path, str] = {}  # file -> class by the SOURCE label (before any semi_fresh->fresh mapping)
     for d in _image_dirs(raw_root):
         parsed = ad.parse_dir(d.name)
         canonical = T.canonical_name(parsed["item"]) if parsed else None
@@ -105,9 +109,11 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
             continue
         cls_dir = f"{canonical}__{parsed['freshness'] or 'fresh'}"
         plan += [(p, sha1_file(p), parsed, canonical, cls_dir) for p in files]
+        for p in files:
+            src_cls[p] = f"{canonical}__{parsed.get('source_freshness') or parsed['freshness'] or 'fresh'}"
     classes_of: dict[str, set] = {}
-    for p, sha, _, _, cls_dir in plan:
-        classes_of.setdefault(sha, set()).add(cls_dir)
+    for p, sha, _, _, cls_dir in plan:  # conflicts are judged on the source labels, so a
+        classes_of.setdefault(sha, set()).add(src_cls[p])  # Fresh/Semi-fresh pair stays a conflict
     conflicts = {sha: sorted(c) for sha, c in classes_of.items() if len(c) > 1}
     conflict_files = [f"{p.parent.name}/{p.name}" for p, sha, *_ in plan if sha in conflicts]
     done: set[str] = set()
@@ -144,18 +150,24 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
                 continue
             w.writerow(dict(image=str(rel), source_dir=p.parent.name, source_file=p.name, item=parsed["item"],
                             canonical=canonical, freshness=fr, category=T.category_for(canonical),
+                            source_freshness=parsed.get("source_freshness") or fr,
                             age_days_min=parsed.get("age_days_min", ""), age_days_max=parsed.get("age_days_max", ""),
                             group=group, is_source_aug=int(is_aug), sha1=sha, width=W, height=H,
                             licence=ad.LICENCE))
             ledger.mark(f"dataset:{name}", sha, "staged", str(rel))
             counts["staged"] += 1
             counts[f"freshness:{fr}"] += 1
+            if parsed.get("semi_mapped_to_fresh"):
+                counts["semi_fresh_mapped_to_fresh"] += 1
     source = {"name": name, "kind": "folders", "root": str(out.resolve()), "license": ad.LICENCE,
               "url": ad.URL, "class_map": dict(sorted(class_map.items()))}
     (out / "source.json").write_text(json.dumps(source, indent=2) + "\n")
     report = {"dataset": name, "adapter": adapter, **dict(counts), "unmapped_dirs": dict(unmapped),
               "bad_images": bad, "label_conflict_files": conflict_files,
               "label_conflicts_cross_drop_files": cross_conflicts, "classes": len(class_map)}
+    if counts.get("semi_fresh_mapped_to_fresh"):
+        report["notes"] = ["taxonomy has no semi_fresh class: source 'semi fresh' images were staged as "
+                           "'fresh' (see semi_fresh_mapped_to_fresh and the manifest source_freshness column)"]
     (out / "ingest_report.json").write_text(json.dumps(report, indent=2) + "\n")
     return report
 

@@ -1,10 +1,10 @@
 name: pipeline
 on:
   pull_request:
-    paths: ["pipeline/**", "ml/yolo/**", "ml/ocr/**", ".github/workflows/pipeline.yml"]
+    paths: ["pipeline/**", "ml/yolo/**", "ml/ocr/**", "ml/serve/**", "backend/app/services/food_group.py", ".github/workflows/pipeline.yml"]
   push:
     branches: [main]
-    paths: ["pipeline/**", "ml/yolo/**", "ml/ocr/**"]
+    paths: ["pipeline/**", "ml/yolo/**", "ml/ocr/**", "ml/serve/**", "backend/app/services/food_group.py", ".github/workflows/pipeline.yml"]
 
 jobs:
   test:
@@ -19,4 +19,4 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install -r pipeline/requirements.txt flask   # flask: ml/serve integration test
       - name: Pipeline tests
-        run: .venv/bin/python -m pytest pipeline/tests -q
+        run: .venv/bin/python -m pytest pipeline/tests -q -o python_files="test_*.py qa_*.py"

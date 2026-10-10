@@ -50,6 +50,8 @@ def test_fake_engine_outputs(dirs):
     rows = list(csv.DictReader(open(pd / "receipt_lines.csv")))
     assert list(rows[0]) == receipts.LINE_COLS
     assert [(r["canonical"], r["category"]) for r in rows] == [("milk", "dairy"), ("chicken", "meat")]
+    assert [r["food_group"] for r in rows] == ["dairy", "protein"]
+    assert [l["food_group"] for l in recs[0]["lines"]] == ["dairy", "protein"]
     assert rows[0]["receipt_id"] == rid and rows[0]["source_file"] == "r1.jpg"
     assert recs[0]["total"] == 12.29
     assert not p.exists() and not p.with_suffix(".txt").exists()

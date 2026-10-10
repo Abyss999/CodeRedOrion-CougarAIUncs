@@ -2,7 +2,7 @@
 
   ingest-dataset    --zip FILE | --dir DIR  --name NAME  [--adapter agrifreshnet|folders]
   prepare           [--extra-sources ml/yolo/sources.json] [--replace] [-- prepare_dataset args]
-  augment-lighting  [--per-image 2] [--presets low,warm,...] [--seed 0] [--max-side 1280] [--replace]
+  augment-lighting  [--per-image 2] [--presets cool,bright,...|all] [--seed 0] [--max-side 1280] [--replace]
   ingest-receipts   [--engine fake|glm|service] [--timeout S] [--service-url URL] [--watch SECONDS]
   preview-lighting  --image FILE --out FILE.jpg
   run-all           --zip FILE --name NAME [--adapter ...] [--per-image 2] [--replace]
@@ -67,7 +67,8 @@ def main(argv=None):
 
     s = sub.add_parser("augment-lighting", help="add lighting variants to train/val (separate step)")
     s.add_argument("--src"); s.add_argument("--out")
-    s.add_argument("--per-image", type=int, default=2); s.add_argument("--presets")
+    s.add_argument("--per-image", type=int, default=2)
+    s.add_argument("--presets", help="default: cool,bright,shadow,spot. low/warm/mixed are opt-in; 'all' = every preset")
     s.add_argument("--seed", type=int, default=0); s.add_argument("--max-side", type=int, default=1280)
     s.add_argument("--no-crops", action="store_true"); s.add_argument("--replace", action="store_true")
 

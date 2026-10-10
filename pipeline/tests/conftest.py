@@ -13,6 +13,23 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+from pipeline import config  # noqa: E402,F401  (puts ml/yolo on sys.path)
+import taxonomy as T  # noqa: E402
+
+# This branch is written against current main (fresh/spoiled only, no papaya/pineapple/bitter_melon).
+# Once the semi_fresh PR (A) lands these flip on and the guarded tests run for real.
+HAS_SEMI = "semi_fresh" in getattr(T, "FRESHNESS", ("fresh", "spoiled"))
+needs_semi = pytest.mark.skipif(not HAS_SEMI, reason="taxonomy has no semi_fresh class (PR A not merged)")
+
+
+def needs_class(name: str):
+    return pytest.mark.skipif(name not in T.CLASS_CATEGORY, reason=f"taxonomy has no {name} class (PR A not merged)")
+
+
+def semi_label() -> str:
+    """What a source 'semi fresh' folder becomes on this taxonomy."""
+    return "semi_fresh" if HAS_SEMI else "fresh"
+
 
 def make_jpeg(path: Path, seed: int, size=(48, 48), base=(120, 110, 100)) -> Path:
     """Unique noisy image (different seed -> different bytes)."""

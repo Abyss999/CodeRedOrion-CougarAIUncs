@@ -28,6 +28,15 @@ from .. import config
 
 PRESETS_FILE = config.PIPELINE / "shots" / "presets.json"
 SPLITS = ("train", "val")
+# `low`, `warm` and `mixed` (dim + warm/cool cast) are the same families as the synthetic low/warm
+# held-out copies that ml/yolo/lighting.synth builds. Training on them and then scoring on those
+# copies is train-on-test-family, so they are OPT-IN (--presets low,warm,mixed or --presets all).
+# A model trained on them gets no lighting sign-off from synthetic held-out rows (ML-17, ML-22).
+HELDOUT_FAMILY_PRESETS = ("low", "warm", "mixed")
+
+
+def default_presets(specs: dict) -> list[str]:
+    return [k for k in specs if k not in HELDOUT_FAMILY_PRESETS]
 
 
 def load_presets(path: Path = PRESETS_FILE) -> dict:
@@ -132,7 +141,7 @@ def augment(src: Path, out: Path, per_image: int = 2, presets: list[str] | None 
             raise SystemExit(f"{out} is not empty; pass --replace to rebuild it")
         shutil.rmtree(out)
     specs = load_presets()
-    names = presets or list(specs)
+    names = list(specs) if presets and list(presets) == ["all"] else (presets or default_presets(specs))
     bad = [n for n in names if n not in specs]
     if bad:
         raise SystemExit(f"unknown presets {bad}; known: {list(specs)}")
@@ -190,6 +199,11 @@ def augment(src: Path, out: Path, per_image: int = 2, presets: list[str] | None 
         w.writeheader()
         w.writerows(rows)
     report = {"source": str(src), "per_image": per_image, "presets": names, "seed": seed,
-              "max_side": max_side, "counts": dict(sorted(counts.items())), "heldout": "unchanged (linked)"}
+              "max_side": max_side, "counts": dict(sorted(counts.items())), "heldout": "unchanged (linked)",
+              "heldout_family_presets_used": [n for n in names if n in HELDOUT_FAMILY_PRESETS],
+              "lighting_signoff": ("none from synthetic held-out rows: low/warm/mixed were used in training "
+                                   "(only real low/warm images count, ML-17/ML-22)"
+                                   if any(n in HELDOUT_FAMILY_PRESETS for n in names) else
+                                   "n/a: no held-out-family preset used; synthetic low/warm held-out stays independent")}
     (out / "augment_report.json").write_text(json.dumps(report, indent=2) + "\n")
     return report
