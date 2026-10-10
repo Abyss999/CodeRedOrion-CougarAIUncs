@@ -76,6 +76,12 @@ CI (`.github/workflows/ios.yml`) runs the same on every PR touching `ios/`.
 The API must be reachable from the phone for TestFlight builds (see open questions in `HANDOFF.md`).
 
 ## 5. ML (off-box)
+**Dataset credentials** go in `.env` where datasets are prepared, and as Colab secrets:
+- `ROBOFLOW_API_KEY` is the **private** key. The `rf_` publishable key returns 401.
+- `KAGGLE_API_TOKEN` is the Kaggle API token.
+
+Never commit them.
+
 Light, CPU-only tests (no torch) run anywhere:
 ```bash
 python3.12 -m venv .venv-ml && .venv-ml/bin/pip install pytest flask pillow numpy
