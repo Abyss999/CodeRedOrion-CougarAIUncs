@@ -90,3 +90,27 @@ Token usage: the backend neither logs nor returns it (`resp.usage_metadata` is d
 | - | info | `predicted_expiry` is NOT NULL, so the spec's "nulls last" in `group_by` can never trigger | skipped test | spec note |
 
 Env note: `docker compose up -d` brought up `db` (created `fwr_test`) and `--build api` for the live run; both are left running.
+
+## 2026-10-10 - food-group follow-ups (BE-2, BE-3, PATCH semantics) - branch fix/food-group-followups
+
+**Result: PASS.** Full suite from `backend/`: `pytest -q --cov=app` = **335 passed, 1 skipped, coverage 96%** (`gemini.py` 99%, `food_group.py` 100%). Run against `fwr_test` on localhost:5433. No live Gemini calls (SDK `genai.Client` and `gemini._generate` stubbed; `requests` blocked).
+
+| Area | Tests | Checked |
+|---|---|---|
+| PATCH (`test_food_group.py`) | 11 | category only -> re-derived (also over an earlier manual group, and produce_* uses the name); category + food_group -> explicit wins; invalid group with category -> 400, nothing written; invalid category -> 400; food_group only -> kept, category untouched, later unrelated PATCH keeps it; same category re-derives (resets manual choice, as documented); name only -> group unchanged; `food_group: null` never 500 (200 or 400, alone and with category) |
+| BE-2 (`test_food_group_names.py`) | 80+ | 39-row receipt table (`GV WHL MILK GAL`, `KS ORG EGGS`, `CHKN BRST`, `WHT BRD`, `ORG BANANAS`, `BABY SPINACH`, `FRZN PEAS`, many lines from ml/eval/fixtures/receipts); case-insensitive; empty/None/unknown -> other; substring false positives (BUTTERNUT SQUASH, PEANUT BUTTER, EGGPLANT, MILKY WAY, JASMINE RICE, PRICE, HAMMER, CORNER, PEASANT); PINEAPPLE -> fruit; end-to-end `POST /items/from-receipt` with OCR stubbed: Milk -> dairy, Eggs -> protein |
+| BE-3 (`test_gemini_usage.py`) | 19 | exactly one INFO record per call on `app.gemini.usage`, with model/purpose/input/output/total tokens/latency_ms/status; each of the 4 helpers logs once with a distinct purpose; record never contains prompt text, a sentinel user string, response text or the fake API key (message and the whole LogRecord); missing/None/partial `usage_metadata` -> `null` fields, no exception; SDK exception -> `status=error`, no traceback attached; bad JSON -> `status=error` but tokens kept (call was billed); unconfigured -> no log; a failing logger never breaks the call; route-level `/items/parse-text` logs once. `scripts/gemini_cost.py` (subprocess): totals, per-model cost math, `--price` / `--default-price`, default table (gemini-3.8-flash 0.75/3.75 per 1M, 1M+1M = $4.50), file arg, empty input, round trip of the real emitted line |
+
+Decisions / findings (all behaviours match docs/API.md):
+- CREAMER / COFFEE CREAMER -> dairy; ICE CREAM -> frozen; COCONUT MILK and ALMOND MILK -> dairy; BUTTERNUT SQUASH -> veggies; PEANUT BUTTER -> pantry; APPLE JUICE / ORANGE JUICE -> pantry. Tests assert only the unambiguous ones (creamer, ice cream and juices are asserted only to be a valid group).
+- PATCH `name` only keeps the group (documented); `food_group: null` currently returns 400 validation_error (not documented in API.md; tests accept 200 or 400, never 500).
+- Existing tests that stubbed `gemini._generate` with `lambda contents, hint:` broke when the builder added the `purpose` kwarg; stubs in `test_food_group.py` updated to accept `*a, **k` (test_macros already did). Any other caller stubbing `_generate` needs the same.
+- The usage logger sets `propagate=False`, so pytest `caplog` cannot see it; tests attach their own handler. Anyone writing log assertions must do the same.
+
+### Bug status
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| BE-2 | low | Receipt `Milk`/`Eggs` got `other` | **fixed, verified** (keyword tables + abbreviations; Milk -> dairy, Eggs -> protein end to end) |
+| BE-3 | info | No Gemini token usage logged | **fixed, verified** (one leak-free INFO line per call; `scripts/gemini_cost.py` verified) |
+| BE-4 | info | `food_group: null` on PATCH undocumented in docs/API.md (returns 400, never 500) | open, doc request to builder |
+| BE-5 | info | Reported cosmetic oddities: POPCORN -> other, PICO DE GALLO -> other, COCOA BUTTER -> dairy, EGG NOODLES -> protein, COCONUT WATER -> fruit | open, optional |
