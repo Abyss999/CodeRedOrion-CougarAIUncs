@@ -75,6 +75,13 @@ python3.12 -m venv .venv-ml && .venv-ml/bin/pip install pytest flask pillow nump
 .venv-ml/bin/python -m pytest ml/eval/tests -q        # QA harness + receipt-parser gates
 ```
 
+Data pipeline (dataset ingestion, receipt inbox, lighting augmentation), CPU-only, from the root `.venv`:
+```bash
+.venv/bin/pip install -r pipeline/requirements.txt
+.venv/bin/python -m pytest pipeline/tests -q
+.venv/bin/python -m pipeline --help                    # commands: docs/PIPELINE.md
+```
+
 Training and heavy inference run on a GPU (Colab or a teammate's machine), **not** on a shared
 server. See `ml/README.md` and `docs/ML.md` (created by the ML builder). Point the backend at the
 inference service with `ML_SERVICE_URL`; leave it empty to use the Gemini-vision fallback.

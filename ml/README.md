@@ -10,6 +10,8 @@ Food detection, spoilage classification and receipt OCR. **Training and heavy in
 | `serve/` | ML builder | Flask inference service (`/detect`, `/ocr`, `/health`) with fake + real backends; `Dockerfile`, GPU `requirements.txt` |
 | `eval/` | ML QA only | Held-out sets, eval scripts, results |
 
+New datasets, the receipt inbox and lighting augmentation live in the root `pipeline/` (see `docs/PIPELINE.md`); it imports `yolo/` and `ocr/` rather than copying them.
+
 Light tests (run from `ml/`, project venv, no torch/ultralytics needed):
 `../.venv/bin/python -m pytest serve/tests ocr/tests yolo/tests -q`
 

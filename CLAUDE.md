@@ -38,6 +38,8 @@ Current state: [`HANDOFF.md`](HANDOFF.md).
 | `ios/Tests/**` | iOS QA |
 | `ml/yolo/**`, `ml/ocr/**`, `ml/serve/**`, `docs/ML.md` | ML builder |
 | `ml/eval/**` | ML QA |
+| `pipeline/**` (except `pipeline/tests/`), `docs/PIPELINE.md` | Pipeline builder |
+| `pipeline/tests/**` | Pipeline QA |
 | `docs/design/**` | Design agent (approved by the team before iOS builds) |
 | `docs/qa/<area>.md` | That area's QA agent |
 | `CLAUDE.md`, `HANDOFF.md`, `docs/QA.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/IDEA.md`, `docs/SETUP.md`, CI, compose | Orchestrator |
@@ -57,7 +59,7 @@ Current state: [`HANDOFF.md`](HANDOFF.md).
   the test database.
 
 ## QA process and the merge gate
-- Pairs: **Backend QA**, **iOS QA**, **ML QA** run alongside their builder; **Integration QA** runs
+- Pairs: **Backend QA**, **iOS QA**, **ML QA**, **Pipeline QA** run alongside their builder; **Integration QA** runs
   after builders merge. QA writes and runs tests, checks each feature against its definition of
   done, and reports bugs to the orchestrator and the builder. **QA never edits feature code.**
 - Each QA agent logs to `docs/qa/<area>.md`; the orchestrator folds it into

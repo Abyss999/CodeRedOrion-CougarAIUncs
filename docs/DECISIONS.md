@@ -2,6 +2,13 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — Data pipeline, AgriFreshNET, third freshness class
+- **Freshness has three classes: `fresh | semi_fresh | spoiled`.** *Why:* AgriFreshNET labels a middle stage (with day ranges), and "use soon" is exactly the nudge that prevents waste. *How:* the crop classifier learns 3 folders; `spoiled` is decided first (`SPOILED_THRESHOLD`), then `semi_fresh` (`SEMI_FRESH_THRESHOLD`), else `fresh`, so spoiled recall is never traded for the new class. The `/detect` and `/items/from-photo` `freshness` field gains the value `semi_fresh`; the sidecar code is `2` so old `0/1` data stays valid. QA reports semi_fresh but does not gate it until a trained model gives a baseline. *Alternatives:* fold semi_fresh into fresh (loses the signal) or into spoiled (false alarms on edible food).
+- **Data pipeline lives in `pipeline/`** and reuses `ml/yolo` and `ml/ocr` by import. *Why:* one taxonomy, one parser, one dataset builder; the pipeline only adds ingestion (adapters, dedupe, label conflicts, leakage groups), the receipt inbox (timeouts, quarantine, category cleanup) and lighting augmentation.
+- **Lighting augmentation is a separate step that never touches heldout.** *Why:* keeps the ML QA lighting gates comparable; every variant is logged so a harmful preset can be dropped.
+- **Identical images filed under two classes are dropped**, not resolved by first-seen. AgriFreshNET has 17 such Fresh/Semi-fresh orange pairs.
+- **AgriFreshNET detector classes appended:** `papaya`, `pineapple`, `bitter_melon` (produce_leafy). `bittergourd` now maps to `bitter_melon` (it pointed at `other`, which silently dropped the label).
+
 ## 2026-10-10 — Wave 1 decisions (backend core, ML, design)
 - **YOLO26 via `ultralytics==8.4.175`.** That was the latest on PyPI on 2026-10-10, and Ultralytics' docs recommend YOLO26 for new projects (YOLO11 is the mature fallback). It is **AGPL-3.0**: fine for this public repo, but it matters if the code is ever closed. Details are in `docs/ML.md`.
 - **Two-stage vision.** The detector predicts food *names* (about 50 classes, `ml/yolo/taxonomy.py`), and a separate `yolo26n-cls` classifier labels each crop fresh or spoiled. *Why:* the fridge datasets have no freshness labels and the produce datasets have no fridge scenes. The consequence is that spoiled recall is effectively a produce-only number.

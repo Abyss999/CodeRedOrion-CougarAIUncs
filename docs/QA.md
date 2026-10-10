@@ -26,6 +26,12 @@ orchestrator folds results in here.
 - YOLO on a held-out set: precision/recall per class (fresh vs spoiled), and under normal / low /
   warm lighting.
 - OCR on sample receipts: line items, prices, totals.
+- Freshness is three classes (`fresh`, `semi_fresh`, `spoiled`); `semi_fresh` is reported, not gated.
+
+### Pipeline QA (`pipeline/tests/`, pytest from `.venv`, CI `.github/workflows/pipeline.yml`)
+- Dataset ingestion: safe extraction, folder parsing, dedupe and label conflicts, leakage groups never straddle splits, idempotent re-runs.
+- Lighting augmentation: train/val only, heldout byte-identical, labels unchanged, deterministic, presets move luma/colour the right way.
+- Receipt inbox: outputs, quarantine codes, timeout + worker restart, duplicates, service-down behaviour, category cleanup.
 
 ### Integration QA (after builders merge)
 Whole stack in Docker, walk the **demo path**: add food by photo → expiry prediction → remove →
@@ -40,6 +46,7 @@ dashboard updates.
 | YOLO | Precision, per class (fresh, spoiled) | ≥ 0.80 |
 | YOLO | **Recall, spoiled** (a missed spoiled item is the costly error) | ≥ 0.85 |
 | YOLO | Recall drop, low or warm light vs normal | ≤ 10 points |
+| YOLO | Precision / recall, `semi_fresh` | reported only, **not gated** until a trained model sets a baseline |
 | OCR | Line-item recall (≥ 20 receipts) | ≥ 85% |
 | OCR | Price exact match | ≥ 90% |
 | OCR | Receipt total exact match | ≥ 90% |
@@ -59,6 +66,8 @@ Detail lives in [`qa/backend.md`](qa/backend.md) and [`qa/ml.md`](qa/ml.md). The
 | 2026-10-10 | #7 | Design | Not a QA area. Photo-review and Recipes screens added; new color pairs checked (5.9:1, 6.3:1) | **awaiting team approval** | none |
 | 2026-10-10 | #8 | ML parser fixes | ML QA: new blind holdout **v2** (15 receipts) written while the builder fixed ML-7/8/9 without seeing it, giving **97.2 / 100 / 100**. The ML-10 fix that followed brought all three sets to 100/100/100. A ~60-line black-box probe of the skip logic was also run. Suites: eval 74, ocr 89, serve 12, yolo 3 | **PASS** | ML-11 to ML-14 (all low) |
 | 2026-10-10 | #5 | Backend social | Backend QA: 158/158 (100 Wave 1 + 57 social + 1 migration), coverage 94%. Visibility tested for friend, pending, stranger, group member and non-member on every list and mutating endpoint | **PASS** | none |
+| 2026-10-10 | (feat/data-pipeline) | ML: `semi_fresh` 3rd class | ML QA: all 24 AgriFreshNET folder names parse correctly, class order is append-only (orchestrator diffed it against main), the `TwoStage.label` decision table, serve pass-through, the prepare sidecar/crops. Eval reports semi_fresh, not gated. Suites: eval 109, serve 12, ocr 89, yolo 3. Backend pass-through test added but **not run locally** (no Postgres); CI covers it | **PASS** | none |
+| 2026-10-10 | (feat/data-pipeline) | Data pipeline | Pipeline QA: 92 tests (~20 s). Ingestion (zip slip, nesting, dedupe, in-drop and cross-drop label conflicts, no group straddles splits, idempotent), augmentation (heldout byte-identical, labels unchanged, deterministic, presets move in the right direction), receipt inbox (outputs, all quarantine codes, timeout + worker restart, duplicates, service down), cleanup categories valid; 24 receipt fixtures match the parser alone. Real-data reports cross-checked. PIPE-1 and PIPE-2 (low) were fixed and re-verified | **PASS** (real GLM-OCR not run: no GPU) | none |
 
 **Not yet tested anywhere:** the iOS build (no Xcode yet), live Gemini (no key), the live ML service and YOLO accuracy (no GPU), GLM-OCR image-to-text, `docker compose up` of the full stack, and the integration demo path.
 

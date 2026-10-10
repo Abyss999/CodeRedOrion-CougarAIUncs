@@ -1,6 +1,6 @@
 # Handoff
 
-_Last updated: 2026-10-10. This is checkpoint 1, the end of session 1 on the Linux VPS. The next session runs on a Mac._
+_Last updated: 2026-10-10 (evening): data pipeline session on the Linux VPS, branch `feat/data-pipeline`. Checkpoint 1 notes below still apply._
 
 ## Current status
 **The backend and ML are built, QA-signed and merged. The design is waiting for team approval. iOS hasn't started.**
@@ -17,6 +17,28 @@ each suite independently before merging.
 | Design: 10 screens (incl. photo review + Recipes) + design system + `Theme.swift` | merged #2, #7 | **awaiting team approval**: https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx (private until the owner shares it) |
 | iOS app | **not started**: only the tab shell + `Theme.swift` | needs Xcode, and design approval first |
 | CI | **enabled** in `.github/workflows/` (backend, ML, iOS) | moved from the parked `ci/` folder on the Mac |
+| **Data pipeline** (`pipeline/`): dataset ingestion, receipt inbox (GLM-OCR), category cleanup, lighting augmentation | branch `feat/data-pipeline`, PR pending | see "Data pipeline session" below |
+| **Freshness: 3 classes** (`fresh / semi_fresh / spoiled`) | same branch | ML QA PASS: eval 109, serve 12, ocr 89, yolo 3 |
+
+## Data pipeline session (2026-10-10, evening)
+- **`pipeline/`** (`python -m pipeline`, docs in [`docs/PIPELINE.md`](docs/PIPELINE.md)):
+  - `ingest-dataset`: safe nested-zip extraction, adapters, dedupe, label conflicts and leakage groups.
+  - `prepare`: wraps `ml/yolo/prepare_dataset.py`.
+  - `augment-lighting`: 7 presets on train and val only; heldout is left untouched.
+  - `ingest-receipts`: a GLM-OCR inbox with `glm`, `service` and `fake` engines, a per-file timeout with worker restart, quarantine, and per-line category tagging.
+- **AgriFreshNET** (from `~/Downloads`) is ingested:
+  - 14,103 images, about 4.7k each of fresh, semi_fresh and spoiled.
+  - 34 cross-class conflict files dropped.
+  - Prepared into 11,060 train, 1,569 val and 1,474 heldout images. Augmented into 33,180 train and 4,707 val images.
+  - The data lives in `pipeline/data/` on the VPS, which is gitignored. Re-create it with the commands in PIPELINE.md.
+- **Freshness has a third class, `semi_fresh`.** It touches the taxonomy, prepare, infer (`SEMI_FRESH_THRESHOLD`), the serve contract, the Gemini hint and `docs/API.md`. The eval reports it but doesn't gate it.
+- **New detector classes:** `papaya`, `pineapple` and `bitter_melon`, appended to the class list.
+- **Not run:** real GLM-OCR (no GPU) and the backend suite (no Postgres on the VPS; CI runs it). `test_from_photo_passes_semi_fresh_through` was added but hasn't run yet.
+- **Follow-ups:**
+  - iOS needs a "use soon" badge for `semi_fresh`. It must go through design first.
+  - Optionally, the backend could shorten predicted expiry for semi_fresh items, using AgriFreshNET's day ranges (kept in `manifest.csv`).
+  - Train on `pipeline/data/augmented` on the GPU box.
+  - Verify AgriFreshNET's licence.
 
 ## Done this session
 - Bootstrap (#1): `CLAUDE.md`, the docs set, and the scaffold.
@@ -51,6 +73,7 @@ each suite independently before merging.
    feature-complete.
 
 ## Open questions / blockers
+- **AgriFreshNET licence** is unverified. Check it before publishing any results.
 - **`GEMINI_API_KEY`** and the model id.
 - **Who uploads to TestFlight**, and which Apple Developer team and bundle id to use.
 - **How the phone reaches the API** during the demo (same Wi-Fi as a laptop, a tunnel, or a hosted backend).
