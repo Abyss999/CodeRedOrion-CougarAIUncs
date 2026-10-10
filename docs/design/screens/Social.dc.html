@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Social</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
+a{color:#1F4D2B}a:hover{color:#13261A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F8E8; display: flex; flex-direction: column">
+  <main style="flex: 1; overflow: hidden; padding: 64px 20px 0; display: flex; flex-direction: column; gap: 18px">
+    <header style="display: flex; justify-content: space-between; align-items: center">
+      <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 30px; letter-spacing: -0.01em">Social</h1>
+      <button aria-label="Add friends or groups" style="width: 44px; height: 44px; border: 0; border-radius: 22px; background: #1F4D2B; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D9EC8F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+    </header>
+
+    <button aria-expanded="false" style="border: 0; border-radius: 20px; background: #D9EC8F; padding: 16px; display: flex; flex-direction: column; gap: 12px; text-align: left; color: #13261A">
+      <span style="display: flex; justify-content: space-between; align-items: center; width: 100%">
+        <span style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-family: Outfit, sans-serif; font-size: 20px; font-weight: 600">Food Pantry</span>
+          <span style="font-size: 14px; color: #2B3D30">7 items shared by friends and groups</span>
+        </span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </span>
+      <span style="display: flex; gap: 8px; flex-wrap: wrap">
+        <sc-for list="{{pantry}}" as="p" hint-placeholder-count="4">
+          <span style="font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 10px; background: #F4F8E8; color: #1F4D2B">{{p}}</span>
+        </sc-for>
+      </span>
+    </button>
+
+    <div style="display: flex; justify-content: space-between; align-items: baseline">
+      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 20px">Requests</h2>
+      <a href="#" style="font-size: 15px; font-weight: 500">Post one</a>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{notes}}" as="n" hint-placeholder-count="4">
+        <article style="{{n.noteStyle}}">
+          <header style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #2B3D30">
+            <span style="width: 8px; height: 8px; border-radius: 4px; background: #1F4D2B"></span>{{n.source}}</header>
+          <p style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 500; line-height: 1.3; color: #13261A">{{n.text}}</p>
+          <footer style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #45584A">
+            <span>{{n.who}}</span>
+            <button style="height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: #1F4D2B; color: #F4F8E8; font-size: 12px; font-weight: 600">I have it</button>
+          </footer>
+        </article>
+      </sc-for>
+    </div>
+  </main>
+
+  <nav aria-label="Tabs" style="height: 84px; box-sizing: border-box; background: #FFFFFF; border-top: 1px solid #E6EDD6; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; padding-top: 8px">
+    <a href="Home.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #5C6E5F; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"></path></svg>Home</a>
+    <a href="#" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #5C6E5F; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"></path><path d="M2 10h20"></path><path d="M9 7c0-1.2 1-1.8 1-3M14 7c0-1.2 1-1.8 1-3"></path></svg>Recipes</a>
+    <a href="AddSheet.dc.html" aria-label="Add food" style="text-decoration: none; justify-self: center; margin-top: -26px; width: 60px; height: 60px; border-radius: 30px; background: #1F4D2B; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(31,77,43,0.28)">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D9EC8F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></a>
+    <a href="Fridge.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #5C6E5F; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="M6 10h12M9 5v2M9 13v3"></path></svg>Fridge</a>
+    <a href="Social.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #1F4D2B; font-size: 10px; font-weight: 600">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.8 3.5 6"></path></svg>Social</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const base = 'min-height: 168px; box-sizing: border-box; padding: 14px; border-radius: 4px 4px 14px 4px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; box-shadow: 0 2px 6px rgba(31,77,43,0.12); ';
+return {
+pantry: ['Sourdough, half loaf', 'Basil', '6 eggs', 'Rice, 2 lb'],
+notes: [
+{ source: 'Moody Hall 4F', text: 'Anyone have 2 eggs? Baking tonight.', who: 'Marcus, 20m', noteStyle: base + 'background: #FFF6C7; transform: rotate(-1.2deg)' },
+{ source: 'Priya R.', text: 'Need a lemon for dinner, can trade cilantro', who: '1h', noteStyle: base + 'background: #E4F2C4; transform: rotate(0.8deg)' },
+{ source: 'CougarCS Kitchen', text: 'Leftover rice from the event. Bring a container.', who: 'Dana, 2h', noteStyle: base + 'background: #E4F2C4; transform: rotate(0.6deg)' },
+{ source: 'Theo Nguyen', text: 'Half a bag of shredded mozzarella?', who: '3h', noteStyle: base + 'background: #FFF6C7; transform: rotate(-0.7deg)' }
+]
+};
+}
+}
+</script>
+</body>
+</html>
