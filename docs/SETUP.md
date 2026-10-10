@@ -47,6 +47,14 @@ docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'CREATE DAT
 cd backend && ../.venv/bin/pytest -q --cov=app      # about 40 s; concurrent runs queue on an advisory lock
 ```
 
+**Gemini cost:** every Gemini call logs one token-usage line (model, purpose, tokens, latency, and
+no prompt or user data). Sum them with:
+```bash
+docker compose logs api | python3 scripts/gemini_cost.py
+```
+The prices for `gemini-3.8-flash` are in the script and were checked on 2026-10-10: $0.75 in /
+$3.75 out per 1M tokens until 2026-12-31, then $1.50 / $7.50.
+
 ## 4. iOS
 ```bash
 cd ios
