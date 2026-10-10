@@ -21,7 +21,7 @@
 | iOS app | `ios/` | SwiftUI, XcodeGen. Talks only to the Flask API through an `APIClient` protocol (mock impl for previews/tests). |
 | API | `backend/` | Flask app factory, blueprints per area, services wrap every external call. Stateless; JWT auth. |
 | DB | Docker `db` service | `timescale/timescaledb` (pinned tag). One database. Migrations via Flask-Migrate. |
-| ML service | `ml/serve/` | Runs where there's a GPU. Backend reaches it at `ML_SERVICE_URL`; **if unset or down, `/items/from-photo` falls back to Gemini vision** so the demo never depends on a GPU being up. |
+| ML service | `ml/serve/` | Flask: `POST /detect` (YOLO26 food-name detector, then a fresh/spoiled crop classifier), `POST /ocr` (GLM-OCR, then the deterministic receipt parser), `GET /health`. Runs where there's a GPU, with fake backends for CPU tests. Backend reaches it at `ML_SERVICE_URL`. **If it's unset or returns an error, `/items/from-photo` falls back to Gemini vision**, so the demo never depends on a GPU being up. Receipts have no fallback. It has no auth, so keep it on loopback or a tunnel. Details: `docs/ML.md`. |
 | Gemini | external | One service module (`backend/app/services/gemini.py`). Model id pinned in `.env` (`GEMINI_MODEL`) and recorded in `DECISIONS.md`. |
 
 ## Key flows
@@ -30,7 +30,8 @@
   `POST /items` (batch) → `add` events written.
 - **Remove:** swipe → 3-option sheet → `POST /items/:id/remove` → one transaction: soft delete +
   `remove` event (+ fulfil share listing on `donated`).
-- **Impact:** `GET /impact` aggregates `food_events` with `time_bucket`.
+- **Impact:** `GET /impact` aggregates `food_events` with `time_bucket`, and returns zeros (not an error) for a user with no events.
+- **Social (Wave 3):** friends, groups with their own pantries, the Food Pantry share board and the request board. Visibility is limited to accepted friends and fellow group members. See `docs/API.md`.
 
 ## Deployment
 - Local / demo: `docker compose up` (API on `127.0.0.1:5055`, DB on `127.0.0.1:5433`).

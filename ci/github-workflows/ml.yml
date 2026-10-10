@@ -1,0 +1,26 @@
+name: ml
+on:
+  pull_request:
+    paths: ["ml/**", ".github/workflows/ml.yml"]
+  push:
+    branches: [main]
+    paths: ["ml/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Light test deps only (no torch / ultralytics / transformers)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install pytest flask pillow numpy
+      - name: Builder tests (one directory per run; their conftests clash in a single run)
+        working-directory: ml
+        run: |
+          for d in serve ocr yolo; do ../.venv/bin/python -m pytest $d/tests -q; done
+      - name: QA eval harness + parser gates
+        run: .venv/bin/python -m pytest ml/eval/tests -q

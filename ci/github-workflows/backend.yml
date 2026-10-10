@@ -20,7 +20,9 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U fwr" --health-interval 5s --health-timeout 3s --health-retries 20
     env:
-      DATABASE_URL: postgresql+psycopg://fwr:fwr@localhost:5432/fwr_test
+      # The suite runs against TEST_DATABASE_URL and refuses to run if it equals DATABASE_URL.
+      TEST_DATABASE_URL: postgresql+psycopg://fwr:fwr@localhost:5432/fwr_test
+      DATABASE_URL: postgresql+psycopg://fwr:fwr@localhost:5432/unused
       JWT_SECRET: ci-only-secret
     steps:
       - uses: actions/checkout@v4
@@ -33,4 +35,4 @@ jobs:
           .venv/bin/pip install -r backend/requirements.txt
       - name: pytest
         working-directory: backend
-        run: ../.venv/bin/pytest -q
+        run: ../.venv/bin/pytest -q --cov=app --cov-fail-under=80
