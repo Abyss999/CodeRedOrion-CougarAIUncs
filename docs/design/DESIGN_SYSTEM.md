@@ -112,7 +112,7 @@ chart values are always labeled.
 ## Components
 | Component | Seen in | Notes |
 |---|---|---|
-| `ItemRow` | Home, Fridge | 40 pt **food-group icon** tile (`limeTint`, `forest` stroke) + name + meta + `ExpiryBadge`; swipe action `Remove` on `forest` |
+| `ItemRow` | Home, Fridge | 40 pt **food-group icon** tile in the group's colours (see Food-group colours) + name + meta + `ExpiryBadge`; swipe action `Remove` on `forest` |
 | `FoodGroupSection` | Fridge | The Fridge list is **grouped by food group** (Protein, Veggies, Fruit, Dairy, Grains, Pantry, Leftovers, Frozen, Other). The header has the group icon, name and count, and rows within a group are sorted by expiry. Storage (Fridge / Pantry / Freezer) stays the segmented control above |
 | `QuantityStepper` | Photo review | `limeTint` pill: − / value with unit / +. 40 pt tall, with a 44 pt hit target via `contentShape`. The value shows the unit ("1.4 lb", "1 bag", "12") |
 | `MacroStrip` | Recipes hero | Four equal cells (kcal, protein, carbs, fat) **per serving**, labelled as estimates in the recipe detail. Rows show "kcal · protein" in their meta line |
@@ -131,6 +131,27 @@ chart values are always labeled.
 | `StatTile`, `ImpactHero` | Impact | Hero on forest; tiles on surface |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |
+
+**Food-group colours** (owner request: icons are colourful, one colour per group). The tile is the
+fill behind the icon and the stroke is the icon colour. Every stroke clears the 3:1 non-text
+contrast minimum against its tile: light mode 3.98:1 at worst, dark 7.39:1 at worst. The group
+name always appears beside the icon, so colour is never the only cue.
+
+| Group | Light stroke / tile | Dark stroke / tile |
+|---|---|---|
+| Protein | `#B0412E` / `#FBE4DE` | `#FF9E8A` / `#3D1F1A` |
+| Veggies | `#2F7A3A` / `#E2F1D8` | `#8FD69A` / `#1C3320` |
+| Fruit | `#A8366E` / `#F8E1EC` | `#F59AC6` / `#3A1C2B` |
+| Dairy | `#3A5BA0` / `#E2E9F7` | `#9DB7F0` / `#1C2540` |
+| Grains | `#8A6414` / `#F5EBCD` | `#E8C46A` / `#33290F` |
+| Pantry | `#6A4FA3` / `#ECE5F7` | `#C1AAF0` / `#2A2140` |
+| Leftovers | `#1F7A78` / `#DAF0EE` | `#7FD8D3` / `#14302F` |
+| Frozen | `#1E7BA8` / `#DCEFF8` | `#86CBEE` / `#122C3A` |
+| Other | `#5C6E5F` / `#EAEFE6` | `#B4C2B6` / `#243026` |
+
+In `Theme.swift` these go in `Theme.FoodGroup.<group>.stroke` / `.tile`, both adaptive. They are
+**only** for food-group identity. Never reuse them for status, which is the urgent tokens, or for
+charts.
 
 **Food-group icons** (stroke style, matching the mockups; use the closest SF Symbol, or ship these as
 template assets if SF has no match):
