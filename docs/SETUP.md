@@ -33,8 +33,11 @@ curl http://127.0.0.1:5055/health         # {"status":"ok"}
 docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"   # DB shell
 ```
 Ports bind to `127.0.0.1` only: API `5055`, DB `5433` (5433 avoids clashing with a local Postgres).
-Migrations: `cd backend && ../.venv/bin/flask --app wsgi db upgrade`. This creates the
-`timescaledb` and `citext` extensions, all tables, and the `food_events` hypertable.
+Migrations run automatically: the `api` container's entrypoint (`backend/entrypoint.sh`) runs
+`flask --app wsgi db upgrade` before starting gunicorn, so no host-side step is needed for the
+container. It is idempotent, so restarts are safe. The upgrade creates the `timescaledb` and
+`citext` extensions, all tables, and the `food_events` hypertable.
+For the host venv (and for tests) run it by hand: `cd backend && ../.venv/bin/flask --app wsgi db upgrade`.
 
 **Backend tests need their own database.** The suite drops and rebuilds its schema by running the
 migrations, so it refuses to run unless `TEST_DATABASE_URL` is set and differs from `DATABASE_URL`.
