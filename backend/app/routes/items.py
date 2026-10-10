@@ -8,7 +8,7 @@ from ..errors import ApiError, not_found, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (CATEGORIES, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
                       ShareListing, User)
-from ..services import barcode, candidates, expiry, gemini, impact, ml
+from ..services import barcode, candidates, expiry, gemini, impact, ml, social
 from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item)
 
 bp = Blueprint("items", __name__, url_prefix="/items")
@@ -26,8 +26,23 @@ def _owned(item_id, *, lock=False) -> Item:
     return item
 
 
-def _event(item, event_type, **extra):
-    return FoodEvent(time=datetime.now(timezone.utc), user_id=item.owner_id, item_id=item.id,
+def _removable(item_id) -> Item:
+    """Owner may remove any own item; any member of the group may remove a group-pantry item.
+    Personal items of other users stay 403."""
+    item = db.session.execute(db.select(Item).where(Item.id == path_uuid(item_id)).with_for_update()
+                              ).scalar_one_or_none()
+    if item is None:
+        raise not_found("Item not found.")
+    if item.owner_id == g.user.id:
+        return item
+    if item.group_id is not None and social.membership(item.group_id, g.user.id) is not None:
+        return item
+    raise ApiError(403, "forbidden", "This item belongs to another user.")
+
+
+def _event(item, event_type, user_id=None, **extra):
+    """`user_id` is the actor (defaults to the owner); a member removing a group item passes theirs."""
+    return FoodEvent(time=datetime.now(timezone.utc), user_id=user_id or item.owner_id, item_id=item.id,
                      group_id=item.group_id, event_type=event_type, category=item.category,
                      quantity=item.quantity, est_weight_kg=item.est_weight_kg,
                      est_price=item.est_price, **extra)
@@ -36,7 +51,7 @@ def _event(item, event_type, **extra):
 @bp.get("")
 @require_auth
 def list_items():
-    q = Item.query.filter(Item.owner_id == g.user.id)
+    q = Item.query.filter(Item.owner_id == g.user.id, Item.group_id.is_(None))
     storage = request.args.get("storage")
     if storage:
         if storage not in STORAGES:
@@ -90,6 +105,14 @@ def create_items():
     if len(raws) > 100:
         raise validation_error("At most 100 items per request.")
     parsed = [_validate_new(r) for r in raws]
+    body_group = parse_uuid(body.get("group_id"), missing_ok=True)
+    checked = set()
+    for raw, p in zip(raws, parsed):
+        gid = parse_uuid(raw["group_id"], missing_ok=True) if raw.get("group_id") is not None else body_group
+        if gid is not None and gid not in checked:
+            social.require_member(gid, g.user.id)
+            checked.add(gid)
+        p["group_id"] = gid
 
     # Optional Gemini refinement for items with no client expiry; failure -> table default.
     missing = [p for p in parsed if p["predicted_expiry"] is None]
@@ -192,7 +215,7 @@ def remove_item(item_id):
         if db.session.get(User, recipient_id) is None:
             raise validation_error("recipient_id does not match a user.")
 
-    item = _owned(item_id, lock=True)  # row lock: concurrent removes serialise, one wins
+    item = _removable(item_id)  # row lock: concurrent removes serialise, one wins
     if item.removed_at is not None:
         raise ApiError(409, "already_removed", "Item has already been removed.")
 
@@ -203,11 +226,13 @@ def remove_item(item_id):
     if weight is None:
         weight = impact.estimate_weight_kg(item.category, item.quantity, item.unit)
         item.est_weight_kg = weight
-    db.session.add(_event(item, "remove", outcome=outcome, waste_reason=reason,
+    db.session.add(_event(item, "remove", user_id=g.user.id, outcome=outcome, waste_reason=reason,
                           co2e_kg=impact.co2e_kg(item.category, weight)))
     if outcome == "donated":
         listing = ShareListing.query.filter_by(item_id=item.id, status="open").first()
         if listing:
+            if recipient_id is None:
+                recipient_id = listing.claimed_by
             listing.status, listing.fulfilled_at, listing.recipient_id = "fulfilled", now, recipient_id
     db.session.commit()
     return jsonify(item=serialize_item(item))

@@ -75,6 +75,7 @@ def serialize_listing(l) -> dict:
         "id": str(l.id), "item_id": str(l.item_id), "owner_id": str(l.owner_id),
         "group_id": str(l.group_id) if l.group_id else None, "status": l.status,
         "recipient_id": str(l.recipient_id) if l.recipient_id else None,
+        "claimed_by": str(l.claimed_by) if l.claimed_by else None,
         "created_at": iso(l.created_at), "fulfilled_at": iso(l.fulfilled_at),
     }
 

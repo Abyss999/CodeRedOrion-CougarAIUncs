@@ -40,7 +40,7 @@ class Item(db.Model):
     __tablename__ = "items"
     id = _uuid_pk()
     owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    group_id = db.Column(UUID(as_uuid=True), nullable=True)  # FK to groups added in the social wave
+    group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id"), nullable=True)
     name = db.Column(db.Text, nullable=False)
     category = db.Column(db.Text, nullable=False)
     storage = db.Column(db.Text, nullable=False)
@@ -70,9 +70,10 @@ class ShareListing(db.Model):
     id = _uuid_pk()
     item_id = db.Column(UUID(as_uuid=True), db.ForeignKey("items.id"), nullable=False, index=True)
     owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    group_id = db.Column(UUID(as_uuid=True), nullable=True)
+    group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id"), nullable=True)
     status = db.Column(db.Text, nullable=False, default="open")
     recipient_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
+    claimed_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
     fulfilled_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
@@ -105,4 +106,58 @@ class FoodEvent(db.Model):
                         name="ck_food_events_type"),
         CheckConstraint("(outcome = 'thrown_out') = (waste_reason IS NOT NULL)",
                         name="ck_food_events_reason_iff_thrown_out"),
+    )
+
+
+class Friendship(db.Model):
+    """One row per relationship: user_id = requester, friend_id = target. Symmetric once accepted."""
+    __tablename__ = "friendships"
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), primary_key=True)
+    friend_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), primary_key=True)
+    status = db.Column(db.Text, nullable=False, default="pending")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','accepted')", name="ck_friendships_status"),
+        CheckConstraint("user_id <> friend_id", name="ck_friendships_not_self"),
+    )
+
+
+class Group(db.Model):
+    __tablename__ = "groups"
+    id = _uuid_pk()
+    name = db.Column(db.Text, nullable=False)
+    created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    invite_code = db.Column(db.Text, nullable=False, unique=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class GroupMember(db.Model):
+    __tablename__ = "group_members"
+    group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id"), primary_key=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), primary_key=True)
+    role = db.Column(db.Text, nullable=False, default="member")
+    joined_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("role IN ('owner','member')", name="ck_group_members_role"),
+    )
+
+
+class HelpRequest(db.Model):
+    """Request board ('sticky notes'): 'does anyone have an onion?'."""
+    __tablename__ = "requests"
+    id = _uuid_pk()
+    author_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id"), nullable=True)
+    text = db.Column(db.Text, nullable=False)
+    status = db.Column(db.Text, nullable=False, default="open")
+    fulfilled_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('open','fulfilled','cancelled')", name="ck_requests_status"),
+        CheckConstraint("char_length(text) BETWEEN 1 AND 280", name="ck_requests_text_len"),
+        CheckConstraint("(status = 'fulfilled') = (fulfilled_by IS NOT NULL)",
+                        name="ck_requests_fulfilled_iff_by"),
     )

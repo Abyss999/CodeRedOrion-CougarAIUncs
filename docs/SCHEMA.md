@@ -3,8 +3,8 @@
 PostgreSQL + TimescaleDB, one database. Relational tables for state; the `food_events`
 **hypertable** is the append-only log the Impact Dashboard is computed from.
 Status: **implemented** in migration `0001_initial` (users, items, share_listings, food_events).
-Social tables other than `share_listings` are still planned; `items.group_id` and
-`share_listings.group_id` are plain nullable uuids until the `groups` table exists.
+Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
+and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in migration `0002_social`.
 
 ## Relational tables
 ### users
@@ -40,11 +40,23 @@ Also CHECKs on `storage`, `outcome` and `waste_reason` value sets (`ck_items_*`)
 Index: `(owner_id, removed_at, predicted_expiry)`.
 `quantity` defaults 1, `unit` defaults `piece`; `predicted_expiry` is NOT NULL (always predicted).
 
-### Social
-- `friendships(user_id, friend_id, status pending|accepted, created_at)` — pk `(user_id, friend_id)`
-- `groups(id, name, created_by, created_at)`, `group_members(group_id, user_id, role)`
-- `share_listings(id, item_id → items, owner_id, group_id null, status open|fulfilled|cancelled, recipient_id null, created_at, fulfilled_at)`
-- `requests(id, author_id, group_id null, text, status open|fulfilled, created_at)`
+### Social (migration `0002_social`)
+- `friendships(user_id → users, friend_id → users, status pending|accepted, created_at)` — pk
+  `(user_id, friend_id)` (user_id = requester). CHECK `user_id <> friend_id`; unique index
+  `uq_friendships_pair` on `(LEAST(user_id,friend_id), GREATEST(user_id,friend_id))` so only one
+  row exists per pair, whatever the direction. Index on `friend_id`.
+- `groups(id, name, created_by → users, invite_code UNIQUE, created_at)`.
+- `group_members(group_id → groups, user_id → users, role owner|member, joined_at)` — pk
+  `(group_id, user_id)`; index on `user_id`.
+- `share_listings(id, item_id → items, owner_id, group_id → groups null, status open|fulfilled|cancelled,
+  recipient_id null, claimed_by → users null, created_at, fulfilled_at)`; group null = shared to
+  friends. Index `(status, group_id)`.
+- `items.group_id → groups` (FK added in 0002; index `(group_id, removed_at)`).
+  `food_events.group_id` stays a plain uuid (hypertable, no FK).
+- `requests(id, author_id → users, group_id → groups null, text 1-280 chars, status
+  open|fulfilled|cancelled, fulfilled_by → users null, created_at)`. CHECKs: text length, and
+  `(status='fulfilled') = (fulfilled_by IS NOT NULL)`. Indexes `(status, created_at DESC)`,
+  `author_id`, `group_id`.
 
 ## Event model (TimescaleDB)
 ```sql
