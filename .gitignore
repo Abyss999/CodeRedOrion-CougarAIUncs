@@ -1,0 +1,31 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ML artifacts (large; keep out of git)
+ml/**/runs/
+ml/**/datasets/
+ml/**/*.pt
+ml/**/*.onnx
+ml/**/*.mlpackage
+
+# iOS / Xcode
+ios/*.xcodeproj/
+ios/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
