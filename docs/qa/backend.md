@@ -54,3 +54,7 @@ Files checked: `backend/entrypoint.sh` (retries `flask --app wsgi db upgrade` up
 Notes (no bugs): the builder's stack was up when QA ran `down -v`, and a concurrent `restart` by the builder overlapped with QA's first run; results were re-confirmed afterwards. SETUP.md does not mention the 10 x 3 s retry window (about 30 s before the container gives up); low-value doc nit only.
 
 Bugs: none new.
+
+## 2026-10-10 - semi_fresh pass-through
+Added `test_from_photo_passes_semi_fresh_through` in `backend/tests/test_ai_endpoints.py` (ML service returns `semi_fresh`; `/items/from-photo` returns it unchanged with source `yolo`).
+**Not run locally**: Postgres at TEST_DATABASE_URL refused the connection and backend deps (dotenv etc.) are not installed in `.venv`; Docker not started per instructions. File compiles (`py_compile`); CI covers the run. Bugs: none. Verdict: PASS pending CI.

@@ -98,6 +98,19 @@ def test_from_photo_uses_ml_when_configured(app, client, user, monkeypatch):
     assert c["name"] == "Banana" and c["freshness"] == "fresh" and c["confidence"] == 0.9 and c["bbox"] == [1, 2, 3, 4]
 
 
+def test_from_photo_passes_semi_fresh_through(app, client, user, monkeypatch):
+    monkeypatch.setitem(app.config, "ML_SERVICE_URL", "http://ml.invalid")
+    monkeypatch.setattr(ml, "detect", lambda *a, **k: [dict(YOLO[0], freshness="semi_fresh")])
+    monkeypatch.setattr(gemini, "detect_from_image", lambda *a, **k: pytest.fail("gemini must not be used"))
+    r = client.post("/items/from-photo", data={"mode": "single", **img()}, headers=user["headers"],
+                    content_type="multipart/form-data")
+    assert r.status_code == 200
+    b = r.get_json()
+    assert b["source"] == "yolo"
+    assert b["candidates"][0]["freshness"] == "semi_fresh"
+    assert b["candidates"][0]["name"] == "Banana" and b["candidates"][0]["confidence"] == 0.9
+
+
 def test_from_photo_gemini_fallback_when_no_ml(client, user, monkeypatch):
     monkeypatch.setattr(gemini, "detect_from_image", lambda *a, **k: [dict(YOLO[0], freshness="spoiled")])
     r = client.post("/items/from-photo", data=img(), headers=user["headers"], content_type="multipart/form-data")

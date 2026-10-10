@@ -17,7 +17,7 @@ Definitions (all documented so the numbers can be audited):
     name, across all images, sorted by confidence; AP is the all-point-interpolated area under the
     precision envelope (VOC2010+ / COCO "all point"). Classes with no GT are skipped. A class with
     GT but no predictions has AP 0. No confidence threshold is applied for AP.
-  * Fresh/spoiled precision & recall: for each freshness class c, only predictions with
+  * Fresh/semi_fresh/spoiled precision & recall: for each freshness class c, only predictions with
     freshness==c (and confidence >= --conf) compete for GT with freshness==c. By default matching
     ignores `name` (localisation + freshness label); pass --match-name to also require the name.
         precision = TP/(TP+FP), recall = TP/(TP+FN); None when the denominator is 0.
@@ -32,7 +32,7 @@ import sys
 from collections import defaultdict
 
 IOU_THRESHOLD = 0.5
-FRESHNESS = ("fresh", "spoiled")
+FRESHNESS = ("fresh", "semi_fresh", "spoiled")
 LIGHTING = ("normal", "low", "warm")
 
 
@@ -202,7 +202,7 @@ def evaluate(gt_rows, pred_rows, conf=0.0, match_name=False) -> dict:
         if lt == "normal":
             continue
         d = {}
-        for key in ("overall", "spoiled", "fresh"):
+        for key in ("overall", "spoiled", "semi_fresh", "fresh"):
             b = base["freshness"][key]["recall"] if base else None
             v = grp["freshness"][key]["recall"]
             d[key] = None if b is None or v is None else (b - v) * 100.0
@@ -226,7 +226,7 @@ def _drops(by):
         if lt == "normal":
             continue
         out[lt] = {}
-        for key in ("overall", "spoiled", "fresh"):
+        for key in ("overall", "spoiled", "semi_fresh", "fresh"):
             b = base["freshness"][key]["recall"] if base else None
             v = grp["freshness"][key]["recall"]
             out[lt][key] = None if b is None or v is None else (b - v) * 100.0
@@ -274,12 +274,12 @@ def print_report(res):
         print(f"  AP[{n}] = {_fmt(ap)}")
     for cls in (*FRESHNESS, "overall"):
         f = d["freshness"][cls]
-        print(f"{cls:8s} P={_fmt(f['precision'])} R={_fmt(f['recall'])} (tp={f['tp']} fp={f['fp']} fn={f['fn']})")
+        print(f"{cls:10s} P={_fmt(f['precision'])} R={_fmt(f['recall'])} (tp={f['tp']} fp={f['fp']} fn={f['fn']})")
     for lt, g in d["by_lighting"].items():
         o = g["freshness"]["overall"]; s = g["freshness"]["spoiled"]
         print(f"[{lt}] n={g['n_images']} mAP={_fmt(g['map50'])} recall={_fmt(o['recall'])} spoiled_recall={_fmt(s['recall'])}")
     for lt, dr in d["recall_drop_points"].items():
-        print(f"recall drop {lt} vs normal (points): overall={dr['overall']} spoiled={dr['spoiled']}")
+        print(f"recall drop {lt} vs normal (points): overall={dr['overall']} spoiled={dr['spoiled']} semi_fresh={dr.get('semi_fresh')}")
 
 
 def main(argv=None):
@@ -302,7 +302,7 @@ def main(argv=None):
         print(f"-- lighting by source (real n={ls['n_real']}, synthetic n={ls['n_synthetic']}; synthetic is usually EASIER) --")
         for src in ("real", "synthetic"):
             for lt, dr in ls[src]["recall_drop_points"].items():
-                print(f"{src:9s} {lt}: recall drop overall={dr['overall']} spoiled={dr['spoiled']}")
+                print(f"{src:9s} {lt}: recall drop overall={dr['overall']} spoiled={dr['spoiled']} semi_fresh={dr.get('semi_fresh')}")
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:
             json.dump(res, f, indent=2)

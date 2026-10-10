@@ -69,3 +69,16 @@ def test_end_to_end_cli_on_fixtures(tmp_path):
     # no OCR section supplied -> OCR fails unless explicitly allowed
     assert ct.main([str(out)]) == 1
     assert ct.main([str(out), "--allow-missing-section", "ocr"]) == 0
+
+
+def test_semi_fresh_is_reported_not_gated():
+    m = good_det()
+    names = [n for n, _, _ in ct.run_checks(m)]
+    assert not any("semi" in n for n in names)
+    # terrible / missing semi_fresh numbers never change any status
+    base = ct.run_checks(m)
+    m["detection"]["freshness"]["semi_fresh"] = {"precision": 0.0, "recall": 0.0}
+    m["detection"]["recall_drop_points"]["low"]["semi_fresh"] = 99.0
+    assert ct.run_checks(m) == base
+    m["detection"]["freshness"]["semi_fresh"] = {"precision": None, "recall": None}
+    assert ct.run_checks(m) == base

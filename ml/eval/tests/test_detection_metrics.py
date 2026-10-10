@@ -249,3 +249,61 @@ def test_lighting_sources_real_vs_synthetic():
     assert ls["n_real"] == 2 and ls["n_synthetic"] == 1
     assert ls["real"]["recall_drop_points"]["low"]["overall"] == pytest.approx(50.0)
     assert ls["synthetic"]["recall_drop_points"]["low"]["overall"] == pytest.approx(0.0)
+
+
+# ---------- 3-class (semi_fresh) ----------------------------------------------------------------
+def three_class_fixture():
+    # img a: GT fresh@0, semi@1, spoiled@2. preds: fresh@0 ok, semi@1 ok, spoiled@2 ok
+    # img b: GT semi@0 (n), spoiled@1. preds: fresh@0 (semi mislabelled as fresh), spoiled@1 ok, semi@5 (FP, no GT)
+    gt = [{"image": "a", "lighting": "normal", "labels": [lab("banana", "fresh", 0), lab("banana", "semi_fresh", 1), lab("banana", "spoiled", 2)]},
+          {"image": "b", "lighting": "normal", "labels": [lab("banana", "semi_fresh", 0), lab("banana", "spoiled", 1)]}]
+    pr = [{"image": "a", "predictions": [pred("banana", "fresh", 0), pred("banana", "semi_fresh", 1), pred("banana", "spoiled", 2)]},
+          {"image": "b", "predictions": [pred("banana", "fresh", 0), pred("banana", "spoiled", 1), pred("banana", "semi_fresh", 5)]}]
+    return gt, pr
+
+
+def test_freshness_tuple_has_semi():
+    assert dm.FRESHNESS == ("fresh", "semi_fresh", "spoiled")
+
+
+def test_three_class_per_class_pr():
+    gt, pr = three_class_fixture()
+    f = evaluate(gt, pr)["detection"]["freshness"]
+    # semi: GT 2 (a@1, b@0); preds semi: a@1 TP, b@5 FP -> tp1 fp1 fn1 -> P=.5 R=.5
+    assert (f["semi_fresh"]["tp"], f["semi_fresh"]["fp"], f["semi_fresh"]["fn"]) == (1, 1, 1)
+    assert f["semi_fresh"]["precision"] == 0.5 and f["semi_fresh"]["recall"] == 0.5
+    # fresh: GT 1 (a@0); preds fresh: a@0 TP, b@0 vs no fresh GT in b -> FP -> P=.5 R=1
+    assert (f["fresh"]["tp"], f["fresh"]["fp"], f["fresh"]["fn"]) == (1, 1, 0)
+    # spoiled: perfect
+    assert f["spoiled"]["precision"] == 1.0 and f["spoiled"]["recall"] == 1.0
+    # overall = sum of the three: tp 4, fp 2, fn 1
+    o = f["overall"]
+    assert (o["tp"], o["fp"], o["fn"]) == (4, 2, 1) and o["n_gt"] == 5
+
+
+def test_semi_absent_gives_none_not_crash():
+    gt = [{"image": "a", "lighting": "normal", "labels": [lab("banana", "fresh", 0)]}]
+    pr = [{"image": "a", "predictions": [pred("banana", "fresh", 0)]}]
+    f = evaluate(gt, pr)["detection"]["freshness"]
+    assert f["semi_fresh"]["precision"] is None and f["semi_fresh"]["recall"] is None and f["semi_fresh"]["n_gt"] == 0
+
+
+def test_lighting_drop_includes_semi_and_report_prints(capsys):
+    gt, pr = three_class_fixture()
+    # low-light copy where the semi box is missed entirely
+    gt.append({"image": "c", "lighting": "low", "labels": [lab("banana", "semi_fresh", 0)]})
+    pr.append({"image": "c", "predictions": []})
+    res = evaluate(gt, pr)
+    d = res["detection"]["recall_drop_points"]["low"]
+    assert set(d) == {"overall", "spoiled", "semi_fresh", "fresh"}
+    assert d["semi_fresh"] == pytest.approx(50.0)  # normal semi recall .5 -> low 0
+    dm.print_report(res)
+    out = capsys.readouterr().out
+    assert "semi_fresh" in out and "P=0.500" in out
+
+
+def test_two_class_inputs_still_evaluate():
+    gt = [{"image": "a", "lighting": "normal", "labels": [lab("x", "fresh", 0), lab("x", "spoiled", 1)]}]
+    pr = [{"image": "a", "predictions": [pred("x", "fresh", 0), pred("x", "spoiled", 1)]}]
+    f = evaluate(gt, pr)["detection"]["freshness"]
+    assert f["fresh"]["recall"] == 1.0 and f["semi_fresh"]["precision"] is None

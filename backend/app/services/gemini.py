@@ -53,9 +53,9 @@ def parse_text(text: str) -> list[dict]:
 def detect_from_image(image: bytes, mime: str, mode: str) -> list[dict]:
     from google.genai import types
 
-    hint = ("Identify the food items in the photo and whether each looks fresh or spoiled. "
+    hint = ("Identify the food items in the photo and whether each looks fresh, semi-fresh (use soon) or spoiled. "
             "Return JSON: a list of {name:str, category:one of %s, confidence:number 0-1, "
-            "freshness:fresh|spoiled}." % ", ".join(CATEGORIES))
+            "freshness:fresh|semi_fresh|spoiled}." % ", ".join(CATEGORIES))
     part = types.Part.from_bytes(data=image, mime_type=mime)
     prompt = "Single item close-up." if mode == "single" else "Fridge/pantry shelf photo."
     data = _generate([part, prompt], hint)

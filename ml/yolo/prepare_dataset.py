@@ -130,9 +130,9 @@ def write_yolo(out: Path, split: str, stem: str, img: Image.Image, boxes, ext=".
     img.convert("RGB").save(out / rel, quality=92)
     (out / "labels" / split / f"{stem}.txt").write_text("".join(
         f"{T.CLASS_ID[b['name']]} " + " ".join(f"{v:.6f}" for v in b["box"]) + "\n" for b in boxes))
-    # sidecar: one 0/1 (1 = spoiled) per label line, same order
+    # sidecar: one code per label line, same order (0 = fresh, 1 = spoiled, 2 = semi_fresh)
     (out / "freshness" / split / f"{stem}.txt").write_text(
-        "".join(f"{1 if b['freshness'] == 'spoiled' else 0}\n" for b in boxes))
+        "".join(f"{T.FRESHNESS_CODE.get(b['freshness'], 0)}\n" for b in boxes))
     return rel
 
 
@@ -184,6 +184,7 @@ def main(argv=None):
 
     stats = {s: Counter() for s in ("train", "val", "heldout")}
     cls_count: Counter = Counter()
+    fresh_count: Counter = Counter()
     manifest, gt = [], []
     for r in recs:
         split = assign_split(r["group"], a.heldout, a.val, a.seed)
@@ -196,6 +197,7 @@ def main(argv=None):
         for b in r["boxes"]:
             stats[split][f"{b['name']}/{b['freshness']}"] += 1
             cls_count[b["name"]] += 1
+            fresh_count[b["freshness"]] += 1
         if split != "heldout":
             write_crops(out, split, stem, img, r["boxes"], a.include_assumed_fresh_crops)
             continue
@@ -226,7 +228,8 @@ def main(argv=None):
               "classes_unmapped_skipped": dict(skipped),
               "classes_below_min": [n for n in T.CLASS_NAMES if cls_count[n] < a.min_class_images and cls_count[n]],
               "classes_with_no_data": [n for n in T.CLASS_NAMES if not cls_count[n]],
-              "heldout_by_lighting": dict(Counter(m["lighting"] for m in manifest))}
+              "heldout_by_lighting": dict(Counter(m["lighting"] for m in manifest)),
+              "boxes_by_freshness": {f: fresh_count[f] for f in T.FRESHNESS}}
     (out / "dataset_report.json").write_text(json.dumps(report, indent=2))
     print(json.dumps({"heldout_by_lighting": report["heldout_by_lighting"],
                       "images": {k: v["images"] for k, v in stats.items()},
