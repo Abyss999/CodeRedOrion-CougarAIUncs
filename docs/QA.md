@@ -47,6 +47,8 @@ dashboard updates.
 | iOS | UI tests (5 main flows) | 100% |
 | Integration | Demo path | completes with no manual fix-ups |
 
+**Freshness gates (decided 2026-10-10):** freshness is three-class (`fresh | semi_fresh | spoiled`), but **the YOLO gates stay binary: spoiled vs not-spoiled**. For spoiled recall, per-class precision and the lighting-drop gate, `semi_fresh` counts as not-spoiled in both ground truth and predictions. ML QA also reports the full 3×3 freshness confusion matrix, plus `semi_fresh` precision and recall, **for information only, with no gate**. Every `semi_fresh` label comes from one source (AgriFreshNET), so that metric can't be separated from the source (ML-16). Revisit this if a second semi_fresh source is added. **Lighting gates are signed off only on real low and warm images, never on synthetic copies** (ML-17, ML-22), and that includes models trained with lighting augmentation.
+
 ## Sign-off log
 Detail lives in [`qa/backend.md`](qa/backend.md) and [`qa/ml.md`](qa/ml.md). The orchestrator re-ran every suite independently before merging.
 

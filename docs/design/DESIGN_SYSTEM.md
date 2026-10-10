@@ -56,6 +56,7 @@ and its `onForest` text turns dark.
 | `urgentBg` / `urgentInk` | `#FBE3CF` / `#8A3B0E` | `#4A2614` / `#FFB98A` |
 | `noteYellow` / `noteLime` | `#FFF6C7` / `#E4F2C4` | `#3A3720` / `#2A3A1F` |
 | `chartSaved` / `chartWasted` | `#277338` / `#E8A04C` | `#24783D` / `#C6802F` |
+| `useSoonBg` / `useSoonInk` | `#FFF1B8` / `#6B5000` | `#3A3112` / `#FFD970` |
 | `scrim` (behind sheets) | `#13261A` at 60% | `#000000` at 60% |
 
 The dark scrim is black, not dark `ink`: a light-ink scrim would *brighten* the content behind a
@@ -67,14 +68,14 @@ is 8.0:1. The lowest pair is muted on a yellow note, at 5.2:1. The dark chart pa
 colorblind validator check against a dark surface: lightness band 0.48-0.67, protan ΔE 9.2, and
 3:1 against the surface.
 
-### Tab bar on iOS 26 (Liquid Glass)
-iOS 26 renders `TabView` as a floating glass bar. **Recommendation, pending approval:** use the
-**native** glass tab bar rather than recreating the flat bar in the mockups, and keep
-`Theme.Colors.forest` as its tint, which is adaptive and so stays visible on dark glass. The
-center **Add** becomes a regular tab item using the `plus.circle.fill` symbol. Selecting it
-presents the Add sheet and doesn't switch tabs. The raised custom circle in the mockups is
-dropped, because a custom view floating over the glass bar fights the platform and its
-accessibility.
+### Tab bar on iOS 26 (Liquid Glass): decided 2026-10-10
+**The owner chose the native glass tab bar.** Use the system `TabView`, which renders as the
+floating glass bar, with `Theme.Colors.forest` as its tint (adaptive). There are five tabs, in
+this order: Home, Recipes, **Add**, Fridge, Social. **Add is a regular tab item** with a filled
+circle-plus symbol (`plus.circle.fill`). Selecting it presents the Add sheet and leaves the
+selected tab unchanged. **No raised custom button.** The mockups show the bar as a floating pill
+with a tinted selection capsule, which approximates the system rendering. Build it with the real
+`TabView`, not a recreation.
 
 Every text pair above passes WCAG AA, and the ratios were computed rather than eyeballed. The chart pair passes the
 colorblind (protan/deutan/tritan) separation check. `chartWasted` is only 2.1:1 against white, so
@@ -107,7 +108,7 @@ chart values are always labeled.
   20 · sheets 28 (top corners) · Add button and icon buttons fully round.
 - **Touch targets** are at least 44 pt. Primary buttons are 56 pt tall and removal options are
   68 pt.
-- **Tab bar:** 84 pt including the home indicator. The raised Add button is 60 pt.
+- **Tab bar:** the system glass `TabView`. Add is a tab, so there's no custom size.
 
 ## Components
 | Component | Seen in | Notes |
@@ -128,6 +129,7 @@ chart values are always labeled.
 | `DetectedItemRow` | Photo review | Checkbox (44 pt row) + name + category/storage or a warning meta line + `ExpiryBadge` |
 | `FilterChip` | Recipes | 36 pt pill. Selected uses `forest`/`onForest`; unselected is outlined |
 | `RecipeHero`, `RecipeRow` | Recipes, Home | Hero on `forest` with expiring-item chips (`forestChip`); rows with a "Uses N" badge |
+| `UseSoonBadge` | Fridge, Photo review | Shown when `freshness == semi_fresh` (ripe or starting to turn). Pill with `useSoonBg`/`useSoonInk`: 6.7:1 light, 9.5:1 dark. Text is "Use soon". It's distinct from the expiry badges and from the urgent "Check" (spoiled). In photo review the meta line reads "ripe, use soon" in `useSoonInk` |
 | `StatTile`, `ImpactHero` | Impact | Hero on forest; tiles on surface |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |

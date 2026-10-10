@@ -37,12 +37,18 @@ These need two backend additions (see `docs/API.md` once built):
 - `food_group` on items and candidates.
 - `macros` on recipe suggestions.
 
+## Owner decisions, 2026-10-10 (round 2)
+- **Native glass tab bar**, with Add as a tab. All tabbed artboards are updated.
+- **`semi_fresh` is a product feature.** Food that's fine but should be eaten soon gets a **"Use soon"** badge on the Fridge, and "ripe, use soon" on photo review.
+- **Food-group icons are colourful**, and the removal sheet header uses them too.
+- The design is **not yet approved** for Wave 2. The owner has more changes coming.
+
 ## Interaction notes for iOS
 - **Removal is one or two taps.** Swipe left on a row to reveal **Remove**, which opens the sheet.
   *Used it* and *Gave it away* finish immediately. *Threw it away* goes to the reason grid, where
   one tap finishes. *Gave it away* shows a "Gave it to" picker only when the item has an open Share
   listing.
-- The **Add** tab-bar button is a raised 60 pt circle that opens the Add sheet. It is not a real tab.
+- **Tab bar (decided):** the native iOS 26 glass `TabView`. **Add is a tab** that presents the Add sheet and doesn't change the selected tab. There's no raised button.
 - **Photo review** is the demo path's middle step. Snap your fridge → `POST /items/from-photo` →
   this screen → `POST /items`. Every detected item starts ticked, except ones the classifier flags
   as spoiled, which start unticked with "Looks spoiled. Toss it?". Low-confidence items say "not
