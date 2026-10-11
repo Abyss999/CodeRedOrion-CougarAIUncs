@@ -991,3 +991,42 @@ Fresh `uv venv --seed -p 3.13` (CPython 3.13.5, gcc 14) per row, `PIP_NO_CACHE_D
 | ID | Sev | Where | Summary | Status |
 |---|---|---|---|---|
 | ML-63 | high | `train_colab.ipynb` cell 1 | `pip("unrar-cffi==0.2.2")` fails on Colab (Python 3.13, legacy setup.py path): setuptools fetches `setuptools_scm` 10.x as a `setup_requires` egg without `vcs_versioning`. Colab hid pip's error. | **fixed** (uncommitted diff on `fix/colab-unrar-build`): pinned build tools, then `--no-build-isolation`; the helper prints pip's output and re-raises; `qa_ml63_unrar_build.py` |
+
+# 2026-10-11: Independent QA (food-main-mac) for #73 (ML-63, `fix/colab-unrar-build`)
+
+## Verdict: **PASS, with 2 low/info findings and one coverage gap**. This section supersedes the author's self-signed "PASS" above for the merge gate (his section stays as the record of his live install matrix).
+Read-only review of `gh pr diff 73`; no notebook or feature code edited, no training, no Colab, no downloads, CPU only. New tests: `ml/eval/tests/qa_pr73_unrar_independent.py` (16 tests; 12 pass in `.venv-ml` + 4 skip for lack of unrar-cffi; all 16 pass in `venv-pipeline` with unrar-cffi==0.2.2).
+
+## The 5 checks
+1. **Cell 1 keeps ML-61: yes.** AST/regex scan of every code cell: no `!pip`, `%pip`, `os.system`, `get_ipython`, and the only `pip install` subprocess is the one inside `pip()` with `check=True`. Cell 1 has 5 `pip(...)` calls and all go through the helper. The helper's `except CalledProcessError` ends in a bare `raise`. The only remaining shell-bang in cell 1 is `!python -c "import ultralytics..."` (pre-existing, not an install; see finding ML-64).
+2. **"Show pip's error" without swallowing: yes, proven by subprocess.** The helper source is extracted from the notebook and run via `python -I -c`:
+   - Real failing pip, no network (`pip("--no-index", "qa-pr73-nonexistent-pkg==0.0.0")`): exit non-zero, traceback ends in `CalledProcessError`, pip's `No matching distribution found` is visible, and the following `print('CONTINUED-AFTER-PIP')` never runs.
+   - Stub interpreter (`sys.executable` = shell script, rc 7, writes `ModuleNotFoundError: ... vcs_versioning` to stderr): that text and the stdout line are printed, the exception says `non-zero exit status 7`, exit code 1, no continue.
+   - Success is silent and continues. A 50 KB stderr whose real error is at the end keeps that error (the `[-4000:]` tail) and the output stays < 9 KB.
+   - Note: the error is surfaced by `print` to stdout (Colab shows that); the traceback carries the exit.
+3. **Pinning.** Exact `==`: `setuptools==80.9.0` (only if missing), `cffi==2.1.1`, `setuptools_scm==8.1.0`, `pytest-runner==6.0.1`, `wheel==0.45.1`, `unrar-cffi==0.2.2`. No range or unpinned build tool. Not pinned (all **pre-existing**, not introduced by #73): `pip` itself (Colab's runtime pip, never installed/upgraded), `roboflow`, `imagehash` (cell 1 line 1 of the installs), the `>=` ranges in `ml/yolo/requirements.txt` (`pyyaml>=6.0`, `pillow>=10.0`, `numpy>=1.26`) and `pipeline/requirements.txt` (`pytest>=8.0` too), and transitive `packaging`/`pycparser`. CLAUDE.md says "pin every dependency": see ML-64. Pinned by test: `test_build_tools_are_exact_pins`, `test_unpinned_installs_are_the_known_preexisting_ones` (documents, fails if a new loose one appears).
+4. **Real RAR5: his repo test is NOT real, it is a recorder.** `ml/eval/tests/qa_ml63_unrar_build.py` (7 tests, all pass, also in venv-pipeline) executes the notebook's helper and unrar block against a fake `subprocess.run`; it never imports `unrar`, so it proves command shape and the failure path only. His real RAR5 evidence is a one-off manual run recorded in the section above (rarfile 4.2 sdist `rar5-crc.rar`, not in the repo; I did not re-download it, and there is no `rar`/`unrar`/`7z` on this host). No `.rar` fixture exists in the repo, and `pipeline/tests` injects `unrar_bytes`. I closed the gap without a download: the new test builds a minimal valid RAR5 (signature, main header, one stored file with CRC32, end header, header CRCs) in pure Python and pushes it through the real `pipeline.ingestion.fetch.unrar_bytes` and `unrar.cffi.rarfile` (unrar-cffi 0.2.2, UnRAR C code). Results: round-trip bytes identical; `RarFile` reports the right name, size and CRC; flipping one data byte raises `BadRarFile` (CRC checked). Limit: method 0 (stored), so the LZ decoder is not exercised by the committed tests; that remains covered only by his manual run. Skipped in `.venv-ml` (no unrar-cffi, by design).
+5. **Suites** (`-o python_files='test_*.py qa_*.py'`):
+
+   | Suite | Interpreter | Result |
+   |---|---|---|
+   | `ml/serve` | `.venv-ml` | 14 passed |
+   | `ml/ocr` | `.venv-ml` | 89 passed |
+   | `ml/yolo` | `.venv-ml` | 64 passed |
+   | `ml/eval` | `.venv-ml` | 241 passed, 6 skipped: 4 are my real-RAR5 tests (no unrar-cffi in `.venv-ml`), 2 file-level (`qa_pr62_strat_merge.py`, `test_variant_dup_check.py`: `imagehash` not installed in `.venv-ml`) |
+   | `pipeline/tests` | `venv-pipeline` | 279 passed, 2 skipped (`qa_pipeline.py:59,96`, 2-class tests superseded by semi_fresh), 3 xfailed (PL-5, accepted) |
+   | `qa_pr73_*` + `qa_ml63_*` | `venv-pipeline` | 23 passed |
+
+   His doc says `ml/eval` 249 passed; the difference here is the interpreter (the two `imagehash` files skip in `.venv-ml`), not a regression.
+
+## Bugs (independent review)
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-64 | low | `train_colab.ipynb` cell 1, `!python -c "import ultralytics; ..."` line after the pip calls | A shell-bang swallows the exit code: if ultralytics failed to install/import, cell 1 continues (only `import imagehash` right after fails loudly). Pre-existing, not from #73. Repro: run the line with a python without ultralytics; the cell goes on. | **open, non-blocking**; fix: `import ultralytics; assert ultralytics.__version__ == "8.4.175"` in Python |
+| ML-65 | info | cell 1 / requirements | `roboflow`, `imagehash`, `pyyaml>=`, `pillow>=`, `numpy>=`, `pytest>=` and pip itself are not exact-pinned (CLAUDE.md "pin every dependency"). Pre-existing; #73's added installs are all exact. | **open, non-blocking** |
+| (gap) | info | `qa_ml63_unrar_build.py` | Recorder-only; no real decompression test in the repo before this QA. | covered by `qa_pr73_unrar_independent.py` (stored RAR5); LZ path still manual |
+
+No blocking bug found. Highest ML-n before this review was ML-63 (QA.md, `docs/qa/ml.md`, and open PR #64's docs had nothing higher; PR #64's diff was grepped for ML-n too).
+
+## Files written
+`ml/eval/tests/qa_pr73_unrar_independent.py`; this section in `docs/qa/ml.md`.
