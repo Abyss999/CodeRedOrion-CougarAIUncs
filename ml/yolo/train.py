@@ -108,6 +108,11 @@ def main(argv=None):
     ap.add_argument("--semi-fresh-threshold", type=float, default=float(os.environ.get("SEMI_FRESH_THRESHOLD", "0.5")),
                     help="P(semi_fresh) needed to label a crop semi_fresh in the exported predictions (env SEMI_FRESH_THRESHOLD, default 0.5)")
     ap.add_argument("--skip-cls", action="store_true")
+    ap.add_argument("--cache", choices=("none", "ram", "disk"), default="none",
+                    help="Ultralytics image cache for both stages. ram: decode each image once (the Colab CPU is the bottleneck)")
+    ap.add_argument("--no-epoch-val", action="store_true",
+                    help="skip validation after every epoch (Ultralytics still validates the final epoch). We export last.pt, "
+                         "not the best val epoch (ML-28), so per-epoch val only fills results.csv")
     a = ap.parse_args(argv)
     from ultralytics import YOLO  # heavy, lazy
     data = Path(a.data)
@@ -115,8 +120,9 @@ def main(argv=None):
     print("device:", device)
 
     project = str(Path(a.project).resolve())     # absolute, so a resumed run finds the same folders
+    speed = dict(cache=False if a.cache == "none" else a.cache, val=not a.no_epoch_val)
     det_last, det_best, how = train_stage("det", a.det_model, project, a.resume, device, data=str(data / "data.yaml"),
-                                          epochs=a.epochs, imgsz=a.imgsz, batch=a.batch)
+                                          epochs=a.epochs, imgsz=a.imgsz, batch=a.batch, **speed)
     det_pt = det_last if a.weights == "last" else det_best
     print(f"det {how}; val on {a.weights}:", YOLO(str(det_pt)).val(data=str(data / "data.yaml"), split="val", device=device).box.map50)
     print("exporting detector", a.weights, det_pt)
@@ -124,7 +130,7 @@ def main(argv=None):
     cls_pt = None
     if not a.skip_cls:
         cls_last, cls_best, how = train_stage("cls", a.cls_model, project, a.resume, device, data=str(data / "cls"),
-                                              epochs=a.cls_epochs, imgsz=224, batch=a.cls_batch)
+                                              epochs=a.cls_epochs, imgsz=224, batch=a.cls_batch, **speed)
         print(f"cls {how}")
         cls_pt = cls_last if a.weights == "last" else cls_best
 

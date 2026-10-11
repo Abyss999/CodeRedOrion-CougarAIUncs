@@ -16,7 +16,7 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
    `ml/yolo/sources.json`, so adding or editing a source always triggers a fresh download + prepare instead of reusing an older cached dataset. (Ultralytics' own `fraction=0.05` exists in 8.4.175 but takes the *first*
    5% of the sorted file list, i.e. one source or one class folder, which would not test the 3-class head.)
 4. **Real run:** untick `DRY_RUN`, keep the **same `RUN_ID`**, **Runtime -> Run all**. The prepared dataset is restored from Drive (no downloads), the gates re-run, then
-   detector 80 ep + classifier 30 ep. Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>/`.
+   training. **`FAST` (cell 1, default on): ~30 min on a T4** (section 5d); untick it for the full run (detector 80 ep + classifier 30 ep, ~4-5 h). Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>/`.
    **If you got disconnected: reconnect, keep the same `RUN_ID` and `DRY_RUN` setting, Runtime -> Run all; it resumes from the last epoch on Drive.**
    Write the `RUN_ID` down: left at the default it is today's date, so resuming after midnight needs it typed in.
 5. Download `export.zip` from the last cell and hand it to the team. Cell 5 also has a `SEMI_FRESH_THRESHOLD` field (default 0.5), passed through
@@ -24,10 +24,10 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 The notebook downloads VegQual (figshare), every non-pending Roboflow set with a pinned version (API), raghavrpotdar (if Kaggle creds exist), **MeatScan** (cell 3e: `python -m pipeline fetch-meatscan` range-reads 450 originals per class from the 25.4 GB Zenodo RAR, then `ingest-dataset --adapter meatscan --max-per-cell 300`; needs `unrar-cffi`, installed in cell 1), **DaFiF fish** (cell 3f: `fetch-dafif` then `ingest-dataset --adapter dafif --max-per-cell 300`; see `docs/PIPELINE.md` for both) and **AgriFreshNET from the public Mendeley release**
 (file selected by name from `data.mendeley.com/public-api/datasets/42m5tb7yv9`; both requests send a browser-like `User-Agent` because Mendeley returns 403 to urllib's default; the zip is always verified against the hardcoded SHA-256 `6607a48b...3f11`; a `RUN_ID` ending in `_dry` is rejected), ingests it with `python -m pipeline --data-root /content/pipeline_data
 ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300` (4,754 images, same as the local a2b run), derives a
-`sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (yolo26s 80 ep +
-classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
+`sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (FAST: yolo26n 512 px 30 ep on
+the capped detector train set + classifier 10 ep; full: yolo26s 80 ep + classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
 `stratification_check.py` (3-class mapping) and a check that `cls/{train,val}` has `fresh`, `semi_fresh` and `spoiled`. The gate is identity pHash <= 6 and <= 1% per source; the
-dihedral-variant near-duplicate check is **reported only** (same-class, masked padding, ML-40), not a gate in the notebook (ML-35 ruling). Expect 3-4.5 h on a free T4 for the real run.
+dihedral-variant near-duplicate check is **reported only** (same-class, masked padding, ML-40), not a gate in the notebook (ML-35 ruling). Expect ~30 min on a free T4 for the real run with `FAST` (estimate, section 5d), ~4-5 h without.
 
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
@@ -312,6 +312,32 @@ VegQual only) over the new 4-source held-out set into `mldata/runs/smoke_export/
 heldout_manifest.csv, class_names.json, dataset_report.json). These predictions are **contaminated (ML-25)**: the smoke
 model saw many of these images, and has never seen the fridge/Kaggle classes. Use them to test the metric plumbing only; do not
 quote any number from them.
+
+## 5d. FAST profile (data-owner ruling, 2026-10-11)
+The full run (yolo26s, 640 px, 80 epochs on 11,777 train images) takes ~4-5 h on a free T4, longer when Colab's 2 vCPUs can't keep up with
+decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (default **on**) runs:
+
+| | FAST | full |
+|---|---|---|
+| detector | `yolo26n.pt`, 512 px, batch 32, **30 epochs** | `yolo26s.pt`, 640 px, batch 16, 80 epochs |
+| detector train set | **capped**: <= `DET_CAP` (400) boxes per food, `ml/yolo/cap_detector.py` (~4.9k of 11.8k images) | all |
+| classifier | `yolo26n-cls`, 224 px, batch 128, **10 epochs**, all crops | same model, batch 64, 30 epochs |
+| cache / val | `--cache ram`, `--no-epoch-val` (Ultralytics still validates the last epoch) | no cache, val every epoch |
+| checkpoints | `data_<DATA_VER>_fast[_dry]/` | `data_<DATA_VER>[_dry]/` |
+
+- **Why the cap is safe for freshness:** the detector only learns food names; fresh / semi_fresh / spoiled comes from the crop classifier,
+  which still trains on every crop. The cap is a symlink view of the train split only: val, held-out (incl. synthetic lighting copies),
+  `heldout_gt.jsonl` / manifest and `cls/` are the full set, so the leakage / stratification gates and every held-out metric are unchanged
+  and comparable with a full run. Foods with <= 400 boxes (butter, bacon, cheese, lemon, cucumber, papaya, ...) keep all of them.
+  Selection is round-robin over (food, freshness, source) cells, multi-object images first, then a stable hash order (no RNG); on the local
+  rebuild it kept 4,881 of 11,777 images with boxes 69% fresh / 25% spoiled / 6% semi_fresh (full set 66 / 29 / 5). `cap_report.json`
+  in the view lists kept/total boxes per food.
+- **Cost:** a nano detector at 512 px is less accurate than yolo26s at 640, mostly on small objects in fridge-shelf photos. If the
+  held-out detector gates in `docs/QA.md` come up short, untick `FAST` (or raise `DET_CAP` / pass `--det-model yolo26s.pt`) for the next run.
+- **Time is an estimate, not measured on a T4**: ~4.9k images/epoch, CPU-bound at roughly 120-150 img/s with RAM cache -> ~35-40 s per
+  epoch -> ~20 min detector, ~5 min classifier, ~3 min export. The Ultralytics progress bar shows the real s/epoch; record it here after the
+  first run.
+- Don't train on `pipeline augment-lighting` output in FAST mode: it multiplies the train images (and see `docs/PIPELINE.md` for the lighting sign-off rule).
 
 ## 6. Running the service on a GPU box
 ```

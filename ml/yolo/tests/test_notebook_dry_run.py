@@ -22,15 +22,32 @@ def test_every_code_cell_parses():
 def test_dry_run_wiring_and_safety_properties():
     code = "\n".join(t for t, k in cells() if k == "code")
     assert re.search(r"^DRY_RUN = True\s+#@param \{type:\"boolean\"\}", code, re.M)
-    assert 'RUN_DIR = CACHE_DIR + ("_dry" if DRY_RUN else "")' in code
+    assert 'RUN_DIR = CACHE_DIR + ("_fast" if FAST else "") + ("_dry" if DRY_RUN else "")' in code
     assert "fwr_data.tar" in code and "{CACHE_DIR}/fwr_data.tar" in code       # dataset cache is shared, checkpoints are not
     assert code.count("check=True") >= 3 and "RUN_ID must start with a letter or digit" in code and "run_check(" in code
     assert "--specimen-groups" in code and "--exclude-source-augs" in code and "--max-per-cell" in code and "pipeline/requirements.txt" in code
     assert '"--semi-fresh-threshold", str(SEMI_FRESH_THRESHOLD)' in code
-    assert "DRY RUN OK" in code and 'run_train("/content/fwr_data_dry", 1, 1)' in code and 'run_train("/content/fwr_data", 80, 30)' in code
+    assert "DRY RUN OK" in code and 'run_train("/content/fwr_data_dry", 1, 1)' in code and "run_train(TRAIN_DATA, *EPOCHS)" in code
+    assert "EPOCHS = (30, 10) if FAST else (80, 30)" in code and 'make_subset(TRAIN_DATA, "/content/fwr_data_dry", stride=20)' in code
     # ML-57: training runs with check=True (never `!python train.py`), and a stale RUN_DIR/export is dropped before it
     assert "!python train.py" not in code and 'shutil.rmtree(f"{RUN_DIR}/export", ignore_errors=True)' in code
     assert "if DATA_ON_DRIVE" in code and "skipping all downloads" in code
+
+
+def test_fast_profile_wiring():
+    code = "\n".join(t for t, k in cells() if k == "code")
+    assert re.search(r"^FAST = True\s+#@param \{type:\"boolean\"\}", code, re.M)
+    assert re.search(r"^DET_CAP = 400\s+#@param \{type:\"integer\"\}", code, re.M)
+    for flag in ('"--det-model", "yolo26n.pt"', '"--imgsz", "512"', '"--cache", "ram"', '"--no-epoch-val"'):
+        assert flag in code
+    assert 'cap_detector("/content/fwr_data", "/content/fwr_data_fast", cap=DET_CAP)' in code and "*PROFILE]" in code
+
+
+def test_train_py_speed_flags_reach_both_stages():
+    import train
+    src = Path(train.__file__).read_text()
+    assert 'speed = dict(cache=False if a.cache == "none" else a.cache, val=not a.no_epoch_val)' in src
+    assert src.count("**speed)") == 2
 
 
 def test_train_py_plumbs_semi_fresh_threshold(monkeypatch):
