@@ -563,3 +563,13 @@ Targeted runs, from `backend/` on `fwr_test`:
 | **Total** | **235 passed, 0 xfail/xpass** |
 
 **Interim verdict for PR 3 (backend): PASS pending the full suite, no open bugs** (BE-15 and BE-16 fixed in PR 3).
+
+### Final verdict for PR 3 (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `feat/oauth` at HEAD baaeaa6 (main merged into b6d3b43, clean tree), from `backend/` on `fwr_test`: `pytest -q --cov=app` = **1411 passed, 1 skipped in 145 s, total coverage 98%**. No xfails or xpasses remain.
+
+| ID | Severity | Fixed in | Status |
+|---|---|---|---|
+| BE-15 | low | PR 3: `_parse_jwks` returns no keys for a non-dict document, a non-list `keys` or a non-string `kid`, so the result is a clean 502, or the stale cache is used | fixed, verified |
+| BE-16 | low | PR 3: one shared `google_auth.email_verified` (bool True, or "true" in any case after trimming) is used by verification and by linking | fixed, verified |
+
+**No open bugs.** N1 to N3 are resolved in `docs/API.md` and N4 is resolved on main (now merged). This final verdict supersedes the interim verdicts above.
