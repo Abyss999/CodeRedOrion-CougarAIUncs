@@ -1,14 +1,6 @@
 # Handoff
 
-## BiteUp branding and branch sync — 2026-10-10
-
-- Merged `origin/main` into `Truc_branch`, retaining the current checkpoint, agent rules, and
-  expanded design canvas from main while applying **BiteUp** branding.
-- README tagline: **Use what you have. Share what you spare.** The iOS display name and sign-in
-  mockup use BiteUp; internal Xcode target and scheme names remain `FoodWasteReducer`.
-- Updated README QA references and signing instructions to match this checkpoint.
-- Merge review: conflict-marker and whitespace checks, design JSON parsing, and local README
-  link checks. No application tests or builds were run for this branding/documentation merge.
+_The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
 _Last updated: 2026-10-10 (checkpoint 4d). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the

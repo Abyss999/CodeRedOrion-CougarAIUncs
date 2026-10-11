@@ -1,8 +1,8 @@
-# BiteUp
+# BiteDown
 
 **Use what you have. Share what you spare.**
 
-BiteUp helps students and shared households keep track of their food, decide what to
+BiteDown helps students and shared households keep track of their food, decide what to
 cook next, and share surplus with friends. Built for
 [CodeRED: Orion 2026](https://codered-orion-ccs.devpost.com/), it brings inventory, AI recipe
 suggestions, and food sharing into one iOS app.
@@ -12,7 +12,7 @@ suggestions, and food sharing into one iOS app.
 ## Why we’re building it
 
 Food gets forgotten at the back of the fridge. Planning a meal takes effort, and extra food
-often goes unused even when someone nearby could use it. BiteUp makes the next action
+often goes unused even when someone nearby could use it. BiteDown makes the next action
 easier: see what needs attention, cook with it, or offer it to a friend.
 
 ## The experience
@@ -25,8 +25,8 @@ easier: see what needs attention, cook with it, or offer it to a friend.
 5. **Record what happened.** Mark items used, donated, or discarded to keep inventory current
    and build a history of food use and waste.
 
-A guided **Fridge Cleaning** checklist is planned to help new users add their existing food
-without typing every item.
+A guided **Fridge Cleaning** checklist, to help new users add the food they already have without
+typing every item, is a possible later addition. Onboarding is deferred for v1.
 
 ## Current implementation
 
@@ -34,18 +34,17 @@ This is an active hackathon prototype. The backend is ahead of the iOS interface
 
 | Area | What exists | What remains |
 |---|---|---|
-| Inventory and accounts | Authentication, bulk item creation, editing, storage filters, and removal outcomes | Connect the iOS screens to the API |
+| Inventory and accounts | Authentication, bulk item creation, editing, storage filters, removal outcomes with undo, and account deletion | Connect the iOS screens to the API |
 | Recipes and photo entry | Gemini integration and an ML-service photo route with Gemini fallback | Verify live AI calls and the complete user flow |
 | Sharing | Friends, groups, group pantries, share listings, and requests in the API | Build the iOS interactions |
 | Impact | Timestamped food events, outcome totals, weekly trends, and waste tips | Build the dashboard UI and validate the integrated flow |
 | iOS | SwiftUI tab shell, shared theme, and recorded shell build checks | Implement functional screens and API connectivity |
-| Guided onboarding | Product flow specified | Food catalog, checklist UI, and completion/resume state |
+| Guided onboarding | Idea only (deferred for v1) | Food catalog, checklist UI, and completion/resume state |
 | Vision and receipts | Training pipeline, inference service, receipt-text parser, and evaluation tools | Validate trained models and real image-to-text performance |
 
-The [latest handoff](HANDOFF.md) records **523 backend tests and 96% coverage** on main,
-with additional backend and iOS work in QA. These are recorded results, not a fresh validation
-of this branch. The [area QA reports](docs/qa/) distinguish component checks from full product
-verification. YOLO accuracy and the complete phone demo still need validation.
+Current test counts and QA verdicts live in the [QA log](docs/QA.md), and the work in progress is
+in the [handoff](HANDOFF.md). The [area QA reports](docs/qa/) distinguish component checks from full
+product verification. YOLO accuracy and the complete phone demo still need validation.
 
 ### How to interpret estimates
 

@@ -19,7 +19,7 @@ targets:
       path: App/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleDisplayName: BiteUp
+        CFBundleDisplayName: Food Waste Reducer
         NSCameraUsageDescription: Take photos of your fridge, food and receipts to add items.
   FoodWasteReducerTests:
     type: bundle.unit-test
