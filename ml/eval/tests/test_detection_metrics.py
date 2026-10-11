@@ -249,3 +249,41 @@ def test_lighting_sources_real_vs_synthetic():
     assert ls["n_real"] == 2 and ls["n_synthetic"] == 1
     assert ls["real"]["recall_drop_points"]["low"]["overall"] == pytest.approx(50.0)
     assert ls["synthetic"]["recall_drop_points"]["low"]["overall"] == pytest.approx(0.0)
+
+
+# ---------- ML-18: Wilson 95% CI + spoiled recall by source (information only) ----------
+def test_wilson_known_values():
+    # standard Wilson 95% intervals (z=1.96): 0/10 -> [0, 0.2775], 10/10 -> [0.7225, 1], 50/100 -> [0.4038, 0.5962]
+    lo, hi = dm.wilson_ci(0, 10)
+    assert lo == 0.0 and hi == pytest.approx(0.2775, abs=1e-3)
+    lo, hi = dm.wilson_ci(10, 10)
+    assert lo == pytest.approx(0.7225, abs=1e-3) and hi == 1.0
+    lo, hi = dm.wilson_ci(50, 100)
+    assert (lo, hi) == pytest.approx((0.4038, 0.5962), abs=1e-3)
+
+def test_wilson_empty_is_none_and_interval_contains_p():
+    assert dm.wilson_ci(0, 0) == (None, None)
+    lo, hi = dm.wilson_ci(37, 41)
+    assert lo < 37 / 41 < hi and 0 <= lo and hi <= 1
+    # narrower with more data at the same rate
+    a, b = dm.wilson_ci(9, 10), dm.wilson_ci(90, 100)
+    assert (b[1] - b[0]) < (a[1] - a[0])
+
+def test_spoiled_recall_by_source_with_ci_and_synthetic_excluded():
+    # source A: 2 spoiled boxes, 1 found -> 0.5, n=2 (wide CI). source B: 1 spoiled found -> 1.0, n=1.
+    # the synthetic copy of A's image reuses the same box and must NOT add a sample.
+    gt = [row("a1", "labels", [lab("potato", "spoiled", 0), lab("potato", "spoiled", 1)]),
+          row("b1", "labels", [lab("tomato", "spoiled", 0)]),
+          row("a1__low", "labels", [lab("potato", "spoiled", 0), lab("potato", "spoiled", 1)], lighting="low")]
+    pr = [row("a1", "predictions", [pred("potato", "spoiled", 0)]),
+          row("b1", "predictions", [pred("tomato", "spoiled", 0)]),
+          row("a1__low", "predictions", [pred("potato", "spoiled", 0), pred("potato", "spoiled", 1)], lighting="low")]
+    man = {"a1": {"lighting_method": "auto", "variant_of": "", "source": "A"},
+           "b1": {"lighting_method": "auto", "variant_of": "", "source": "B"},
+           "a1__low": {"lighting_method": "synthetic", "variant_of": "a1", "source": "A"}}
+    r = dm.spoiled_recall_by_source(gt, pr, man, conf=0.0, match_name=True)
+    assert r["A"]["all"]["n_gt"] == 2 and r["A"]["all"]["recall"] == 0.5
+    lo, hi = r["A"]["all"]["ci95"]
+    assert lo < 0.5 < hi and hi - lo > 0.5          # n=2: the interval is huge, which is the point
+    assert r["B"]["all"]["recall"] == 1.0 and r["B"]["by_class"]["tomato"]["n_gt"] == 1
+    assert r["A"]["by_class"]["potato"]["recall"] == 0.5

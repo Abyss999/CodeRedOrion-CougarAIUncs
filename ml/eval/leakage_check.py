@@ -187,6 +187,64 @@ def check(root: Path, hash_cache: Path | None = None, with_hash: bool = True, pa
     return report
 
 
+def session_audit(root: Path, gap: float = 300.0, small: int = 10) -> dict:
+    """Pooled-unit assertion (orchestrator ruling). Sessions = maximal runs of same-source, same-clock-kind
+    timestamps with consecutive gaps <= `gap` (chained, over ALL splits). For every session that has a
+    held-out image:
+      * FRAGMENT: it also has train/val members  -> the held-out part is a fragment of a larger session;
+      * GAP: min |t - t'| to any train/val image of the same source/kind outside the session must be >= `gap`.
+    Sessions with < `small` images are the ones the builder may pool ("pooled timestamped units"); they are
+    reported separately. `assertion_ok` is False if any fragment exists or any gap < `gap`."""
+    files = originals(root)
+    out = {}
+    ok_all = True
+    for src in SOURCES:
+        items = defaultdict(list)  # kind -> [(t, split)]
+        for sp in SPLITS:
+            for p in files[sp]:
+                if source_of(p.name) != src:
+                    continue
+                st = stamp(p.name)
+                if st:
+                    items[st[0]].append((st[1], sp))
+        r = {"heldout_sessions": 0, "heldout_small_sessions": 0, "heldout_small_session_images": 0,
+             "fragments": 0, "fragment_examples": [], "min_gap_to_trainval_s": None}
+        for kind, lst in items.items():
+            lst.sort()
+            sessions, cur = [], [lst[0]]
+            for a, b in zip(lst, lst[1:]):
+                if b[0] - a[0] > gap:
+                    sessions.append(cur)
+                    cur = []
+                cur.append(b)
+            sessions.append(cur)
+            tv = [t for t, sp in lst if sp != "heldout"]
+            for ses in sessions:
+                held = [t for t, sp in ses if sp == "heldout"]
+                if not held:
+                    continue
+                r["heldout_sessions"] += 1
+                if len(ses) < small:
+                    r["heldout_small_sessions"] += 1
+                    r["heldout_small_session_images"] += len(ses)
+                if any(sp != "heldout" for _, sp in ses):
+                    r["fragments"] += 1
+                    if len(r["fragment_examples"]) < 3:
+                        r["fragment_examples"].append({"kind": kind, "size": len(ses), "heldout": len(held)})
+                if tv:
+                    i = bisect.bisect_left(tv, held[0])
+                    cand = [abs(tv[j] - t) for t in (held[0], held[-1]) for j in (bisect.bisect_left(tv, t) - 1, bisect.bisect_left(tv, t))
+                            if 0 <= j < len(tv)]
+                    g = min(cand)
+                    if r["min_gap_to_trainval_s"] is None or g < r["min_gap_to_trainval_s"]:
+                        r["min_gap_to_trainval_s"] = g
+        r["assertion_ok"] = r["fragments"] == 0 and (r["min_gap_to_trainval_s"] is None or r["min_gap_to_trainval_s"] >= gap)
+        ok_all &= r["assertion_ok"]
+        out[src] = r
+    out["_all_ok"] = ok_all
+    return out
+
+
 def cells(root: Path, min_images: int = 10) -> dict:
     """class x freshness image counts per split from the YOLO labels + the class map, + the not-in-held-out list."""
     names = json.loads((root / "class_names.json").read_text())
@@ -222,12 +280,23 @@ if __name__ == "__main__":
     r = check(Path(a.root), Path(a.hash_cache) if a.hash_cache else None, want_hash, pairs)
     if a.dhash_pairs:
         Path(a.dhash_pairs).write_text(json.dumps(pairs))
+    audit = session_audit(Path(a.root))
+    print("SESSION / POOLED-UNIT ASSERTION (min gap to train/val >= 300 s, no fragments):")
+    print(json.dumps(audit, indent=1))
+    if not audit["_all_ok"]:
+        print("!!! POOLED-UNIT ASSERTION FAILED: a held-out session is a fragment of a larger session or sits within 300 s of train/val !!!", file=sys.stderr)
+    for src, v in audit.items():            # make the notebook's per-source assertion fire on a session-audit failure
+        if src != "_all_ok" and not v["assertion_ok"]:
+            r[src]["criterion"]["timestamp_300s_zero"] = False
     slim = {k: {kk: vv for kk, vv in v.items() if kk != "phash_pairs"} for k, v in r.items()}
     print(json.dumps(slim, indent=2))
     if a.json:
         # flat aggregate keys (within_60s, within_300s, ...) are kept for ml/yolo/train_colab.ipynb's gate
         agg = {k: sum(v[k] for v in r.values()) for k in ("heldout_originals", "with_timestamp", "within_60s", "within_300s")}
-        Path(a.json).write_text(json.dumps({**agg, "per_source": r}, indent=2))
-    ok = all(v["criterion"]["timestamp_300s_zero"] and v["criterion"]["phash_le_1pct"] is not False for v in r.values())
+        Path(a.json).write_text(json.dumps({**agg, "per_source": r, "session_audit": audit}, indent=2))
+        if not audit["_all_ok"]:
+            agg["within_300s"] = max(agg["within_300s"], 1)   # make the notebook gate (within_300s == 0) fail loudly
+            Path(a.json).write_text(json.dumps({**agg, "per_source": r, "session_audit": audit}, indent=2))
+    ok = audit["_all_ok"] and all(v["criterion"]["timestamp_300s_zero"] and v["criterion"]["phash_le_1pct"] is not False for v in r.values())
     print("ML-21 timestamp+pHash criterion:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)

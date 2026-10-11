@@ -5,9 +5,17 @@ heldout_manifest.csv, dataset_report.json); no code from ml/yolo is imported.
 
   python ml/eval/stratification_check.py /path/to/fwr_data [--json out.json]
 
-Rules (QA.md + orchestrator #28): a class x freshness cell with >= 10 images AND >= 2 capture
-sessions must appear in held-out; single-session cells are "not measurable on held-out"; no cell
-may exist only in held-out/val (never trained on).
+Rules (QA.md + orchestrator #28 + approved rulings): a class x freshness cell is REQUIRED in held-out
+if it has >= 10 images and >= 2 independent units (capture sessions with >= `min_session_images`
+images of the cell, or a pool of smaller whole groups); otherwise it is "not measurable on held-out"
+and goes entirely to train (held-out = val = 0). Train keeps >= 50% of every required cell. No cell may
+exist only in held-out/val. The decision per cell is READ FROM dataset_report.json and then verified
+against the files on disk and against an independent session reconstruction (300 s chains).
+
+PASS only if: every required cell has held-out > 0 and train >= 50% (images and boxes); every
+not-measurable cell has held-out = val = 0; every cell >= 10 images that is absent from held-out is
+listed not-measurable by the report AND has < 2 independent sessions of >= min_session_images by my own
+count; no session (my reconstruction) spans train/val/held-out; report == manifest == disk.
 """
 from __future__ import annotations
 
@@ -22,6 +30,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from leakage_check import SOURCES, SPLITS, originals, source_of, stamp, series_key  # noqa: E402
 
 GAP = 300.0
+import re
+_AUG = re.compile(r"(rotated_by_-?\d+_|saltandpepper_|translation_|vertical_flip_|horizontal_flip_)")
 
 
 def image_cells(root: Path, split: str, p: Path):
@@ -42,7 +52,7 @@ def check(root: Path) -> dict:
             sk = series_key(p.name, source_of(p.name))
             rows.append({"split": s, "src": source_of(p.name), "cells": image_cells(root, s, p),
                          "ts": st[1] if st else None, "name": p.name,
-                         "key": (sk[0] if sk else p.name.split("_jpg")[0])})
+                         "key": (sk[0] if sk else _AUG.sub("", p.name).split("_jpg")[0])})
     # capture sessions: chain timestamps per source with a 300 s gap; untimestamped -> series stem / original stem
     sess = {}
     for src in SOURCES:
@@ -62,7 +72,7 @@ def check(root: Path) -> dict:
             by_cell[k]["images"][r["split"]] += 1
             by_cell[k]["sessions"].add(r["session"])
             by_cell[k]["sources"][r["src"]] += 1
-    out = {"cells": {}, "missing_from_heldout_required": [], "single_session_not_measurable": [],
+    out = {"_rows": rows, "cells": {}, "missing_from_heldout_required": [], "single_session_not_measurable": [],
            "small_not_measurable": [], "never_trained_cells": []}
     for k, v in sorted(by_cell.items()):
         n = sum(v["images"].values())
@@ -112,19 +122,106 @@ def check(root: Path) -> dict:
     return out
 
 
+def box_cells(root: Path):
+    """(class, freshness) -> {split: boxes} from the label files."""
+    names = json.loads((root / "class_names.json").read_text())
+    out = defaultdict(Counter)
+    for sp in SPLITS:
+        for lf in (root / "labels" / sp).glob("*.txt"):
+            if "__low" in lf.name or "__warm" in lf.name:
+                continue
+            ff = root / "freshness" / sp / lf.name
+            cls = [int(l.split()[0]) for l in lf.read_text().splitlines() if l.strip()]
+            fr = [int(x) for x in ff.read_text().split()]
+            for c, f in zip(cls, fr):
+                out[(names[str(c)], "spoiled" if f else "fresh")][sp] += 1
+    return out
+
+
+def verify(root: Path, out: dict) -> dict:
+    """Apply the rules to the report's per-cell decisions. Returns {"failures": [...], "info": {...}}."""
+    rep = json.loads((root / "dataset_report.json").read_text())
+    dec = rep["stratification"].get("cell_decisions", {})
+    min_s = rep["stratification"].get("min_session_images", 10)
+    boxes = box_cells(root)
+    fails, info = [], {"val_missing_for_required": [], "required_cells_relying_on_pooling": [], "decision_table": {}}
+    for k, c in out["cells"].items():
+        d = dec.get(k)
+        if d is None:
+            fails.append(f"{k}: no decision in report")
+            continue
+        n = c["train"] + c["val"] + c["heldout"]
+        b = boxes.get(tuple(k.split("/")), Counter())
+        bn = sum(b.values())
+        # my own independent count of sessions with >= min_s images of the cell
+        by_sess = Counter()
+        for r in out["_rows"]:
+            if tuple(k.split("/")) in r["cells"]:
+                by_sess[r["session"]] += 1
+        mine_big = sum(1 for v in by_sess.values() if v >= min_s)
+        info["decision_table"][k] = {"decision": d["decision"], "train/val/heldout_images": [c["train"], c["val"], c["heldout"]],
+                                     "train_pct_images": round(100 * c["train"] / n, 1), "train_pct_boxes": round(100 * b["train"] / max(1, bn), 1),
+                                     "my_sessions_ge_min": mine_big, "report_units": d["units"]["units"]}
+        if d["decision"] == "required_in_heldout":
+            if c["heldout"] == 0:
+                fails.append(f"{k}: required but held-out is empty")
+            if c["train"] / n < 0.5:
+                fails.append(f"{k}: train has {100 * c['train'] / n:.1f}% of images (< 50%)")
+            if bn and b["train"] / bn < 0.5:
+                fails.append(f"{k}: train has {100 * b['train'] / bn:.1f}% of boxes (< 50%)")
+            if c["train"] == 0:
+                fails.append(f"{k}: never trained on")
+            if c["val"] == 0:
+                info["val_missing_for_required"].append(k)
+            if mine_big < 2:
+                info["required_cells_relying_on_pooling"].append(k)
+        else:
+            if c["heldout"] or c["val"] or c["train"] != n:
+                fails.append(f"{k}: not measurable but split is {c['train']}/{c['val']}/{c['heldout']}")
+            if mine_big >= 2:
+                fails.append(f"{k}: report says not measurable but I count {mine_big} sessions with >= {min_s} images")
+    # any cell >= 10 images absent from held-out must be not-measurable in the report
+    for k, c in out["cells"].items():
+        n = c["train"] + c["val"] + c["heldout"]
+        if n >= 10 and c["heldout"] == 0 and dec.get(k, {}).get("decision") == "required_in_heldout":
+            fails.append(f"{k}: >= 10 images, absent from held-out, but not listed not-measurable")
+    # the legacy key now follows the report's decisions (what the Colab gate reads)
+    out["missing_from_heldout_required"] = [k for k, c in out["cells"].items()
+                                            if dec.get(k, {}).get("decision") == "required_in_heldout" and c["heldout"] == 0]
+    # timestamped sessions spanning splits (my reconstruction); stem groups reported as info
+    span = defaultdict(set)
+    for r in out["_rows"]:
+        span[r["session"]].add(r["split"])
+    ts_span = [s for s, v in span.items() if len(v) > 1 and "/t" in s.split("/")[-1][:2]]
+    stem_span = [s for s, v in span.items() if len(v) > 1 and "/s:" in s]
+    if ts_span:
+        fails.append(f"{len(ts_span)} timestamped sessions span more than one split: {ts_span[:3]}")
+    info["stem_groups_spanning_splits"] = len(stem_span)
+    info["stem_group_examples"] = stem_span[:5]
+    for kk, v in out["report_vs_manifest"].items():
+        if not v["ok"]:
+            fails.append(f"report vs manifest: {kk}")
+    return {"failures": fails, "info": info}
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
     ap.add_argument("--json")
     a = ap.parse_args()
-    r = check(Path(a.root))
-    print(json.dumps({k: v for k, v in r.items() if k not in ("cells", "report_vs_manifest")}, indent=1))
-    print("CELLS (train/val/heldout, sessions):")
-    for k, v in r["cells"].items():
-        print(f"  {k:24s} {v['train']:5d} {v['val']:5d} {v['heldout']:5d}  sess={v['sessions']}")
-    bad = {k: v for k, v in r["report_vs_manifest"].items() if not v["ok"]}
-    print("report vs manifest mismatches:", json.dumps(bad, indent=1) if bad else "none")
+    root = Path(a.root)
+    r = check(root)
+    v = verify(root, r)
+    r.pop("_rows", None)
+    print("CELLS: decision, train/val/heldout images, train% (images/boxes), my >=min sessions vs report units")
+    for k, t in v["info"]["decision_table"].items():
+        print(f"  {k:22s} {t['decision'][:12]:12s} {t['train/val/heldout_images']!s:18s} {t['train_pct_images']:5.1f}/{t['train_pct_boxes']:5.1f}  mine={t['my_sessions_ge_min']} report={t['report_units']}")
+    print("required cells with no val image:", v["info"]["val_missing_for_required"])
+    print("required cells that rely on pooling (I count < 2 sessions >= min):", v["info"]["required_cells_relying_on_pooling"])
+    print("stem groups spanning splits (info):", v["info"]["stem_groups_spanning_splits"], v["info"]["stem_group_examples"])
+    print("spoiled from exactly one source:", r["spoiled_single_source"], "| no spoiled at all:", r["no_spoiled_at_all"])
+    print("FAILURES:", json.dumps(v["failures"], indent=1) if v["failures"] else "none")
     if a.json:
-        Path(a.json).write_text(json.dumps(r, indent=2))
-    ok = not r["missing_from_heldout_required"] and not r["never_trained_cells"] and not bad
-    print("STRATIFICATION:", "PASS" if ok else "FAIL")
+        Path(a.json).write_text(json.dumps({**r, **v}, indent=2, default=list))
+    print("STRATIFICATION:", "FAIL" if v["failures"] else "PASS")
+    sys.exit(1 if v["failures"] else 0)

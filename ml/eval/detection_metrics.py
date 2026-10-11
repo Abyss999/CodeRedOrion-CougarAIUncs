@@ -273,7 +273,8 @@ def load_manifest(path):
     """heldout_manifest.csv -> {image: {"lighting_method", "variant_of"}} (columns per docs/ML.md)."""
     import csv
     with open(path, newline="", encoding="utf-8") as f:
-        return {r["image"]: {"lighting_method": r.get("lighting_method", ""), "variant_of": r.get("variant_of", "")}
+        return {r["image"]: {"lighting_method": r.get("lighting_method", ""), "variant_of": r.get("variant_of", ""),
+                             "source": r.get("source", "")}
                 for r in csv.DictReader(f)}
 
 
@@ -329,6 +330,42 @@ def evaluate_lighting_sources(gt_rows, pred_rows, manifest, conf=0.0, match_name
     return out
 
 
+def wilson_ci(k, n, z=1.96):
+    """Wilson score interval (default 95%) for k successes of n. (None, None) when n == 0. NOT a gate (ML-18):
+    it is there so thin cells and one-source recalls are not over-read. Boxes in the same photo/session are
+    not independent, so the true interval is wider than this one."""
+    if n <= 0:
+        return (None, None)
+    p = k / n
+    d = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / d
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / d
+    return (max(0.0, centre - half), min(1.0, centre + half))
+
+
+def spoiled_recall_by_source(gt_rows, pred_rows, manifest, conf=0.0, match_name=False, real_only=True):
+    """Spoiled recall (binary: semi_fresh counted as not-spoiled) per SOURCE and per source x class, each with
+    a 95% Wilson CI and n_gt. INFORMATION ONLY. real_only drops the synthetic low/warm copies (they reuse
+    the same boxes, so they add no independent samples, ML-22)."""
+    pi = {r["image"]: r for r in pred_rows}
+    rows = [r for r in gt_rows if not (real_only and manifest.get(r["image"], {}).get("lighting_method") == "synthetic")]
+    def one(sub, name=None):
+        if name is not None:
+            sub = [{**r, "labels": [g for g in r.get("labels", []) if g["name"] == name]} for r in sub]
+        pr = [pi.get(r["image"], {"image": r["image"], "predictions": []}) for r in sub]
+        if name is not None:
+            pr = [{**p, "predictions": [x for x in p.get("predictions", []) if x["name"] == name]} for p in pr]
+        sp = freshness_metrics(sub, pr, conf, match_name)["spoiled"]
+        lo, hi = wilson_ci(sp["tp"], sp["n_gt"])
+        return {"recall": sp["recall"], "tp": sp["tp"], "n_gt": sp["n_gt"], "ci95": [lo, hi]}
+    out = {}
+    for src in sorted({manifest.get(r["image"], {}).get("source", "") for r in rows}):
+        sub = [r for r in rows if manifest.get(r["image"], {}).get("source", "") == src]
+        classes = sorted({g["name"] for r in sub for g in r.get("labels", []) if fold(g["freshness"]) == "spoiled"})
+        out[src or "unknown"] = {"all": one(sub), "by_class": {c: one(sub, c) for c in classes}}
+    return out
+
+
 def _fmt(x):
     return "n/a" if x is None else f"{x:.3f}"
 
@@ -372,7 +409,18 @@ def main(argv=None):
         gi = {r["image"]: r for r in load_jsonl(a.gt)}
         res["detection"]["lighting_sources"] = evaluate_lighting_sources(
             list(gi.values()), load_jsonl(a.pred), load_manifest(a.manifest), a.conf, a.match_name)
+    if a.manifest:
+        man = load_manifest(a.manifest)
+        res["detection"]["spoiled_recall_by_source"] = spoiled_recall_by_source(
+            list(gi.values()), load_jsonl(a.pred), man, a.conf, a.match_name)
     print_report(res)
+    sr = res["detection"].get("spoiled_recall_by_source")
+    if sr:
+        print("-- spoiled recall by source, real images only, 95% Wilson CI (information only, NOT a gate; boxes in a session are not independent) --")
+        for src, v in sr.items():
+            for lab_, g in (("all", v["all"]), *((f"  {c}", x) for c, x in v["by_class"].items())):
+                ci = g["ci95"]
+                print(f"{src:24s} {lab_:14s} n_gt={g['n_gt']:4d} recall={_fmt(g['recall'])} CI95=[{_fmt(ci[0])}, {_fmt(ci[1])}]")
     ls = res["detection"].get("lighting_sources")
     if ls:
         print(f"-- lighting by source (real n={ls['n_real']}, synthetic n={ls['n_synthetic']}; synthetic is usually EASIER) --")
