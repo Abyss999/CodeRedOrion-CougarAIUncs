@@ -117,6 +117,8 @@ chart values are always labeled.
 | `FoodGroupSection` | Fridge | The Fridge list is **grouped by food group** (Protein, Veggies, Fruit, Dairy, Grains, Pantry, Leftovers, Frozen, Other). The header has the group icon, name and count, and rows within a group are sorted by expiry. Storage (Fridge / Pantry / Freezer) stays the segmented control above |
 | `QuantityStepper` | Photo review | `limeTint` pill: − / value with unit / +. 40 pt tall, with a 44 pt hit target via `contentShape`. The value shows the unit ("1.4 lb", "1 bag", "12") |
 | `MacroStrip` | Recipes hero | Four equal cells (kcal, protein, carbs, fat) **per serving**, labelled as estimates in the recipe detail. Rows show "kcal · protein" in their meta line |
+| `AuthProviderButtons` | Sign in, Sign up, Log in | Official Apple and Google buttons, 50 pt, equal prominence. Apple is feature-flagged (paid team only). See `README.md` › Sign-in |
+| `FormField` | Sign up, Log in | Label above (14 / semibold), a 50 pt field with a `border` hairline, focus ring 2 pt `forest`, error ring 2 pt `urgentInk` with an icon and message below (`role=alert`) |
 | `ValuePoints` | Sign in | A card of three icon + title + one-line rows between the headline and the buttons |
 | `ExpiryBadge` | Home, Fridge | Today / 1 day use `urgent`; 2+ days use `limeTint`/`forest` |
 | `SpoilageFlag` | Fridge | Meta line in `urgentInk`: "Photo check: looks spoiled" |
