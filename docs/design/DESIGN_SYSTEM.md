@@ -117,7 +117,7 @@ chart values are always labeled.
 | `FoodGroupSection` | Fridge | The Fridge list is **grouped by food group** (Protein, Veggies, Fruit, Dairy, Grains, Pantry, Leftovers, Frozen, Other). The header has the group icon, name and count, and rows within a group are sorted by expiry. Storage (Fridge / Pantry / Freezer) stays the segmented control above |
 | `QuantityStepper` | Photo review | `limeTint` pill: − / value with unit / +. 40 pt tall, with a 44 pt hit target via `contentShape`. The value shows the unit ("1.4 lb", "1 bag", "12") |
 | `MacroStrip` | Recipes hero | Four equal cells (kcal, protein, carbs, fat) **per serving**, labelled as estimates in the recipe detail. Rows show "kcal · protein" in their meta line |
-| `AuthProviderButtons` | Sign in, Sign up, Log in | Official Apple and Google buttons, 50 pt, equal prominence. Apple is feature-flagged (paid team only). See `README.md` › Sign-in |
+| `GoogleSignInButton` | Sign in, Sign up, Log in | The official Google button, 50 pt. See `README.md` › Sign-in. There is no Apple button |
 | `FormField` | Sign up, Log in | Label above (14 / semibold), a 50 pt field with a `border` hairline, focus ring 2 pt `forest`, error ring 2 pt `urgentInk` with an icon and message below (`role=alert`) |
 | `ValuePoints` | Sign in | A card of three icon + title + one-line rows between the headline and the buttons |
 | `ExpiryBadge` | Home, Fridge | Today / 1 day use `urgent`; 2+ days use `limeTint`/`forest` |
@@ -166,8 +166,8 @@ template assets if SF has no match):
 | Veggies | carrot | `carrot` |
 | Fruit | apple | `apple.logo` must NOT be used (it's a trademark), so ship the mockup glyph as an asset |
 | Dairy | milk carton | `waterbottle` is not a match, so ship the mockup glyph as an asset |
-| Grains | bread | `birthday.cake` is not a match, so ship an asset |
-| Pantry / Leftovers / Frozen / Other | jar / box / snowflake / circle | an asset / `takeoutbag.and.cup.and.straw` / `snowflake` / `circle.grid.2x2` |
+| Grains | bread loaf: `M5 11a4 4 0 0 1 1-7h12a4 4 0 0 1 1 7v9H5zM9 11v5M15 11v5` (see `FoodPantry`) | ship as an asset |
+| Pantry / Leftovers / Frozen / Other | jar `M8 3h8v3H8zM7 6h10a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM6 11h12` / box `M4 10h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM3 10h18M9 6l3-3 3 3` / snowflake / circle | an asset / `takeoutbag.and.cup.and.straw` / `snowflake` / `circle.grid.2x2` |
 
 Never emoji.
 

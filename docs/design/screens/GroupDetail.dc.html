@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Group</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
+a{color:#1F4D2B}a:hover{color:#13261A}
+</style>
+</helmet>
+<main style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F8E8; padding: 56px 20px 34px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+  <header style="display: flex; align-items: center; gap: 10px">
+    <a href="Connect.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF; flex-shrink: 0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+    <div style="flex: 1">
+      <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 26px">Moody Hall 4F</h1>
+      <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">18 members · you joined Sep 2</p>
+    </div>
+  </header>
+
+  <div style="background: #D9EC8F; border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 10px">
+    <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: #2B3D30">Invite code</span><span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: 0.08em; color: #13261A">K7PQ-M2XR</span></span>
+    <button style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #1F4D2B; color: #F4F8E8; font-size: 14px; font-weight: 600">Share invite</button>
+  </div>
+
+  <div role="tablist" aria-label="Group view" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #E3EDCB; border-radius: 14px">
+    <button role="tab" aria-selected="true" style="height: 40px; border: 0; border-radius: 10px; background: #FFFFFF; color: #13261A; font-weight: 600; font-size: 15px">Group pantry · 9</button>
+    <button role="tab" aria-selected="false" style="height: 40px; border: 0; border-radius: 10px; background: transparent; color: #45584A; font-weight: 500; font-size: 15px">Requests · 2</button>
+  </div>
+
+  <ul style="list-style: none; margin: 0; padding: 0; background: #FFFFFF; border-radius: 16px">
+    <sc-for list="{{items}}" as="i" hint-placeholder-count="5">
+      <li style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #E6EDD6">
+        <span style="{{i.tile}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{i.stroke}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{i.icon}}"></path></svg></span>
+        <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">{{i.name}}</span><span style="font-size: 13px; color: #45584A">{{i.meta}}</span></span>
+        <span style="{{i.badgeStyle}}">{{i.when}}</span>
+      </li>
+    </sc-for>
+  </ul>
+  <button style="height: 52px; border: 0; border-radius: 14px; background: #1F4D2B; color: #F4F8E8; font-family: Outfit, sans-serif; font-weight: 600; font-size: 16px">+ Add to group pantry</button>
+  <button style="margin-top: auto; min-height: 44px; border: 0; background: transparent; color: #8A3B0E; font-size: 15px; font-weight: 600">Leave group</button>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const tile = (bg) => 'width: 40px; height: 40px; border-radius: 12px; background: ' + bg + '; display: flex; align-items: center; justify-content: center; flex-shrink: 0';
+const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #EEF5D6; color: #1F4D2B; white-space: nowrap';
+const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap';
+const V = 'M7 17l-3 3M15.5 8.5l-8 8c-1.4-1.4-1.4-3.6 0-5l3-3c1.4-1.4 3.6-1.4 5 0zM15.5 8.5c.8-2.2 2.7-3.5 5-3.5M15.5 8.5c2.2-.8 3.5-2.7 3.5-5';
+const D = 'M8 3h8v3l2 3v12H6V9l2-3zM6 9h12M8 6h8';
+const L = 'M4 10h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM3 10h18M9 6l3-3 3 3';
+const F = 'M12 8c-1-2-4-3-6-1-3 3-1 10 2 12 1 1 3 1 4 0 1 1 3 1 4 0 3-2 5-9 2-12-2-2-5-1-6 1zM12 8c0-2 1-3.5 3-4.5';
+return {
+items: [
+{ name: 'Leftover chili', meta: 'Added by Marcus · Leftovers', when: 'Today', badgeStyle: urgent, icon: L, stroke: '#1F7A78', tile: tile('#DAF0EE') },
+{ name: 'Basil', meta: 'Added by Dana · Veggies', when: '1 day', badgeStyle: urgent, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8') },
+{ name: 'Oat milk', meta: 'Added by you · Dairy', when: '5 days', badgeStyle: soon, icon: D, stroke: '#3A5BA0', tile: tile('#E2E9F7') },
+{ name: 'Apples, 4', meta: 'Added by Priya · Fruit', when: '12 days', badgeStyle: soon, icon: F, stroke: '#A8366E', tile: tile('#F8E1EC') }
+]
+};
+}
+}
+</script>
+</body>
+</html>
