@@ -2,6 +2,105 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Deadline mode for iOS CI (owner; #109)
+- **iOS PR CI builds and runs unit tests only** (`-skip-testing:FoodWasteReducerUITests`). The full UI suite runs on every push to `main`. *Why:* a 25–32 min UI run per PR doesn't fit the deadline.
+- **The gate becomes:**
+  - an iOS PR merges only if its local iOS QA PASS includes the UI tests for the flows it touches (on the iPhone 17 Pro sim);
+  - a red UI run on `main` blocks further iOS merges until it's fixed.
+- **Duplicate runs:** `concurrency` cancels stale duplicate runs on PRs only, never on `main` pushes.
+- To revert after the deadline, restore UI tests in PR CI.
+
+## 2026-10-11 — Receipts fall back to Gemini vision (owner; #95)
+- **`POST /items/from-receipt` falls back to Gemini vision** when the OCR service is unset or fails, like `/items/from-photo`. This reverses "receipts have no fallback (502)". The receipt response gains `source` (`ocr` | `gemini`). *Why:* receipt scanning works in the demo before the teammate's GLM-OCR engine is deployed. *Cost:* at most one Gemini call per scan, counted against the same quota.
+- **#97** (QA sweep by teammate duwudlekat) needs the author to merge main in, independent QA, a collision check with the in-flight screen PRs, and a check that its sign-in exists only in DEBUG builds.
+
+## 2026-10-11 — Gemini quota hit; model stays gemini-3.8-flash (owner)
+- **The free-tier key ran out of quota** (429 RESOURCE_EXHAUSTED from about 15:07 UTC), so every Gemini endpoint failed. The owner put a second key in the Mac's `.env`; secrets are never relayed between sessions. From now on, **agents and QA never make live Gemini calls**. They use stubs or the Mock client, apart from one smoke call after a key or model change.
+- **The model stays `gemini-3.8-flash`** ("cheapest without degrading quality"). 3.6 Flash costs the same and is older; 3.5 Flash costs more (and isn't on Google's official pricing page); Flash-Lite is cheaper but lower quality.
+- **The demo risk remains:** a free key can hit its limit mid-demo. Billing removes that risk and the free-tier training-use privacy caveat. That's the owner's call. Rotate the new key after the demo.
+
+## 2026-10-11 — Friend QR and pickup spot (owner)
+Owner rulings:
+1. **Add friends by QR, instantly.** Showing your code is consent, so a scan makes you friends at once, with no request to
+   accept. The QR encodes `bitedown://friend/<code>`. `GET /friends/code` returns the caller's code; `POST /friends` takes
+   `{code}` as well as `{email}`. Group invite codes reuse the same QR treatment (`bitedown://group/<invite_code>`).
+   - **The code is an opaque random value** (`token_urlsafe`), stored server-side in a `friend_codes` table with a 10-minute
+     TTL (migration 0008). It is not a signed token, and it carries no email or user id, so the QR reveals nothing about
+     the user.
+   - **One generic error for expired or invalid codes:** "That code expired. Ask them to show it again." The app never says
+     which one it was. Scanning your own code is a `400`. Scanning someone who is already a friend succeeds with no change.
+2. **Optional pickup spot on a share, set by the sharer:** a note (≤ 120 characters) and/or an Apple Maps pin,
+   `pickup: {note, lat, lng, place_name}`. It is set when sharing or edited while the listing is `open` (claimed listings
+   are still `open`). Saved spots ("Home", "Lab") live on the device only. It is optional for everyone, with no close-friends tier.
+3. **Only the claimer and the owner see the exact spot.** Everyone else gets `pickup: null` plus `pickup_set: true/false`,
+   which shows as a "Pickup spot set" hint with no location.
+
+Design choices (canvas row "Friend QR + pickup spot, 2026-10-11"; SCREENS rows 39–42):
+- **`QRCodeCard` (new component).** The card is lime with ink modules drawn straight on it, so the QR stays dark-on-light in dark
+  mode too: lime doesn't flip, and inverted QRs scan badly. On Friends & groups it sits under the friends list, followed by
+  **Scan a friend's code** and **Copy**. **Copy** is how the Simulator (no camera) gets a code into the manual field. The
+  countdown reads "New code in m:ss", and the card re-fetches at expiry and on foreground. The old **Add friend** button is
+  now **Add by email**, so the two ways to add a friend read as alternatives. ConnectPending gets the same card.
+- **Scanner (`FriendScan`):** the BarcodeResult camera surface with a QR frame, plus a bottom panel **Type a code instead**.
+  The panel accepts the raw code or the full link, and errors appear there as an alert with the error haptic. A recognised code
+  posts immediately. Other QR codes are ignored. The expired/invalid error is drawn as the scanner's second state.
+- **Success (`FriendAdded`):** a sheet over the paused scanner with the initials avatar, "You're now friends with <name>",
+  **Done** and **Scan another code**. The already-friends case reuses this sheet with "You're already friends with <name>".
+  That needs the response to tell the two apart, for example `201` vs `200` (a backend ask). Own-code copy: "That's your code.
+  Scan a friend's instead."
+- **The deep link `bitedown://friend/<code>`** means the system Camera can open the same flow. A custom URL scheme needs no
+  entitlement, so the free Personal Team can sign it.
+- **Group invite QR:** **Show QR** / **Hide QR** under the invite code. It is collapsed by default and drawn expanded, with no
+  countdown because invite codes don't expire. To make room, GroupDetail's drawn pantry has 3 items instead of 4.
+- **`PickupSpotRow` (new component)** has three forms. Empty: "Add a pickup spot" in Item detail's share card. Set: map
+  preview, place, note, **Open in Maps**, and **Edit** for the owner, shown on Item shared and on the new claimer screen
+  `ClaimedItem`. Hint: Food Pantry rows show "Pickup spot set" only. The pantry row you claimed becomes a **Claimed ›** link
+  to `ClaimedItem`.
+- **Pickup spot editor (`PickupSpot` sheet):** a note with a live counter, a MapKit preview with **Move pin** (the full picker
+  with search is not drawn), saved spots, **Save this spot**, and **Remove pickup spot** (`pickup: null`). A spot needs at
+  least a note or a pin. Proposed write path: `pickup` on `POST /share` and a new `PATCH /share/:id` (owner only, while
+  `open`). The API owner rules on the exact endpoint.
+- **Map placeholder:** the artboards draw it as SVG streets on `track` with a `forest` pin. On device it is a non-interactive
+  MapKit snapshot. The streets are decorative (below 3:1 on purpose). The pin and the VoiceOver label carry the meaning.
+- **Canvas:** Connect 1060, ConnectPending 1272, ItemDetail 900, ItemShared 1064 tall. The row at y 7495 moved down 200 px
+  so that ItemShared keeps a 120 px gap. ItemDetail leaves a 64 px gap above the next row, which is accepted. The new row
+  is at y 9549 under its title note, on both pages.
+
+## 2026-10-11 — iOS screen build rulings (parallel screen group, canvas v53/v54)
+- **LogIn never reveals whether an email has an account.** The backend already returns `401 invalid_credentials` for an
+  unknown email and a wrong password alike. The app shows one generic message under the password field for every
+  non-network login failure, and has no "no account with that email" copy. *Why:* that copy would be an account-enumeration
+  oracle if the server ever returned 404. SignUp's `409 email_taken` stays, as the backend contract defines it.
+- **Home's tip sits directly below the header**, as the v53 artboard draws it (the build notes had said "at the top"). It is
+  still one observation, dismissible, and the dismissal persists.
+- **Photo-review Toss sends `waste_reason: expired`.** There is no `spoiled` reason in the API, which matches the 2026-10-11
+  feedback-round ruling.
+- **Cross-screen links land as closures.** Home exposes `onOpenImpact`, `onOpenSettings` and `onOpenServerSettings` as no-ops
+  until those screens merge. Impact is reached by the DEBUG flag `-UITestOpenImpact` until then.
+- **Round 4 (v54, #91):** ItemShared's primary "Given to <name>" opens the normal RemoveSheet prefilled with Shared it + the
+  claimer (`.default`, `recipient_id` omitted per #78). Approved by `food-main`.
+
+## 2026-10-11 — Photo enrichment with Gemini (PR #79, FrankinstyLe; rulings recorded by food-orch)
+- **Crops only on the YOLO path.** When YOLO produced boxes, each detection is cut from the photo (512 px JPEG, metadata dropped, nothing stored) and sent to Gemini. On the Gemini-vision fallback there are no boxes, so the call is text-only. *Why:* the fallback has already looked at the photo, and a crop is the least data that still lets the model see the food.
+- **Model knowledge only, no grounding.** Expiry days and nutrition come from the model's own knowledge, with no search or retrieval. They are estimates: `nutrition.estimated` is always true, and dates reuse `expiry_source: "gemini"`, clamped to 0..2 x the table default + 3. *Why:* grounding adds latency and cost for no demo value.
+- **Nutrition is per 100 g** (`items.nutrition`, `basis: "per_100g"`), never per item or per serving. *Why:* the item's weight is unknown, and it matches the core keys of the recipe `macros` object so one UI component serves both.
+- **Gemini returns numbers only, no free text.** The server validates every value (bounds, macro mass, kcal near 4P+4C+9F) and turns anything unusable into `null`. *Why:* free text from a model would reach the UI and the prompt path unchecked.
+- Enrichment is opt-in (`enrich=expiry,nutrition`) and never changes the HTTP status: any failure is a 200 with the table dates. Privacy: on Google's unpaid Gemini tier, submitted content may be used to improve products, so real users' photos need a billing-enabled key.
+
+## 2026-10-11 — Design feedback round 4 (teammate wedwqc, 11:25–11:46; canvas v54; UI/UX QA READY WITH FIXES, fixes applied)
+- **Add sheet:** "one item" joins the photo hero ("Snap a photo: your whole fridge, or just one item"). **Type it** and **Say it** become separate tiles, both opening the Type-or-say screen in their own mode.
+- **Impact:** no driving equivalent on the carbon line. **Waste rate** is a centred card with a 44 pt figure, "3.1 lb of 24.3 lb thrown out" and a meter. The demo figure is corrected to 12.8% (3.1 / 24.3 lb; 14.8% didn't match). On ImpactRange, "Food thrown out" folds into that card, with no chip, because the comparison card already states the change.
+- **Off-app hand-off of a claimed item** (food-orch, answering wedwqc's question; no new endpoint): the owner records it with the normal removal. ItemShared's primary **Given to <name>** opens the Remove sheet prefilled with Shared it + the claimer (`donated`, `recipient_id` omitted per #78). A secondary **Remove** opens it with nothing preselected.
+- **Item detail** never shows a claim. Unclaimed shared items read "Not claimed yet", and a claimed listing is the ItemShared screen.
+- **Friends and groups:** group rows carry a 36 pt icon circle and the friend rows' spacing.
+- **QA fixes:**
+  - Impact, ImpactRange, ItemShared and ConnectPending are taller (1271 / 1434 / 880 / 1056).
+  - The Item detail share switch is a focusable 44 pt control.
+  - Parallel example hints on Type it / Say it, and the meter's VoiceOver label carries the numbers.
+  - No hairline under the last group row.
+  - Canvas rows below the Impact row moved down 145 px.
+- **Not applied:** a helper caption under "Claimed by" (the no-helper-captions rule).
+
 ## 2026-10-11 — Design feedback round 3 (teammate wedwqc, 08:28–08:46; canvas v52–v53; design QA READY WITH FIXES, fixes applied)
 - **Owner: Home has a settings gear, never a profile picture** (44 pt, VoiceOver "Settings"), on Home, HomeEmpty and ServerError.
 - **Owner: the Home tip stays an observation**, one line and dismissible. No recipe suggestions in the tip.

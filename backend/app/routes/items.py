@@ -1,6 +1,9 @@
+import io
+import time
 from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, jsonify, request
+from PIL import Image
 from sqlalchemy import func
 
 from ..auth import require_auth
@@ -8,7 +11,8 @@ from ..errors import ApiError, not_found, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (CATEGORIES, EXPIRY_SOURCES, FOOD_GROUPS, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
                       ShareListing, User)
-from ..services import barcode, candidates, expiry, food_group, gemini, impact, ml, social
+from ..services import (barcode, candidates, enrich, expiry, food_group, gemini, impact, ml, nutrition,
+                        social)
 from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item,
                     share_summaries)
 
@@ -77,6 +81,14 @@ def _check_food_group(value):
     if not isinstance(value, str) or value not in FOOD_GROUPS:
         raise validation_error(f"food_group must be one of {', '.join(FOOD_GROUPS)}.")
     return value
+
+
+def _check_nutrition(value):
+    cleaned = nutrition.clean_nutrition(value)
+    if cleaned is None:
+        raise validation_error("nutrition must be an object with kcal, protein_g, carbs_g and fat_g "
+                               "per 100 g (basis per_100g), within plausible limits.")
+    return cleaned
 
 
 @bp.get("")
@@ -150,6 +162,8 @@ def _validate_new(raw: dict) -> dict:
     if raw.get("freshness") is not None:
         out["freshness"] = _check_freshness(raw["freshness"])
         out["freshness_checked_at"] = datetime.now(timezone.utc)
+    if raw.get("nutrition") is not None:  # candidate round trip: stored once, not editable (like confidence)
+        out["nutrition"] = _check_nutrition(raw["nutrition"])
     return out
 
 
@@ -503,6 +517,42 @@ def parse_text():
     return jsonify(candidates=candidates.normalize_all(raws))
 
 
+_IMAGE_MIMES = {"JPEG": "image/jpeg", "MPO": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+_HEIC_BRANDS = {b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"mif1", b"msf1"}
+_BAD_IMAGE = "image must be a JPEG, PNG, WEBP or HEIC photo."
+
+
+def _jpeg_scan_complete(data: bytes) -> bool:
+    """True when an EOI marker follows the first SOS marker: a JPEG cut off mid-scan has none. Trailing data after the
+    EOI (camera padding, MPO secondary images) is fine. Marker scan only, no pixel decode."""
+    sos = data.find(b"\xff\xda")
+    return sos != -1 and data.find(b"\xff\xd9", sos) != -1
+
+
+def _sniff_image(data: bytes) -> str:
+    """MIME type of a valid photo, from its bytes (never the client's header). Raises validation_error.
+
+    JPEG/PNG/WEBP: Pillow identifies the format and `verify()` checks structure without decoding pixels
+    (it cannot see a cut-off JPEG body, so a JPEG must also have an EOI marker after its first SOS). HEIC/HEIF: Pillow here has no
+    HEIF plugin, so the ISO-BMFF `ftyp` brand is checked instead. Decompression bombs are a 400, not a 500."""
+    if data[4:8] == b"ftyp" and data[8:12] in _HEIC_BRANDS:
+        return "image/heic"
+    try:
+        img = Image.open(io.BytesIO(data))  # reads the header only
+        fmt = img.format
+        img.verify()
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise validation_error("image has too many pixels.")
+    except Exception:  # UnidentifiedImageError, OSError, SyntaxError, ValueError... any undecodable upload
+        raise validation_error(_BAD_IMAGE)
+    mime = _IMAGE_MIMES.get(fmt)
+    if mime is None:
+        raise validation_error(_BAD_IMAGE)
+    if mime == "image/jpeg" and not _jpeg_scan_complete(data):
+        raise validation_error("image is truncated or corrupt.")
+    return mime
+
+
 def _image_upload():
     f = request.files.get("image")
     if f is None:
@@ -510,15 +560,20 @@ def _image_upload():
     data = f.read()
     if not data:
         raise validation_error("image is empty.")
-    return data, f.filename or "upload.jpg", f.mimetype or "image/jpeg"
+    return data, f.filename or "upload.jpg", _sniff_image(data)
 
 
 @bp.post("/from-photo")
 @require_auth
 def from_photo():
+    started = time.monotonic()
     mode = request.form.get("mode", "fridge")
     if mode not in ("fridge", "single"):
         raise validation_error("mode must be fridge or single.")
+    try:
+        facets = enrich.parse_facets(request.form.get("enrich"))
+    except ValueError as e:
+        raise validation_error(str(e))
     data, filename, mime = _image_upload()
     raws, source = None, None
     if ml.is_configured():
@@ -531,7 +586,11 @@ def from_photo():
             raws, source = gemini.detect_from_image(data, mime, mode), "gemini"
         except gemini.UpstreamError as e:
             raise upstream_unavailable(f"No vision backend available: {e}")
-    return jsonify(candidates=candidates.normalize_all(raws, source), source=source)
+    cands = candidates.normalize_all(raws, source)
+    body = {"candidates": cands, "source": source}
+    if facets:  # opt-in; enrich.run never raises and never changes the status
+        body["enrichment"] = enrich.run(cands, facets, image=data, source=source, started=started)
+    return jsonify(**body)
 
 
 @bp.post("/from-receipt")

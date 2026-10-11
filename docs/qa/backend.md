@@ -776,3 +776,151 @@ Four additive gaps, stacked on `feat/donation-recipient`: G1 `GET /requests?mine
 **Full suite:** run by the coordinator on HEAD `446c2ca` (with #74 merged in). `pytest -q --cov=app` gave 1708 passed and 3 skipped in 336 s, with total coverage 98%. Merging main afterwards (`06cf7fa`) changed nothing under `backend/`.
 
 **Verdict: PASS (final).** No open bugs.
+
+
+## PR #79 independent QA (food-orch)
+
+Gemini photo enrichment (`enrich=expiry,nutrition` on `POST /items/from-photo`), `items.nutrition` (migration 0007) and `item_ids` on `POST /recipes/suggest`. Branch `feat/recipes-focus` with `origin/main` merged in. The builder's own tests were not trusted; everything below is backed by the QA files listed here, or by a one-off measurement named as such.
+
+**Verdict: PASS WITH OPEN BUGS.** Four low-severity bugs (BE-19 to BE-22), none on the demo path (photo add, expiry, remove, Impact), because every new field is opt-in and the default responses only gain `nutrition: null`. None is a blocker, but BE-19 and BE-20 are cheap to fix before the iOS work starts.
+
+**New files:** `tests/test_qa_pr79_gemini.py`, `test_qa_pr79_crops.py`, `test_qa_pr79_migration.py`, `test_qa_pr79_contract.py` (197 tests). No existing file was edited. No feature code was edited.
+
+**Environment:** the shared venv had no Pillow, so `pillow==12.3.0` (the exact pin) was installed into it. Every other package already matched `requirements.txt`. google-genai 1.2.0 uses `requests`, not httpx.
+
+**Full suite** (shared heavy lock held, released at once): `pytest -q --cov=app` gave **2199 passed, 3 skipped, 1 xfailed** in 359 s, **total coverage 98%** (`crops.py`, `enrich.py` and `nutrition.py` 100%, `gemini.py` 98%). The one xfail is the strict BE-19 test; the 3 skips are pre-existing. Bug IDs: highest before this was BE-18 only as "next free" text (BE-17 is the last used); no other open PR carries `docs/qa/backend.md` changes (only #79 is open). So the first new ID is BE-19.
+
+### Checklist
+
+**1. Migration 0007** (`test_qa_pr79_migration.py`, 6 tests)
+- One alembic head, `0007_items_nutrition`, linear chain from `0006_request_audiences`, no merge tuples.
+- On a db downgraded to 0006 and seeded with 5 items (one removed, with `add` events), upgrade ran with no error. All 5 rows get SQL NULL (not JSON `null`), every other column and every event is identical before and after, and `alembic_version` is 0007.
+- Downgrade with 3 rows holding nutrition drops the column and `ck_items_nutrition_object` cleanly. The items survive, and new items can be inserted at 0006. Two full up/down cycles on a populated db do not raise.
+- `compare_metadata` shows no autogenerate drift for `nutrition` (model, CHECK and migration agree).
+- The real API serves `nutrition: null` for a row written before the migration.
+
+**2. Gemini cost and latency** (`test_qa_pr79_gemini.py`, 69 tests, real route + `enrich` + `_generate` with a fake `genai.Client`)
+- **Calls:** with `enrich` absent, empty, blank or `","` there are zero Gemini calls, on both detectors, and the response has no `enrichment` key. With `enrich`, exactly one call at n = 1, 3, 12, 15 and 40 detections; the prompt carries min(n, 12) items. An unknown facet is a 400 before any call.
+- **Caching:** none. The same photo twice is two calls. That is fine for a per-photo call, but worth knowing.
+- **Usage log:** exactly one `gemini_usage ... purpose=enrich ... status=ok` line, with no food name and no key. The `app.enrich` line carries counts only.
+- **Failures:** 20 variants all return 200 with the table date, `expiry_source: default` and an `enrichment.status` of `failed`. They are a raised exception, a timeout, malformed JSON, non-JSON text, `null`, a scalar, a string, an object without the list, `items` not a list, a list of scalars or nulls, an empty list, an out-of-range or boolean `index`, string/float/NaN/Infinity/bool/1e999 days. Reasons are `upstream_error` or `unusable_response`. `not_configured`, `time_budget` and an exception inside `apply` (`unexpected_error`) are also 200s.
+- **Out-of-bounds values:** days of 1e9 or 1e12 are clamped to `min(3650, 2 x table + 3)` and a negative to today (`expiry_source: gemini`). Twelve bad nutrition shapes become `nutrition: null` while the expiry still applies. A missing row gives `partial`.
+- **BE-13 / `timeout_s`:** a scalar response is an `UpstreamError` with one `status=error` usage line for every purpose (generate, recipes, detect, enrich). `timeout_s` defaults to `None`: `parse_text`, `suggest_recipes`, `detect_from_image` and `estimate_shelf_life` all build the client with no `http_options`. Only enrich passes `HttpOptions(timeout=25000)` (the SDK wants milliseconds). The real SDK was run against a local socket that never answers (not Google): it gave up in about the configured second.
+- **Timeouts retried:** see BE-20.
+
+**3. Contract** (`test_qa_pr79_contract.py`, 49 tests, plus doc and iOS read-through)
+- Every documented field matches the code. `items.nutrition` is on create, list, `group_by`, PATCH, remove, restore, both batches and the group pantry. PATCH with `nutrition` (a value or `null`) is a 400. `item_ids`: 1-10 distinct uuids; malformed, empty, non-list, duplicates or more than 10 give 400, which wins over 404; `null` means not given; uuid spellings are accepted. An unknown, removed or someone else's id is a 404 with a body identical in every case (no oracle for another user's ids), even on an empty fridge, and with no Gemini call.
+- Extra edges: NaN and Infinity literals, booleans in numeric fields, `basis` null or upper-case give 400 with nothing written. Water, salt and oil boundary values are accepted. `estimated` is forced to true, unknown keys are dropped, and `null` is stored as SQL NULL.
+- **Backward compatibility:** the item key set is exactly the main-branch set plus `nutrition`. `from-photo` without `enrich` returns exactly `{candidates, source}` with the old candidate keys. `enrich=expiry` adds no `nutrition` key; `enrich=nutrition` puts `nutrition` on every candidate, null where skipped. The recipe response keys are unchanged with `item_ids`, and `missing_items` passes through untouched. A candidate posts straight back through `POST /items`.
+- **iOS decode check (read only, `wt/ios-shared`, nothing edited or built):** the decoder (`APICoding.decoder`, snake-case conversion) ignores unknown keys, so `nutrition` on items and candidates and `enrichment` on the from-photo response cannot break decoding. `Item.expirySource` and `Candidate.expirySource` are `String?`, and the strict enum `ExpirySource` (`default|gemini|ml|user`) is used only when posting back, where `gemini` is already a member. `NewItem(candidate:)` does not copy `nutrition`, so it would be silently dropped on add.
+
+**4. Dependencies and crops** (`test_qa_pr79_crops.py`, 73 tests)
+- `pillow==12.3.0` is exact-pinned (and equals `ml/serve`). `Image.MAX_IMAGE_PIXELS` is untouched (89,478,485). The 50 MP ceiling is checked from the header before any pixel decode (asserted), so Pillow's own warning band is never reached. A 400 MP 1-bit PNG, which trips Pillow's own limit inside `Image.open`, is None with no warning leaking. A 36 MP image is fine and bounded to 512 px.
+- Garbage, empty, truncated JPEG or PNG, corrupt EXIF: all None, no raise. RGBA, LA, P, L, CMYK, 1-bit, I;16 PNG, GIF, BMP and WEBP all give a valid RGB JPEG. Twenty-two bad boxes (empty, wrong length, NaN, inf, strings, nested, zero-area, reversed, entirely or mostly outside, under 32 px, 1e308) give None or a valid crop, never an exception. Order and length are preserved, one failing box does not cost the others, and nothing is upscaled.
+- EXIF orientation 1-8: a full-frame crop equals Pillow's `ImageOps.exif_transpose`, and sub-box crops are the right pixels. `ML_BBOX_FRAME=upright` works.
+- EXIF, GPS, camera make, ICC and XMP are absent from the output bytes (marker check). PNG text chunks do not carry over. Nothing touches the filesystem (save only to `BytesIO`, `tempfile` forbidden, temp and cwd listings unchanged).
+- Two observations (no test fails on them): a 16-bit PNG converts to pure white (measured: 20000/65535 gives 255,255,255), so such a crop is blank, harmless but useless; iPhone uploads are JPEG. A JPEG comment survives: BE-19. Memory: BE-22.
+
+**5. Scope**
+- **Cache key:** with `item_ids` absent or empty, `make_key` equals an independent copy of the pre-PR formula (hash compared). Seven different sets (none, singles, pairs, triples, all) each get their own key; the same set in another order or another uuid spelling shares one. The cache is **one slot per user**, so alternating between a focus and a no-focus request always misses (a cost note, by design; an evicted set misses rather than mis-hits). Another user's cache is untouched, and `max_results` and `dietary` still split keys.
+- **Conflict with "Only what I have"** (client filter on empty `missing_items`): the server never changes the shape or content of `missing_items`. But `must_use` only forces the chosen items into every recipe; nothing tells Gemini to avoid extra ingredients, so a "Cook with this" result can have non-empty `missing_items` and the default filter can empty the list. iOS should fall back to the existing "Show recipes that need a few things" state, or turn the chip off for a focus request.
+- **Payload:** 10 focus items among 30 are all sent, the total is capped at 20, and soonest-first order is kept. The prompt adds the must_use hint and the `"must_use": true` marker only when focus is given.
+- See BE-21 for what "every recipe must use one" really guarantees.
+
+**6. `.gitattributes`:** one line, `*.sh text eol=lf`. It matches two tracked files (`backend/entrypoint.sh`, `scripts/demo_tunnel.sh`), both already `i/lf w/lf` in `git ls-files --eol`. No file in the repo has CRLF or mixed endings in the index, so nothing renormalises.
+
+**7. Standard backend QA** (`test_qa_pr79_contract.py`)
+- **Impact:** two users with the same adds and a thrown-out removal, one with nutrition and one without, get identical `/impact`. An add with nutrition does not move impact and writes exactly one `add` event (food_events has no nutrition column). Remove then restore returns impact exactly to the original and keeps the nutrition.
+- **N+1:** `GET /items` and `group_by=food_group` use the same number of queries at 1 and 40 items with nutrition. `POST /items` is the same query count with or without nutrition (5 items).
+- **Rollback:** a forced failure on the second `add` event of a 3-item batch with nutrition gives a JSON 500 `internal_error` and zero items and zero events; a following create works.
+- **Auth and visibility:** from-photo with `enrich`, `/recipes/suggest` with `item_ids` and `POST /items` with nutrition are all 401 without a token. Enrich validation runs before the missing-image check but after auth. A group item's nutrition is visible to members' pantry and a non-member gets 403/404. Another user's items and nutrition never appear in my list.
+
+### Bugs
+- **BE-19 (low, privacy and docs):** a JPEG COM (comment) segment in the uploaded photo survives into the crop sent to Gemini; Pillow copies `info["comment"]` through `convert`, `crop` and `save`. `docs/API.md` says the re-encode "drops EXIF and GPS" and the PR says metadata is dropped. EXIF, GPS, ICC and XMP are in fact gone. Repro: `Image.new("RGB",(300,300)).save(buf,"JPEG",comment=b"secret")`, run `crops.make`, and the bytes contain the text. Test: `test_jpeg_comment_segment_is_stripped` (strict xfail; it flips to a failure when fixed). `backend/app/services/crops.py:284` (`crop.save(...)`). Fix: clear `crop.info` (or pass `comment=b""`) before saving.
+- **BE-20 (low, latency):** the shared retry loop re-sends the enrich call on 429, 503, 504 or DEADLINE_EXCEEDED. So "one call, 25 s timeout" is up to two requests, 2 x 25 s + 1.5 s, and added on top of detection (up to the 30 s skip threshold) the worst case is about 80 s. `docs/API.md` tells iOS to allow "at least 60 s", and the iOS session currently has `timeoutIntervalForRequest = 30` (`LiveAPIClient.swift`, wt/ios-shared). A plain read timeout is not retried (tested). Repro: `test_transient_504_is_retried_so_worst_case_is_two_timeouts`. `backend/app/services/gemini.py:106-112` and `backend/app/services/gemini.py:550`. Fix: no retry for `enrich`, or a 12 s per-attempt timeout, or document at least 90 s.
+- **BE-21 (low, contract wording):** "every recipe must use at least one" focus item is a prompt instruction only. The server does not check it: a recipe that ignores the focus item is still returned (`test_server_does_not_verify_that_a_recipe_uses_a_focus_item`). Also `uses_items` maps names back soonest-first, so with two items of the same name the focus one can be reported as its twin (`test_focus_item_with_a_same_name_twin_can_be_mapped_to_the_twin`). `backend/app/routes/insights.py:355-405` (suggest) and `:307-326` (`match_uses_items`). Fix: soften the wording in `docs/API.md` (best effort), or filter or flag recipes with no focus item in `uses_items`, and prefer focus ids when mapping names.
+- **BE-22 (low, resource):** a 204 KB PNG of 49.9 MP RGBA passes the 50 MP ceiling and raised peak RSS from 68 MB to 468 MB while decoding (measured, one request; one-off script, not a test). Authenticated users only, YOLO path with a bbox, and `enrich` set, but several concurrent requests multiply it. `backend/app/services/crops.py:224` (`MAX_PIXELS`) and `:262-263` (`img.load()`, `convert`). Fix: lower `ENRICH_MAX_PIXELS` (for example 25 MP), or use `img.draft()` / `reduce` for JPEG, or crop before converting.
+
+### iOS follow-ups (none are backend work)
+- Add `nutrition: NutritionPer100g?` (`kcal` Int, `protein_g`, `carbs_g`, `fat_g`, `fiber_g?`, `sugar_g?`, `sodium_mg?`, `estimated`, `basis`) to `Item`, `Candidate` and `NewItem`, and copy it in `NewItem(candidate:)`, otherwise it is dropped on add. Decoding works as is (unknown keys are ignored).
+- Send `enrich=expiry,nutrition` in the multipart form from the photo review step. Add `enrichment: {status, requested, enriched, total, reason}?` to `CandidatesResponse` and show a quiet "estimated from the photo" note, or nothing, for `skipped` and `failed`. Do not treat any enrichment status as an error.
+- Raise the from-photo request timeout to 60 s or more (see BE-20; 90 s is safer). The session default is 30 s.
+- Keep `expirySource` a `String?` (or add an unknown-case fallback); `gemini` is already a valid value on post-back, but a strict enum on read would be fragile.
+- Item detail: a Nutrition section reading the per-100 g object, with the "estimated" flag always shown. Not editable (PATCH is 400).
+- Recipes: for "Cook with this", send `item_ids` (1-10 ids, from the caller's active items; any 404 means refresh the list), keep each response the same shape, and handle the empty "Only what I have" state by falling back to the "needs a few things" state, or by turning the chip off for a focus request. Remember the recipe cache is one slot per user.
+
+## BE-19..22 re-verification on main (food-orch)
+
+Re-check of the four PR #79 bugs against main at `02b06e8` (builder fix `d6b0a52`). New tests: `backend/tests/test_qa_be19_22.py` (24 tests). Each fails on the pre-fix code (reasoned from the diff; BE-22 also measured) and passes now. **Targeted runs only (orchestrator):** the full suite was not run.
+
+| Bug | Verdict | Evidence |
+|---|---|---|
+| BE-19 | **VERIFIED FIXED** | `crops._cut` sets `crop.info = {}` after the crop and RGB convert, so Pillow has no `comment` to write. With a real COM segment in the upload (RGB and L, EXIF orientation 1 and 6), the crop has no 0xFE marker and no comment text, and `im.info` has no `comment`. With EXIF, GPS, XMP, ICC and a comment all present, the crop's markers are a subset of {APP0, DQT, SOF0/2, DHT}. Also checked through the route: the bytes sent to Gemini have no COM and no comment text. |
+| BE-20 | **VERIFIED FIXED** | `enrich_items` passes `retry=False`, so the loop is `(None,)`. For each of 429, 503, 504, "DEADLINE_EXCEEDED", "503 UNAVAILABLE" and "429 RESOURCE_EXHAUSTED": exactly one `generate_content` call and no `time.sleep`, both through the route and through `enrich_items`. `parse_text`, `suggest_recipes` and `estimate_shelf_life` still retry once (two calls on a persistent 503, never three). `retry` defaults to True and `retry=False` appears at one call site only. `docs/API.md` now states one 25 s attempt and a worst case of detection (skipped past 30 s) plus 25 s; 30 + 25 = 55 s fits the documented 60 s. |
+| BE-21 | **ACCEPTED AS DOCUMENTED** (limitation stays) | The fix is wording only in `docs/API.md`. It now says the rule is an instruction to Gemini that the server does not check, and that `uses_items` can report a same-name twin. That is honest best effort. No server filter or flag was added and `match_uses_items` is unchanged, so `test_server_does_not_verify_that_a_recipe_uses_a_focus_item` and `test_focus_item_with_a_same_name_twin_can_be_mapped_to_the_twin` still pass (they document the behaviour). A filter or a focus-first mapping would still be cheap if iOS wants a hard guarantee; no demo path depends on it. |
+| BE-22 | **VERIFIED FIXED** (halved, one decode remains) | Same image class: 7062 x 7062 RGBA PNG (49.87 MP, 207 KB), one crop. Pre-fix `crops.py`: RSS 39 MB to 441 MB (+402 MB). Fixed: 39 MB to 242 MB (+203 MB), which is the single unavoidable RGBA decode (about 200 MB). The full-size RGB copy is gone. Residual: a 200 KB upload still costs about 200 MB, and concurrent requests multiply it; `ENRICH_MAX_PIXELS` is still 50 MP (header-checked before decode, tested again; Pillow's global bomb limit untouched). Not worth a new bug; lowering the ceiling to about 25 MP would be the next step if memory is tight. Regression test measures the delta in a subprocess and requires under 1.4 x the raw decode (pre-fix 2.0 x). |
+
+**Audit of the builder's edits to QA-owned tests in `d6b0a52`:** clean.
+- `test_qa_pr79_crops.py`: only the strict `xfail` marker on `test_jpeg_comment_segment_is_stripped` was removed. The assertions are unchanged, and the test now passes for the right reason (BE-19 is fixed).
+- `test_qa_pr79_gemini.py`: the BE-20 evidence test was renamed and flipped from `len(calls) == 2` to `== 1`, with the same inputs (504 / DEADLINE_EXCEEDED, `upstream_error`, HTTP 200). That is the intended behaviour change, not a weakening. The plain-read-timeout and timeout-kwarg tests are untouched.
+- `test_qa_pr79_contract.py` (BE-21 evidence) was not touched.
+- The non-QA `test_enrich_gemini.py` swapped its "retried once" test for a no-retry enrich test plus a `parse_text` retry test, so retry coverage for other purposes is kept.
+
+Nothing needed restoring. The extra strictness lives in `test_qa_be19_22.py`.
+
+**Runs (targeted):** `test_qa_be19_22.py`, `test_qa_pr79_crops.py`, `test_qa_pr79_gemini.py`, `test_qa_pr79_contract.py`, `test_enrich_gemini.py`, `test_crops.py` and `test_recipes_focus.py`: 301 passed. No failures, so no full-suite run. No new bugs (highest id stays BE-22; `gh pr list` shows no open PRs).
+
+## fix/recipes-gemini-timeout — BE-23/BE-24
+
+Independent QA of the uncommitted builder diff (`GEMINI_TIMEOUT_S`, recipe filter). IDs: highest in `docs/QA.md` is BE-22; open PR #93 touches no `docs/qa/*.md`, so BE-23 to BE-25 are free. **Targeted runs only (orchestrator runs the full suite).**
+
+**Final verdict: PASS** (round 2: BE-25 and the truncation order fixed and verified; no open bugs).
+
+| Bug | Sev | Verdict | Evidence |
+|---|---|---|---|
+| BE-23 unbounded Gemini timeouts (parse_text, detect, receipt, recipes, shelf_life had no HTTP timeout) | medium | **VERIFIED FIXED** | Source scan: one `genai.Client(` and one `generate_content(` in the whole app (`services/gemini.py`); all six `_generate` call sites pass `timeout_s` (five `_default_timeout()`, enrich `ENRICH_TIMEOUT_S`). SDK unit is ms (`HttpOptions.timeout` "in milliseconds"); the code sends 30000, enrich 25000. Through the real routes with a fake client: a read timeout on `/recipes/suggest`, `/items/parse-text` and `/items/from-photo` (detect) is 502 `upstream_unavailable`, not 500; a plain timeout is not retried (1 call), `504 DEADLINE_EXCEEDED` retries once (2 calls); a failed enrich is 200 with `enrichment.status=failed`; a timeout is never cached. |
+| BE-24 recipe `title`/`minutes` unvalidated (broke iOS decoding) | medium | **VERIFIED FIXED** | Bad/blank/non-string title and null, string, 0, negative, >600, bool, NaN, list minutes drop the recipe; floats round to int; steps/missing_items filtered to strings and default `[]`; `servings`, `uses_items`, `macros`, `macros_estimated` and extra Gemini keys unchanged for good recipes. |
+| BE-25 `GEMINI_TIMEOUT_S=inf` | low | **OPEN** | `_default_timeout` accepts `inf` (it is `> 0`), then `int(inf * 1000)` raises `OverflowError` inside `_generate`'s try, so every Gemini call becomes a 502. NaN, 0, negative and junk fall back to 30 correctly. Fix: `math.isfinite(v)` in `_default_timeout` (and in `create_app`). `test_infinite_timeout_config_falls_back` is a strict xfail until fixed. |
+
+**Review notes (no bug):**
+- **From-photo budget is not tight.** The builder's 61.5 + 25 = 87 s cannot happen: `enrich` is skipped once detection took more than `ENRICH_SKIP_AFTER_S` (30 s). Longest route that also enriches is about 30 + 25 = 55 s; longest overall is 61.5 s (detect with retry, enrich skipped). Both are under the iOS 90 s client timeout and gunicorn's 120 s. If `GEMINI_TIMEOUT_S` is raised above 55 the 90 s margin shrinks (API.md already says keep it at or below 55).
+- **Truncation before filter.** `gemini.suggest_recipes` cuts to `max_results` first and the route filters after, so `max_results=1` with a bad first recipe returns `[]` although a good second one existed. Acceptable (iOS shows the empty state) and now pinned by a test; fetching `max_results + 2` would be a cheap improvement.
+- **Filtered-to-empty is cached** for the 6 h TTL, exactly as an empty Gemini answer already was. A new item or a different option changes the key; a 502 is never cached. Fine, but one malformed Gemini answer sticks for 6 h unless an item changes.
+- `round()` is half-to-even: `minutes=0.5` is dropped, `600.5` is kept (as 600). Harmless.
+- The builder's rename in `test_enrich_gemini.py` is **legitimate**: the old assertion (`client_kwargs == [{}]`) encoded the bug, and the new one asserts 30000 ms for `parse_text`, while the enrich timeout tests are untouched. The builder **missed** a second stale assertion in QA's `test_qa_pr79_gemini.py::test_every_existing_gemini_function_leaves_timeout_unset` (it failed after the change). QA updated it to assert the 30000 ms timeout, renamed `test_every_non_enrich_gemini_function_sets_the_gemini_timeout`; same inputs, now stronger.
+- The builder's `test_worst_case_with_retry_under_gunicorn_timeout` is arithmetic only (`2*30+1.5 < 120`), not tied to the code; the new `test_every_generate_call_site_passes_timeout` is the real guard.
+
+**Tests added:** `backend/tests/test_qa_gemini_timeout.py` (17: 16 pass, 1 strict xfail for BE-25). Edited: `test_qa_pr79_gemini.py` (1 test).
+
+**Runs (targeted, venv, `fwr_test` on 5435):** `test_gemini_timeout`, `test_qa_gemini_timeout`, `test_gemini_retry`, `test_enrich_gemini`, `test_insights_wave2_gemini_shapes`, `test_insights_wave2_recipes`, `test_recipes_focus`, `test_macros`, `test_ai_endpoints`, `test_qa_pr79_*`, `test_gemini_usage`: **557 passed, 1 xfailed** (after the stale-test update; the first run had 556 passed, 1 failed on that test). Full suite not run.
+
+### Round 2 re-verification (builder fixed BE-25 and the truncation order)
+- **BE-25 VERIFIED FIXED.** `_default_timeout` and `create_app` now use `math.isfinite`. `inf`, `-inf` and `nan`, as config values and as env strings (`inf`, `-inf`, `nan`, `Infinity`), all fall back to 30 s (30000 ms on the client). The two strict xfails became normal asserts (`test_non_finite_timeout_config_falls_back`, `test_env_non_finite_falls_back_in_create_app`).
+- **Truncation VERIFIED FIXED.** `gemini.suggest_recipes` asks for `min(max_results + 2, 12)` and no longer slices; the route filters the full list, then cuts to `n`, then caches the cut list. Tests: `max_results` 1/3/9/10 ask Gemini for 3/5/11/12 (the prompt's `max_results`); a bad first recipe with `max_results=1` now returns the good second one; a Gemini that returns 12 recipes for `n=3` yields exactly 3, and the repeat call is a cache hit with the same 3; the cache key still uses `n` (not the over-request), so `n=2` then `n=3` misses and returns 3. `suggest_recipes` has no other caller, so dropping its slice affects nothing else. Residual (not a bug): if Gemini returns fewer valid recipes than `n` after filtering, the user gets fewer; the 2 spares make that rare.
+- **Runs (targeted, fwr_test on 5435):** `test_gemini_timeout`, `test_qa_gemini_timeout`, `test_gemini_retry`, `test_enrich_gemini`, `test_insights_wave2_gemini_shapes`, `test_insights_wave2_recipes`, `test_recipes_focus`, `test_macros`, `test_ai_endpoints`, `test_qa_pr79_*`, `test_gemini_usage`: **581 passed, 0 failed, 0 xfailed**. Full suite not run (orchestrator).
+
+## fix/photo-image-validation — BE-26/BE-27
+
+Independent backend QA of the uncommitted branch `fix/photo-image-validation` (worktree `fmt-photo-validate`). Stubs only, no Gemini or ML call. New file `backend/tests/test_qa_photo_validation.py` (19 tests, all pass). Targeted runs only: the new QA file, the builder's two new files and the 9 modified test files: **650 passed, 1 skipped, 0 failed, 0 xfailed** (re-run after the BE-28 fix).
+
+**Verdict: PASS** (BE-26, BE-27 and BE-28 verified fixed; one named residual, R-1, low, accepted).
+
+| Check | Result |
+|---|---|
+| BE-26 non-image to 502 | Fixed: text, PDF, GIF, a renamed file, cut-off JPEG and PNG, and a bomb all give 400 with no upstream call (stubs fail the test if called). |
+| BE-27 usage log `code` | Fixed: `status=ok code=200`; `status=error code=429/503`; `code=null` for plain exceptions and bad JSON. `docs/API.md` matches. `scripts/gemini_cost.py` parses generic `key=value`, so old lines (no `code`) and new lines both parse. |
+| Order | 401 before 400 (decorator); `mode` 400 before the image check; 413 for >10 MB still comes from `MAX_CONTENT_LENGTH` before the route runs. |
+| Data intact after `verify()` | Verified: the exact bytes (length) reach the backend; `data` is a `bytes` copy, so the file pointer is irrelevant. |
+| Memory | `verify()` never calls `load()` (tested by making `ImageFile.load` fail). Header-only; Pillow's bomb limit gives 400. |
+| HEIC | Forwarded as `image/heic` to both Gemini and `ml.detect`. Brand sniff only: a 12-byte `ftypheic` stub passes (documented limitation). Note: the YOLO service has no pillow-heif, so with `ML_SERVICE_URL` set a HEIC upload will fail there and fall back to Gemini via `MLUnavailable` (the route already falls through). Not a regression. The iOS app sends JPEG only. |
+| Builder edits to existing tests | Legitimate: 8 files swap fake JPEG bytes for a real 8x8 JPEG (`TINY_JPEG`); `test_thread_safety` regex gains `code=200` / `code=null`; `test_from_photo_enrich` forces "cannot crop" with `ENRICH_MAX_PIXELS=100` instead of garbage bytes, same assertions. No assertion weakened. |
+
+### BE-28 (low): FIXED, verified. Original finding: the "FFD9 within the last 4096 bytes" check rejects valid JPEGs with large trailing data
+- Repro: `Image.new("RGB",(8,8)).save(buf,"JPEG")` plus 50,000 trailing bytes that do not end in FFD9, then POST to `/items/from-photo` gives **400 "truncated or corrupt"**, yet `Image.open(...).load()` decodes it. Test: `test_valid_jpeg_with_50kb_nonmarker_trailer_is_wrongly_rejected` (strict xfail).
+- What still passes: up to ~4 KB of trailing bytes; a primary JPEG followed by a full second JPEG (MPO / Ultra HDR gain map layout), because the second image ends in FFD9.
+- Severity: **low for the app.** `PhotoPrep.prepare` (`ios/App/Add/PhotoCapture.swift`) re-encodes through `UIImage.jpegData`, so uploads carry no appended MPF/depth data. Other clients (raw camera originals with proprietary trailers or padding) could be falsely rejected.
+- Fix: search for FFD9 anywhere after the last SOS marker (`data.rfind(b"\xff\xd9")` past the header), or `Image.load()` the JPEG under the existing pixel cap (costs a full decode, so use `draft()` for big files).
+
+**BE-28 re-verification.** The builder replaced the tail check with `_jpeg_scan_complete` (an EOI after the first SOS). `test_valid_jpeg_with_50kb_nonmarker_trailer_is_wrongly_rejected` is now a normal assert and passes; cut-off JPEGs (half, last 2 bytes) are still 400.
+
+**R-1 (residual, low, accepted, not a bug):** an EXIF-embedded thumbnail carries its own SOS and EOI, so a JPEG whose *main* scan is cut off but which has an EXIF thumbnail passes the marker check (pinned by `test_residual_exif_thumbnail_eoi_lets_cut_main_scan_through`, 200). Judgement: low. The iOS app re-encodes through `jpegData`, so it never sends such a file. For other clients the file reaches Gemini, which fails soft: the route returns the existing 502 `upstream_unavailable`, no crash and no bad data stored. Closing it needs a real decode (`Image.load()` under the pixel cap), which costs memory for a rare case. If wanted, parse the marker segments and look for EOI after the SOS that follows the SOF.

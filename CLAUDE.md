@@ -55,7 +55,12 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 - Every builder is paired with a QA agent that starts at the same time, in the same worktree, and
   writes only in its own paths. **QA never edits feature code.**
 - Never let two agents edit the same file. Anything outside your paths is a request to its owner.
-- One heavy run at a time: Docker builds, full test suites, training.
+- One heavy run at a time: Docker builds, full test suites, training. On the Mac the shared lock is
+  `<scratchpad>/heavy.lock` (`mkdir` it, write your name to `owner`):
+  - Never run a heavy job without holding the lock, even after a wait timeout. Report and stop instead.
+  - Remove the lock only when `owner` is your own name.
+  - Hold it for one invocation, then release it, so parallel agents interleave. Iterate on targeted tests and run the
+    full suite once, at the end.
 - Backend tests use `TEST_DATABASE_URL` only. The suite rebuilds that schema under an advisory
   lock. Never touch it from outside the suite.
 - Agents report against the API contract in `docs/API.md`. When code and contract disagree, the
@@ -67,7 +72,8 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 - Merge with merge commits. Before merging, rebase onto `main` (on a teammate's branch, merge `main` in instead: never rewrite or force-push someone else's branch) and confirm CI actually ran and passed. A workflow skipped by its path filters is acceptable only for docs- or script-only PRs.
 - The orchestrator records every ruling (contract, data or design) in `docs/QA.md` or `docs/DECISIONS.md` in the PR that applies it.
 - QA bug IDs are global per area (`BE-n`, `ML-n`, `IOS-n`, `PL-n`): before numbering, check the highest ID in
-  `docs/QA.md` **and** in open PRs' `docs/qa/*.md`, because parallel branches have collided.
+  `docs/QA.md` **and** in open PRs' `docs/qa/*.md`, because parallel branches have collided. When several QA agents
+  run at once, give each its own ID block up front (e.g. IOS-30…39) and record the blocks in `HANDOFF.md`.
 - Big data, venvs and model runs live outside git (`../mldata/`), never in the repo or a worktree.
 
 ## Data rules
@@ -81,7 +87,8 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
   days) are a data-owner ruling, recorded in `docs/PIPELINE.md`.
 - Roboflow downloads need the **private** API key; the `rf_`-prefixed publishable key is rejected.
 - Long-running agents wait for each other's heavy runs (xcodebuild vs the backend suite) instead of
-  running them in parallel; give the waiting agent a time limit and a fallback.
+  running them in parallel. Give the waiting agent a time limit; its fallback is to report and stop, never to run
+  without the lock.
 
 ## Merge gate
 - A PR merges only with a QA pass recorded in `docs/qa/<area>.md`, then folded into

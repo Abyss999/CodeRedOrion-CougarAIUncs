@@ -89,7 +89,7 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 ## Items
 An **item** is `{id, owner_id, group_id, name, category, storage, quantity, unit, est_weight_kg,
 est_price, source, added_at, predicted_expiry (date), expiry_source, removed_at, outcome,
-waste_reason, removed_after_expiry, freshness, freshness_checked_at, confidence, share}`
+waste_reason, removed_after_expiry, freshness, freshness_checked_at, confidence, nutrition, share}`
 (`expiry_source` ∈ `default|gemini|ml|user`). `category` ∈ `produce_leafy, produce_hardy, dairy, meat,
 seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fridge|pantry|freezer`;
 `source` ∈ `photo|single_photo|text|barcode|receipt|manual`.
@@ -102,6 +102,15 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   `fresh` with a WARNING, a non-string is `400`); `freshness_checked_at` = now. `confidence` is the
   detector's 0..1 score (create only; `400` outside 0..1), null for manual items. All three are on
   every item response.
+- `nutrition` (`object|null`): a per-100 g nutrition estimate,
+  `{basis: "per_100g", kcal (int), protein_g, carbs_g, fat_g, fiber_g?, sugar_g?, sodium_mg?, estimated: true}`.
+  The four core keys match the recipe `macros` object, which is per serving. Stored when a create payload
+  carries it (the candidate round trip), validated by `services/nutrition.py`: kcal 0..900, grams 0..100,
+  sodium 0..40,000 mg, protein + carbs + fat <= 105 g, and kcal within max(40 %, 30 kcal) of 4P + 4C + 9F.
+  Anything else (not an object, another `basis`, a missing or non-numeric core key, an invalid optional key,
+  an implausible mix) → `400 validation_error`, nothing written. `estimated` is always stored as `true`,
+  unknown keys are dropped, and an explicit `null` means "none". On every item response; `null` when unknown.
+  Not editable (`PATCH` → `400`).
 - `share` is present on the **owner's own** items (`GET /items`, also with `group_by`; create, `PATCH`,
   `remove`, `restore` responses) and is `{id, status (open|fulfilled), claimed_by: {id, name} | null, audience}` for
   the item's most recent **non-cancelled** listing, else `null`. Loaded with two queries for the whole
@@ -130,10 +139,10 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   client-driven and the server trusts the enum: the client sends `expiry_source: "user"` (or omits the
   field, which defaults to `user`) once the person changed the date. Invalid value → `400`; a
   `expiry_source` sent without `predicted_expiry` is ignored (the backend predicts and sets it).
-  `freshness` and `confidence` from the candidate are stored (see above).
+  `freshness`, `confidence` and `nutrition` from the candidate are stored (see above).
 - ✅ `PATCH /items/:id` — body may contain `name, quantity, unit, storage, category, food_group,
-  predicted_expiry, est_price, est_weight_kg, freshness` (unknown fields → 400, so `confidence` is not
-  editable). `freshness` set → stored and `freshness_checked_at` = now; `freshness: null` clears **both**
+  predicted_expiry, est_price, est_weight_kg, freshness` (unknown fields → 400, so `confidence` and
+  `nutrition` are not editable). `freshness` set → stored and `freshness_checked_at` = now; `freshness: null` clears **both**
   (null means "never assessed"). Changing the expiry sets
   `expiry_source=user`. Changing quantity/unit/category re-estimates `est_weight_kg` unless sent.
   → `200 {item}`; `403` other user's item; `404` unknown or already removed.
@@ -227,6 +236,12 @@ Candidates are **not saved** until `POST /items`. Every candidate also carries a
 post it straight back.
 - ✅ `POST /items/parse-text` `{text (<=4000 chars)}` → `200 {candidates: [item…]}` (Gemini);
   `502 upstream_unavailable` when Gemini is not configured/failing.
+- **Image uploads (`from-photo`, `from-receipt`).** The `image` bytes are checked before any Gemini or ML call.
+  Accepted: JPEG, PNG, WEBP and HEIC/HEIF (HEIC is recognised by its `ftyp` brand, since Pillow here has no HEIF decoder;
+  it is forwarded as `image/heic`). Anything else (a text file renamed `.jpg`, PDF, GIF, a cut-off JPEG/PNG, a
+  decompression bomb) → `400 validation_error` ("image must be a JPEG, PNG, WEBP or HEIC photo.") with no upstream
+  call. Empty or missing → `400`; over 10 MB → `413`. The MIME type sent to Gemini/ML is derived from the bytes, not
+  from the client's `Content-Type` part header.
 - ✅ `POST /items/from-photo` multipart `image` (required), `mode=fridge|single` (default `fridge`) →
   `200 {candidates: [{name, category, confidence, freshness: "fresh"|"semi_fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
   …}], source: "yolo"|"gemini"}`. Uses `ML_SERVICE_URL`/detect when set; if unset **or the ML
@@ -235,9 +250,38 @@ post it straight back.
   three values pass through; variants map `semi-fresh`/`semi fresh`/`use soon`/… → `semi_fresh`
   and `rotten`/`stale`/`moldy`/`overripe`/`decayed`/… → `spoiled` (case/hyphen/space-insensitive; the word
   lists mirror `SEMI_WORDS`/`SPOILED_WORDS` in `ml/yolo/taxonomy.py`, and `ripe` is fresh in both); anything unknown or
-  missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). It is
-  informational on the candidate and does not change `predicted_expiry`; post it back with
-  `POST /items` to store it on the item (`freshness`, `freshness_checked_at`).
+  missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). On its own it
+  is informational on the candidate and does not change `predicted_expiry` (with `enrich=expiry`, below,
+  Gemini's estimate can); post it back with `POST /items` to store it on the item (`freshness`,
+  `freshness_checked_at`).
+  **Enrichment (opt-in).** Optional form field `enrich` = comma list of `expiry`, `nutrition`. Absent or empty →
+  the response is exactly as above and Gemini is not called; an unknown name → `400 validation_error`, before
+  anything runs. With it, **one** Gemini call (`gemini.enrich_items`, `purpose=enrich`, 25 s client timeout)
+  answers for the candidates worth asking about: not `spoiled`, confidence unknown or ≥ 0.5, candidates with the
+  same (name, category, storage, freshness) share one question and one answer, at most 12 questions, most
+  confident first.
+  - *What Gemini sees.* With `source: "yolo"`, a **crop** of each detection cut from the uploaded photo. `bbox`
+    is in the raw pixel frame that `ml/serve` decoded (RGB, no EXIF transpose), so the crop is cut there and then
+    rotated upright by the photo's EXIF orientation; the longest side is at most 512 px; it is re-encoded as JPEG,
+    which drops EXIF, GPS and any JPEG comment; nothing is stored. A candidate with no usable box (missing, malformed, mostly
+    outside the image, under 32 px), an undecodable or over-50-megapixel upload, and everything on
+    `source: "gemini"` (there are no boxes) are asked **text-only** (name, category, storage, freshness).
+  - *What comes back.* `expiry` → `predicted_expiry` = today + days and `expiry_source: "gemini"`, with days
+    clamped to `0..min(3650, 2 × the default table value + 3)`: Gemini may shorten a date freely but not stretch it
+    far. `nutrition` → the per-100 g object (see Items), or `null`; the `nutrition` key is on every candidate
+    whenever it was requested. An answer that is missing or fails validation leaves the table values. Numbers only:
+    Gemini returns no free text, so words printed on a label in a photo cannot reach the app.
+  - *`enrichment`* is added to the response: `{status, requested: ["expiry", "nutrition"], enriched, total, reason}`.
+    `status` is `ok` (every candidate got something), `partial`, `skipped` (no call made) or `failed`; `reason` is
+    `null`, `not_configured` (no Gemini key), `time_budget` (detection alone took over 30 s), `no_eligible`,
+    `upstream_error`, `unusable_response` or `unexpected_error`. **Enrichment never changes the HTTP status:**
+    any failure is a `200` with the table dates. The enrich call is never retried (one attempt, 25 s at most), so
+    the worst case is detection (skipped past 30 s) plus 25 s. The app should allow this request at least 60 s.
+  - *Settings* (app config, defaults shown): `ENRICH_MAX_ITEMS` 12, `ENRICH_CROP_MAX_PX` 512, `ENRICH_TIMEOUT_S` 25,
+    `ENRICH_MAX_PIXELS` 50,000,000, `ENRICH_SKIP_AFTER_S` 30, and `ML_BBOX_FRAME` `raw` (set `upright` if
+    `ml/serve` ever applies the EXIF transpose before detecting).
+  - *Log.* One INFO line on `app.enrich` per request: status, reason, source, facets and counts only, never a food
+    name or an image. The Gemini call itself writes the usual `gemini_usage` line.
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [item…], total, categorized_by:
   "gemini"|"heuristic"}` via `ML_SERVICE_URL`/ocr; `502` when unset or failing. Each candidate is a full
   item like the other add paths (`name, category, food_group, storage, quantity, unit, est_price,
@@ -407,9 +451,22 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
 - Acting on a visible resource you lack the right for (cancel someone else's listing/request) is `403`.
 
 ## Recipes, impact, tips
-- ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str]}` → `200 {recipes: [{title,
+- ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str], item_ids?: [uuid] (1-10)}` → `200 {recipes: [{title,
   minutes, servings, uses_items, missing_items, steps, macros, macros_estimated}]}` built from the caller's
   20 soonest-expiring active items.
+  - `item_ids` (optional): the items to cook now, 1-10 distinct uuids (`null` = not given). Any id that is not an
+    active item of the caller (unknown, removed, someone else's) → `404 not_found` for the whole request, even with
+    an empty fridge; a malformed list or id, more than 10, or duplicates → `400`. Those items are always sent to
+    Gemini, even when they are not among the 20 soonest-expiring, flagged `must_use`, and every recipe must use at
+    least one of them: this is an instruction to Gemini, the server does not check that a recipe obeys it (and
+    `uses_items` matches names back soonest-first, so with two items of the same name the focus one may be reported
+    as its twin). The order stays soonest-expiring first. The cache key includes the ids (in any order) only when
+    given, so keys without them are unchanged. Works with `max_results` and `dietary`.
+  - **Filtering (server side):** a recipe is dropped if its `title` is not a non-empty string or its `minutes`
+    is not a number that rounds to an int in 1-600 (the app decodes both as non-null). `steps` and
+    `missing_items` keep only their string entries and default to `[]`. Gemini is asked for
+    `min(max_results + 2, 12)` recipes and the route cuts to `max_results` after filtering, so one bad recipe
+    doesn't shorten the list. The cache key still uses the caller's `max_results`.
   - `servings`: int 1-20 from Gemini, else `null`.
   - `uses_items`: `[{item_id, name, predicted_expiry (date)}]` — Gemini's names mapped back to the
     caller's items (case/space-insensitive exact match, then containment; soonest-expiring wins; each
@@ -468,18 +525,27 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
   Ties: item by name, reason and category alphabetically. `top_reason_*` codes are unchanged
   (`expired`, `forgot`, `didnt_like`, `other`); `past_expiry` and `saved_recent` are new codes.
 
+## Gemini timeouts
+Every Gemini call sets an HTTP timeout so a hung request cannot pin one of the 4 gunicorn threads. Photo
+enrichment uses `ENRICH_TIMEOUT_S` (25, no retry). All other calls (`parse_text`, `detect`, `receipt_categorize`,
+`recipes`, `shelf_life`) use `GEMINI_TIMEOUT_S` (env, default 30 s per attempt). A transient error is retried once
+after 1.5 s, so the worst case is 2 x 30 + 1.5 = 61.5 s, under gunicorn's 120 s `--timeout`. Keep
+`GEMINI_TIMEOUT_S` at or below 55 so that stays true. A timeout is an `UpstreamError` (`502 upstream_unavailable`).
+
 ## Gemini usage logging
-Every Gemini call (`parse_text`, `detect`, `receipt_categorize`, `recipes`, `shelf_life`) writes one INFO line on the
+Every Gemini call (`parse_text`, `detect`, `receipt_categorize`, `recipes`, `shelf_life`, `enrich`) writes one INFO line on the
 logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compose logs api`):
 
-    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
+    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error code=<http|null>
 
 A response that is not usable JSON (unparseable, a scalar such as `null`/string/number/bool, or an
 object whose `items`/`candidates`/`recipes`/`days` value is not a list) counts as a failed call
 (`status=error`, one line) and the endpoint returns `502 upstream_unavailable` (BE-13); for the shelf-life
 estimate on `POST /items` it falls back to the default table.
 Tokens come from the response's `usage_metadata` (`output_tokens` includes thinking tokens); they are
-`null` when it is missing, and on `status=error` when the call failed. Prompts, response text, user
+`null` when it is missing, and on `status=error` when the call failed. `code` is the upstream HTTP status:
+`200` on `status=ok`; on `status=error` the `.code` of the google-genai `APIError`/`ClientError`/`ServerError` (`code=429`), or
+`code=null` when the failure carried none (timeout, network error, unusable JSON). Prompts, response text, user
 data and the API key are never logged. Cost report:
 
     docker compose logs api | python scripts/gemini_cost.py

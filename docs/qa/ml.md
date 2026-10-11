@@ -1030,3 +1030,179 @@ No blocking bug found. Highest ML-n before this review was ML-63 (QA.md, `docs/q
 
 ## Files written
 `ml/eval/tests/qa_pr73_unrar_independent.py`; this section in `docs/qa/ml.md`.
+
+# 2026-10-11: ML QA for the Colab FAST profile (`feat/fast-train`, commit 0959750)
+
+## Verdict: **PASS, with 1 fixed CI break (ML-66, fixed in QA's own tests), 1 low and 1 info finding**
+Unit level only: tiny fixtures, no ultralytics, no training (a builder smoke run was in progress). Ultralytics 8.4.175 behaviour was
+checked by reading its source (`mldata/.venv-train`), not by running it. Interpreter: `.venv-ml`.
+
+New: `ml/eval/tests/qa_fast_profile.py` (26 tests: 25 run anywhere, 1 real-data test that skips when the local rebuild is absent).
+Updated (QA-owned, ML-66): `test_notebook_train_cell.py` (cell-5 harness sets `FAST=False` and stubs `cap_detector`, so the full profile still
+pins the exact old command), `qa_pr62_ml57.py` (crash test parametrized over `FAST`: the real train.py exits 1 = ImportError, not 2 =
+argparse, so the FAST profile flags parse).
+
+| Suite | Result |
+|---|---|
+| `cd ml && pytest yolo/tests -q` (CI) | 68 passed |
+| `pytest ml/eval/tests -q` (CI) | 224 passed (3 failed before the ML-66 test update) |
+| `pytest ml/eval/tests -q -o python_files="test_*.py qa_*.py"` | 288 passed, 4 skipped, 1 failed: `qa_pr73_unrar_independent.py::test_real_pip_failure_shows_error_and_exits_nonzero`, environmental (`.venv-ml` has no `pip` module; unrelated to this PR) |
+| `qa_fast_profile.py` incl. real data | 26 passed |
+
+Note: CI's ml/eval job collects `test_*.py` only, so `qa_fast_profile.py` runs with the `-o python_files` flag above (as the other `qa_*` files).
+
+## What was verified
+1. **Held-out / val / cls integrity** (`check_view`, fixture and real data): val and heldout `images/labels/freshness`, `cls/`,
+   `heldout_gt.jsonl`, `heldout_manifest.csv`, `class_names.json`, `dataset_report.json` are byte-identical to the source (deep compare through
+   the symlinks); `data.yaml` differs only in `path:`. Train is a subset of the source train split; every kept image has its own label and
+   freshness sidecar (byte-identical), found also by Ultralytics' `/images/`->`/labels/` rule on the unresolved path; no orphan sidecars.
+   Ultralytics `check_det_dataset` resolves `val`/`test` to the source dirs and lists train via glob on the view dir: same files.
+   Rebuilding into the same out (cell 5 re-run on resume) never touches the source (sha over the whole source tree) and drops a stale `train.cache`.
+2. **Cap semantics**: foods with total <= cap keep every box; foods over cap keep >= cap; **maximality** (every dropped image only has foods
+   already at cap); background images (empty label file, and no label file) kept; overshoot only from forced rare-food images, multi-food
+   images, or the last image's extra boxes. Freshness codes: `CODE_TO_FRESHNESS == {0 fresh, 1 spoiled, 2 semi_fresh}`; a spoiled-only big food
+   keeps only spoiled boxes; code 2 decodes to semi_fresh; missing sidecar -> fresh. Source prefix: longest match (`fresh_stale_fruits_veg`
+   beats a hypothetical `fresh` source), spied inside `select()`. Deterministic, and identical when the dataset lives at another path.
+3. **make_subset on the fast view**: every dry train/val/heldout image resolves through the symlink chain and has its label; dry train is a
+   subset of the capped train; `cls/{train,val}` have fresh/semi_fresh/spoiled, all non-empty; `heldout_gt.jsonl` rows == chosen heldout images.
+4. **Notebook**: every code cell compiles (`!`/`%` lines stripped); `FAST = True` and `DET_CAP = 400` params; cell 5 does not assign `rep`
+   (AST) and a sentinel `rep` survives exec; cell 5 exec'd for FAST x DRY_RUN with a stub train.py: `cap_detector("/content/fwr_data",
+   "/content/fwr_data_fast", cap=400)` only with FAST, `make_subset(TRAIN_DATA, ...)` only with DRY_RUN, epochs 1/1 dry, 30/10 fast, 80/30 full,
+   `PROFILE` appended last with FAST and absent otherwise; `RUN_DIR` has 4 distinct values and the full real run keeps the pre-FAST folder;
+   cell 6 message and its held-out val on the full `/content/fwr_data/data.yaml`.
+5. **train.py**: `--cache none|ram|disk` -> `cache=False|"ram"|"disk"` and `--no-epoch-val` -> `val=False` reach BOTH stages; the profile
+   flags parse (det model, imgsz 512, batch 32, cls batch 128); `--cache true` rejected. Resume branch with cache/val in kw: calls
+   `train(resume=True, data, device, batch, imgsz)` only, no KeyError; a done stage is skipped; a fresh stage gets cache/val. In 8.4.175
+   resume restores `cache`/`val` from the checkpoint args (both are also in its allowed overrides), and `val=False` is supported
+   (final epoch still validated, `EarlyStopping` handles `fitness=None`, `best.pt` == last until the final val).
+
+## Real data (`mldata/verify_main/fwr_data`, read-only; view built in `mldata/qa_fast_view`, deleted afterwards)
+Kept **4,881 of 11,777** train images (8,808 of 22,096 boxes), built in ~10 s. All integrity checks above pass; 0 unknown-source stems.
+
+| Freshness (boxes) | full train | fast view |
+|---|---|---|
+| fresh | 14,583 (66.0%) | 6,036 (68.5%) |
+| spoiled | 6,325 (28.6%) | 2,206 (25.0%) |
+| semi_fresh | 1,188 (5.4%) | 566 (6.4%) |
+
+Boxes per food (kept/total): apple 425/1187, avocado 400/424, bacon 188/188, banana 400/1011, beef 400/600, bell_pepper 404/2528,
+bitter_melon 400/407, butter 184/184, cheese 220/220, cucumber 315/315, egg 558/1478, eggplant 400/2092, fish 400/404, lemon 364/364,
+milk 501/1386, onion 404/1876, orange 400/960, papaya 311/311, pineapple 400/436, potato 400/1334, soda 403/890, tomato 400/2167, yogurt 531/1334.
+Overshoot: egg +158, yogurt +131, milk +101 (fridge multi-object photos: 170/164/59 boxes come with forced rare-food images such as
+butter/bacon/cheese/avocado, the rest from multi-food images), apple +25, onion/bell_pepper +4, soda +3 (last image's extra boxes).
+
+Images per source (kept/full): agrifreshnet 1973/3467, dafif 400/404, food_spoilage_status 213/217, fresh_stale_fruits_veg 478/1961,
+fridge_objects 547/728, hien_fridge 318/1393, meatscan 400/600, vegqual 552/3007.
+
+## Bugs
+Highest ML-n before this review: ML-65 (`docs/QA.md` on origin/main had ML-62, `docs/qa/ml.md` ML-65; no open PRs).
+
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-66 | medium | `ml/eval/tests/test_notebook_train_cell.py` (CI) | Commit 0959750 makes cell 5 read `FAST`; the ML-57 regression test exec'd cell 5 without it, so CI's `pytest ml/eval/tests -q` failed 3 tests (`NameError: name 'FAST' is not defined`), as did `qa_pr62_ml57.py` (2). The builder ran only `ml/yolo/tests`. | **fixed** in QA's tests (this branch): harness passes `FAST`, stubs `cap_detector` |
+| ML-67 | low | `ml/yolo/cap_detector.py` `cap_detector()` (`if out.exists(): shutil.rmtree(out)`) | No guard against `out` == `data` (or `data` inside `out`): `cap_detector(D, D)` deletes the whole source dataset, then raises `FileNotFoundError` on `class_names.json`. Repro in a temp copy confirmed. The notebook uses fixed distinct paths, so not reachable from Colab today; `make_subset.py` has the same pattern. | **open, non-blocking**; fix: refuse when `out.resolve()` equals or contains `data` |
+| ML-68 | info | `cap_detector.select()` | Per-food cap + round-robin keeps a share of every freshness, but box-level spoiled drops (28.6% -> 25.0%) and some cells shrink much more than their food: apple/spoiled 49/228 (apple 21% -> 12% spoiled), bell_pepper/spoiled 96/800 (32% -> 24%), tomato/semi_fresh 21/225 (10% -> 5%). Cause: fresh-only fridge sources contribute "free" boxes via forced and multi-object images, and vegqual images carry several boxes each. Freshness is the classifier's job (it still sees every crop), so this only matters if detector recall on spoiled / semi_fresh items drops. | **open, non-blocking**; compare held-out detector recall per freshness FAST vs full after the first real run |
+
+Other notes (no ID): the view's (and export's) `dataset_report.json` describes the full train split; the capped split is described only by
+`cap_report.json`, which stays in `/content/fwr_data_fast` and is not copied to the export. Consider copying it to `RUN_DIR/export` for traceability.
+
+## Files written
+`ml/eval/tests/qa_fast_profile.py` (new), `ml/eval/tests/test_notebook_train_cell.py`, `ml/eval/tests/qa_pr62_ml57.py` (ML-66), this section.
+
+## Addendum (2026-10-11): ML-69 fix re-check (commit e4f967c). Verdict stays **PASS**
+The first real FAST run was SIGKILLed (OOM) at the start of the classifier stage. Ultralytics 8.4.175 `ClassificationDataset.cache_images`
+(`data/dataset.py` L1303-1319) decodes every crop at its original size (`self.imread`, no resize), so the 14,377 train crops came to 9.4 GB
+against ~12.7 GB of Colab RAM. The detector cache resizes to imgsz first, and the detector stage finished (~26 min for 30 epochs on a T4).
+Fix in `ml/yolo/train.py`: `cls_speed = dict(speed, cache=False)` for the classifier; the resume branch now passes `cache` and `val`.
+
+Verified, by test and by reading the Ultralytics source:
+- **The classifier gets `cache=False` for every `--cache` value** (none/ram/disk). The detector keeps the requested cache, and `--no-epoch-val`
+  still reaches both stages (`test_speed_kwargs_reach_both_stages`, 4 cases).
+- **Resume only overrides keys Ultralytics accepts.** `train(resume=True, data, device, batch, imgsz, cache, val)`: every key is in
+  `check_resume`'s `allowed` set (L1039-1056: imgsz, batch, device, cache, val, ...) or its exempt set (model, data, mode, resume, pretrained).
+  So nothing is silently replaced by the checkpoint value, and `epochs` is not passed. The `allowed` set is pinned in the test and checked
+  against the installed `mldata/.venv-train` ultralytics source (`test_pinned_allowed_set_matches_installed_ultralytics`; it skips when no
+  install is present).
+- **A resume with both stages mid-training through `main(--resume --cache ram)`**: the detector resumes with `cache="ram"` and the
+  classifier with `cache=False`, so the override beats the `cache=ram` saved in the OOM'd checkpoint. With no `cache`/`val` kwargs, resume
+  defaults to `cache=False, val=True`.
+- Docs (`docs/ML.md` §5d), the notebook cell 1 comment and `test_notebook_dry_run.py` are consistent. ML-69 doesn't collide with any other ID
+  (`docs/QA.md`, `docs/qa/*`, no open PRs).
+
+Tests: `qa_fast_profile.py` went from 26 to 33 tests. The 3 tests that pinned the old both-stages cache behaviour were rewritten as ML-69
+assertions, and 7 tests were added for resume and the allowed set. All 33 pass, including the real-data test and the allowed-set check.
+Suites: `ml/yolo/tests` 68 passed; `ml/eval/tests` (CI) 224 passed. With `qa_*` included: 294 passed, 5 skipped and 1 failed. That failure is
+the same environmental `qa_pr73` pip test as above (`.venv-ml` has no pip).
+
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-69 | high | `ml/yolo/train.py` (`--cache` passed to the classifier stage) | `--cache ram` RAM-cached the classifier crops at full resolution: 9.4 GB, OOM-killed on Colab when the classifier stage started (found on the first real FAST run). | **fixed** (e4f967c), QA-verified |
+
+# 2026-10-11: ML QA for the compose `ml` service (`feat/ml-compose-service`: f22e2e5 + builder fix-up)
+
+## Verdict: **PASS (static + in-process); ML-70, ML-71 and ML-72 fixed and re-verified**
+Round 1 (f22e2e5) found ML-70 and ML-71. The builder's live build then found ML-72 (the image never built). Round 2 re-verified all
+three fixes. QA did not build or start any container. The live container check (build, `--profile ml up`, photo ->
+`/items/from-photo`) belongs to the builder, and it **must assert `source == "yolo"`**, not just a 200: every ML failure falls back
+to Gemini silently.
+
+## Tests
+`ml/eval/tests/qa_ml_compose.py` (new, 23 tests; run with `-o python_files="test_*.py qa_*.py"`):
+- `.venv-ml`: 22 passed, 1 skipped (the backend-client test needs `requests`); `.venv`: 23 passed.
+- CI-equivalent (`.venv-ml`): `ml/serve` 21, `ml/ocr` 89, `ml/yolo` 68 and `ml/eval/tests` 224 passed; `pipeline/tests/test_receipts.py`
+  (serve integration) 24 passed. With QA files collected: 310 passed, 5 skipped, 1 failed. The failure is
+  `qa_pr73_unrar_independent.py::test_real_pip_failure_shows_error_and_exits_nonzero`, caused by the environment (`.venv-ml` has no `pip`
+  module) and unrelated to this branch.
+
+## What was verified
+1. **Compose**. Checked three ways: text parse, PyYAML, and `docker compose -p qa_dummy config` in a temp project dir whose `.env` is
+   a copy of `.env.example` (config only, nothing built; the real `.env` is never read).
+   - Default `config --services` lists `api, db`; `--profile ml` adds `ml`.
+   - `ml` has no `ports`, `expose`, `network_mode` or `env_file`.
+   - The volume is long syntax: `type: bind`, source `${ML_MODELS_DIR:-../mldata/models/current}`, target `/models`,
+     `read_only: true`, `bind.create_host_path: false`. The normalised config keeps `create_host_path: false`.
+   - The env is exact, and `OCR_BACKEND` is the quoted string `"off"`. Empty `YOLO_DEVICE=` and `ML_MODELS_DIR=` fall back to the
+     defaults through `:-`.
+   - The build context and Dockerfile exist. `db` and `api` are unchanged and bind ports to `127.0.0.1` only. The Dockerfile's
+     `0.0.0.0:8000` bind is container-internal, and nothing is published.
+2. **Image**:
+   - Exactly one `FROM python:3.12-slim`, with no `pytorch/pytorch` base. `ARG TORCH_INDEX` defaults to the CPU wheel index.
+   - `torch==2.9.1 torchvision==0.24.1` install from `TORCH_INDEX` before `serve/requirements.txt`, which has no torch line, so pip
+     keeps the pinned build. These are the versions in `mldata/.venv-train` (py3.12, `+cpu`, with ultralytics 8.4.175).
+   - `libgl1` and `libglib2.0-0` are installed for OpenCV, and the apt lists are removed.
+   - An AST walk of every local import shows that all of them are copied (`yolo/infer.py` imports only `yolo.taxonomy`).
+   - A simulated `/app`, laid out exactly as the `COPY` lines, boots with the compose env: `/health` gives
+     `{"status":"ok","detector":"YoloDetector","ocr":"off"}`, `/ocr` gives 503, and `/detect` with missing weights gives 500
+     `inference_failed`.
+3. **OCR backend**:
+   - `off`, `Off`, ` off ` and `OFF` all give None. Unset or `FAKE` gives FakeOCR, and ` Glm` gives GlmOcr.
+   - `none`, `false`, `0`, `disabled`, `of` and the empty string raise `ValueError`.
+   - Importing `serve.wsgi` (what gunicorn does) with `OCR_BACKEND=none` exits non-zero, so the worker never starts.
+   - `/ocr` with OCR off returns 503 `{"error":{"code":"ocr_not_configured","message"}}` with no lines and no canned receipt, even for a
+     missing or junk image. `/health` reports ocr `"off"`, `/detect` is unaffected, and an explicitly injected engine still wins.
+4. **Backend**: the real `backend/app/services/ml.py`, wired to the ml/serve test client, raises `MLUnavailable` on the `/ocr` 503,
+   and `from_receipt` turns that into 502 `upstream_unavailable`. `from_photo` falls back to Gemini.
+5. **Docs/env**:
+   - `.env.example` keys are present and empty.
+   - SETUP.md and ML.md §6 give the profile command and state that plain `docker compose up -d` leaves `ml` off.
+   - ML.md documents `OCR_BACKEND=fake|glm|off` (any other value fails at startup), the 503, `YOLO_CONFIG_DIR`, the absolute
+     `ML_MODELS_DIR` outside the main checkout, and the `TORCH_INDEX` GPU build arg.
+
+## Bugs
+Highest ML-n before this review was ML-69 (open PR #88, `docs/qa/ml.md`); `docs/QA.md` and this file on origin/main end at ML-68.
+
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-70 | medium | `docker-compose.yml` `ml.volumes` | The short-syntax `${ML_MODELS_DIR:-../mldata/models/current}:/models:ro` default is relative to the compose file. It is right only in the main checkout: from a worktree it points at a missing folder (and the real `.env` has no `ML_MODELS_DIR`). Docker then creates an empty root-owned host folder, `/health` still says ok, every `/detect` returns 500, and photos silently fall back to Gemini. | **fixed**: long-syntax bind with `create_host_path: false` (a missing folder stops `up`); ML.md says to set an absolute `ML_MODELS_DIR` outside the main checkout. Pinned in `test_ml_block_profile_no_ports_ro_volume`, `test_compose_yaml_structure`, `test_compose_config_ml_resolved_with_empty_env_example_values` |
+| ML-71 | low | `ml/serve/backends.py` `ocr_from_env()` | Any value other than exactly `glm`/`off` (`Off`, ` off`, `none`) silently selected FakeOCR, so the canned receipt was served as real. | **fixed**: strip + lowercase, and `ValueError` for anything but `fake`/`glm`/`off`, which stops the gunicorn worker at import. Pinned in `test_ocr_backend_normalised_and_typos_rejected`, `test_bad_ocr_backend_stops_the_wsgi_app_import` |
+| ML-72 | high | `ml/serve/Dockerfile` (found by the builder's live build) | The image never built. The `pytorch/pytorch:2.5.1-cuda12.4` base ships Python 3.11, while `serve/requirements.txt` pins `numpy==2.5.4` (Requires-Python >=3.12), so pip failed with "No matching distribution found for numpy==2.5.4". | **fixed**: `FROM python:3.12-slim` + OpenCV libs + pinned `torch==2.9.1`/`torchvision==0.24.1` from `ARG TORCH_INDEX` (CPU default, cu128 for GPU); ML.md build command updated. Pinned statically in `test_dockerfile_base_python_can_install_pins`; the real build is the builder's live check |
+
+Other notes (no ID):
+- An empty `OCR_BACKEND=` now fails at startup (it used to mean fake). That is acceptable because it fails loudly, and compose never
+  sets it empty.
+- There is no warmup, so the first `/detect` loads both models on CPU inside the backend's 60 s timeout. On a timeout the backend
+  falls back to Gemini.
+- SETUP.md's "copy into `../mldata/models/current/`" is right for the main checkout only. ML.md carries the absolute-path caveat.
+
+## Files written
+`ml/eval/tests/qa_ml_compose.py` (new), this section.

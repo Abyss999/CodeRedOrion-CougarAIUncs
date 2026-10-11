@@ -89,7 +89,7 @@ def serialize_item(i, share=None, include_share=True) -> dict:
         "removed_at": iso(i.removed_at), "outcome": i.outcome, "waste_reason": i.waste_reason,
         "removed_after_expiry": i.removed_after_expiry,
         "freshness": i.freshness, "freshness_checked_at": iso(i.freshness_checked_at),
-        "confidence": i.confidence,
+        "confidence": i.confidence, "nutrition": i.nutrition,
     }
     if include_share:
         out["share"] = share
