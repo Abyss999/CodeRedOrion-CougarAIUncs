@@ -128,3 +128,10 @@ Real downloads (builder fetch running), real `unrar-cffi` decompression, real Me
 - Not changed: a missing API SHA is still accepted (Mendeley lists one per file today). **PL-5 stays open** (orchestrator).
 - Results: `qa_new_sources.py` 95 tests, 94 pass, 1 strict xfail (PL-5). Whole `pipeline/tests` (default collection): 163 passed. `qa_pipeline.py`: 19 passed, 2 skipped.
 - Verdict unchanged: PASS.
+
+## Update 2026-10-10: `food_spoilage_status` enabled
+`food_hvk7g` stays pending; `food_spoilage_status` is now enabled (yolo, Roboflow v1, CC BY 4.0, 12-entry class_map). Three QA tests assumed both were pending and were updated:
+- `test_sources_json_new_entries`: hvk7g pending with null version; spoilage_status not pending, version 1, every class_map entry resolves through `prepare_dataset.resolve` to a taxonomy class (apple, banana, bell_pepper, orange, potato, bitter_melon x fresh/spoiled).
+- Prepare skip tests: hvk7g is skipped even with a real root; an enabled yolo source with an empty root now exits with `no data.yaml` (new test); pending-only `main` does not crash.
+- Notebook Roboflow loop: excludes `food_hvk7g`, includes `food_spoilage_status`.
+Results: `qa_new_sources.py` 95 passed + 1 strict xfail (PL-5); whole `pipeline/tests` 163 passed. Verdict unchanged: PASS. PL-5 still open.

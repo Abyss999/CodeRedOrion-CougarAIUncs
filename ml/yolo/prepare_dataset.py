@@ -262,7 +262,10 @@ def yolo_line_to_box(p: list[str]) -> tuple[int, float, float, float, float] | N
 
 def iter_yolo(src: dict):
     root = Path(src["root"])
-    names = load_names(next(root.rglob("data.yaml")))
+    yaml_path = next(root.rglob("data.yaml"), None)
+    if yaml_path is None:
+        raise SystemExit(f"source {src.get('name')!r}: no data.yaml under {root} (download it, fix 'root', or mark it pending)")
+    names = load_names(yaml_path)
     for sd in SPLIT_DIRS:
         idir, ldir = root / sd / "images", root / sd / "labels"
         if not idir.is_dir():

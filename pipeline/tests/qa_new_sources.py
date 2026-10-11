@@ -563,10 +563,19 @@ def test_sources_json_new_entries():
         assert s["license"] == "CC BY 4.0" and s["url"].startswith("http") and s["kind"] == "folders" and not s.get("pending")
     assert by["meatscan"]["class_map"] == {"beef__fresh": "beef:fresh", "beef__spoiled": "beef:spoiled"}
     assert by["dafif"]["class_map"] == {"fish__fresh": "fish:fresh", "fish__spoiled": "fish:spoiled"}
-    for n in ("food_hvk7g", "food_spoilage_status"):
-        s = by[n]
-        assert s["pending"] is True and s["license"] and s["url"] and "class_map" in s
-        assert s["roboflow"]["version"] is None and s["roboflow"]["workspace"] and s["roboflow"]["project"]
+    h = by["food_hvk7g"]
+    assert h["pending"] is True and h["license"] and h["url"] and "class_map" in h
+    assert h["roboflow"]["version"] is None and h["roboflow"]["workspace"] and h["roboflow"]["project"]
+    f = by["food_spoilage_status"]
+    assert not f.get("pending") and f["kind"] == "yolo" and f["license"] == "CC BY 4.0" and f["url"].startswith("http")
+    assert f["roboflow"]["version"] == 1 and f["roboflow"]["workspace"] and f["roboflow"]["project"]
+    assert len(f["class_map"]) == 12
+    got = {PD.resolve(k, f["class_map"]) for k in f["class_map"]}
+    assert len(got) == 12
+    for name, fr in got:
+        assert name in T.CLASS_NAMES and fr in ("fresh", "spoiled"), (name, fr)
+    assert {fr for _, fr in got} == {"fresh", "spoiled"}
+    assert Counter(n for n, _ in got) == {n: 2 for n in ("apple", "banana", "bell_pepper", "orange", "potato", "bitter_melon")}
 
 
 def test_every_source_has_license_and_url():
@@ -574,23 +583,30 @@ def test_every_source_has_license_and_url():
         assert s.get("license") and s.get("url"), s["name"]
 
 
-def test_pending_sources_skipped_by_prepare(tmp_path):
+def test_pending_source_skipped_by_prepare(tmp_path):
     _noise(tmp_path / "rootdir" / "cls" / "a.jpg", 1)
-    srcs = [dict(s, root=str(tmp_path / "rootdir")) for s in _sources() if s["name"] in ("food_hvk7g", "food_spoilage_status")]
-    assert len(srcs) == 2
+    srcs = [dict(s, root=str(tmp_path / "rootdir")) for s in _sources() if s["name"] == "food_hvk7g"]
+    assert len(srcs) == 1
     skipped = Counter()
     assert PD.collect(srcs, skipped) == []
-    assert len(skipped) == 2
+    assert len(skipped) == 1
 
 
-def test_prepare_main_with_only_pending_sources_does_not_crash(tmp_path):
-    srcs = [s for s in _sources() if s["name"] in ("food_hvk7g", "food_spoilage_status")]
+def test_enabled_yolo_source_without_data_yaml_exits_clearly(tmp_path):
+    (tmp_path / "rootdir").mkdir()
+    srcs = [dict(s, root=str(tmp_path / "rootdir")) for s in _sources() if s["name"] == "food_spoilage_status"]
+    with pytest.raises(SystemExit, match="no data.yaml"):
+        PD.collect(srcs, Counter())
+
+
+def test_prepare_main_with_only_pending_source_does_not_crash(tmp_path):
+    srcs = [s for s in _sources() if s["name"] == "food_hvk7g"]
     sj = tmp_path / "s.json"
     sj.write_text(json.dumps({"sources": srcs}))
     try:
         PD.main(["--sources", str(sj), "--out", str(tmp_path / "o")])
     except SystemExit:
-        pass                               # an empty dataset may exit; it must not crash on the pending entries
+        pass                               # an empty dataset may exit; it must not crash on the pending entry
     except Exception as e:                 # noqa: BLE001
         pytest.fail(f"pending-only sources crashed prepare: {e!r}")
 
@@ -638,7 +654,7 @@ def test_notebook_roboflow_loop_skips_pending_and_unversioned():
     srcs = {s["name"]: s for s in _sources()}
     ns = {"srcs": srcs}
     exec(m.group(0), ns)                                                   # noqa: S102 (our own notebook text)
-    assert "food_hvk7g" not in ns["rf_names"] and "food_spoilage_status" not in ns["rf_names"]
+    assert "food_hvk7g" not in ns["rf_names"] and "food_spoilage_status" in ns["rf_names"]
     assert set(ns["rf_names"]) == {n for n, s in srcs.items() if s.get("roboflow") and s["roboflow"].get("version") and not s.get("pending")}
     assert ns["rf_names"], "the pinned Roboflow sources must still be downloaded"
     # the loop must not touch an entry whose version is missing even if "pending" were removed
