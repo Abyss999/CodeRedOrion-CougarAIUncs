@@ -35,6 +35,8 @@ struct FridgeView: View {
         }
         .motionAnimation(Theme.Motion.standard, value: model.banner?.id)
         .undoToast(item: $model.toast)
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear { model.showPendingToast() }  // a removal made from Item detail
         .task(id: model.storage) { await model.loadIfNeeded(model.storage) }
         .onReceive(NotificationCenter.default.publisher(for: .itemsDidChange)) { _ in Task { await model.refresh() } }
         // The Undo toast appears (and its countdown starts) only after the sheet has gone.
@@ -102,8 +104,13 @@ struct FridgeView: View {
     }
 
     private func row(_ item: Item, staggerIndex: Int) -> some View {
-        FridgeItemRow(item: item)
-            .staggeredAppearance(index: staggerIndex, controller: model.stagger)
+        NavigationLink {
+            ItemDetailView(item: item, onChange: { _ in Task { await model.refresh() } },
+                           onRemove: { item, choice in model.remove(item, choice: choice, reduceMotion: reduceMotion) })
+        } label: {
+            FridgeItemRow(item: item)
+        }
+        .staggeredAppearance(index: staggerIndex, controller: model.stagger)
             .listRowBackground(Theme.Colors.surface)
             .listRowSeparatorTint(Theme.Colors.hairline)
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {

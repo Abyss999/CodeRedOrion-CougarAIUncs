@@ -102,12 +102,14 @@ struct ItemShare: Codable, Hashable, Sendable {
     let claimedBy: Claimant?
     /// Who the open listing is offered to (owner only; absent from older backends).
     var audience: ListingAudience?
+    /// The owner's pickup spot (always visible to the owner). Backend `feat/friend-qr-pickup`.
+    var pickup: Pickup?
 
-    init(id: String, status: ShareStatus, claimedBy: Claimant?, audience: ListingAudience? = nil) {
-        self.id = id; self.status = status; self.claimedBy = claimedBy; self.audience = audience
+    init(id: String, status: ShareStatus, claimedBy: Claimant?, audience: ListingAudience? = nil, pickup: Pickup? = nil) {
+        self.id = id; self.status = status; self.claimedBy = claimedBy; self.audience = audience; self.pickup = pickup
     }
 
-    private enum CodingKeys: String, CodingKey { case id, status, claimedBy, audience }
+    private enum CodingKeys: String, CodingKey { case id, status, claimedBy, audience, pickup }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -115,6 +117,7 @@ struct ItemShare: Codable, Hashable, Sendable {
         status = try c.decode(ShareStatus.self, forKey: .status)
         claimedBy = try c.decodeIfPresent(Claimant.self, forKey: .claimedBy)
         audience = try c.decodeIfPresent(ListingAudience.self, forKey: .audience)
+        pickup = try c.decodeIfPresent(Pickup.self, forKey: .pickup)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -123,6 +126,7 @@ struct ItemShare: Codable, Hashable, Sendable {
         try c.encode(status, forKey: .status)
         try c.encodeIfPresent(claimedBy, forKey: .claimedBy)
         try c.encodeIfPresent(audience, forKey: .audience)
+        try c.encodeIfPresent(pickup, forKey: .pickup)
     }
 }
 
