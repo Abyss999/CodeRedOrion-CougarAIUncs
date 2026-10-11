@@ -124,3 +124,38 @@ def test_sessions_split_giant_union_falls_back_to_session_units(tmp_path):
     assert sg["classes"]["banana"]["components"] == 4 and sg["union_specimen_and_session"]["largest_frac"] == 1.0
     assert sg["unit"].startswith("timestamped -> capture session") and sg["final_units"] == 2
     assert {f.name.split(".rf.")[0][:5] for f in (dirs["staged"] / "s").rglob("*.jpg")} == {"sess_"}
+
+
+def test_round_robin_spreads_over_units_and_is_deterministic():
+    items = [(f"a{i:03d}", "big") for i in range(100)] + [(f"b{i}", "s1") for i in range(5)] + [(f"c{i}", "s2") for i in range(5)]
+    pick = specimens.round_robin(items, 12)
+    assert len(pick) == 12 and pick == specimens.round_robin(items, 12)
+    assert sum(p.startswith("b") for p in pick) == 4 and sum(p.startswith("c") for p in pick) == 4   # 4 rounds x 3 units
+    assert specimens.round_robin(items[:5], 12) == [s for s, _ in items[:5]]
+
+
+def test_exclude_source_augs_and_cap(tmp_path):
+    d = tmp_path / "drop" / "Fresh Banana(1-4)"
+    d.mkdir(parents=True)
+    for i in range(6):
+        _pic(40 + i).save(d / f"IMG_20251102_1{i}0000000.jpg", quality=95)
+        _pic(40 + i).transpose(Image.FLIP_LEFT_RIGHT).save(d / f"aug_0_IMG_20251102_1{i}0000000.jpg", quality=95)
+    dirs = config.data_dirs(tmp_path / "data")
+    led = Ledger(dirs["staged"] / "l.sqlite")
+    rep = datasets.ingest(tmp_path / "drop", "s", "agrifreshnet", dirs["staged"], led, specimen_groups=True,
+                          exclude_source_augs=True, max_per_cell=4)
+    led.close()
+    assert rep["curation"]["source_augs_excluded"] == 6
+    assert rep["curation"]["cells"]["banana__fresh"] == {"before": 6, "after": 4}
+    assert rep["staged"] == 4 and rep["capped_max_per_cell"] == 2
+    files = list((dirs["staged"] / "s").rglob("*.rf.*.jpg"))
+    assert len(files) == 4 and not any("aug_" in f.name for f in files)
+
+
+def test_cli_flags(tmp_path, capsys):
+    from pipeline import cli
+    d = _drop(tmp_path, 1)
+    cli.main(["--data-root", str(tmp_path / "data"), "ingest-dataset", "--dir", str(d), "--name", "s",
+              "--adapter", "agrifreshnet", "--specimen-groups", "--exclude-source-augs", "--max-per-cell", "1"])
+    out = capsys.readouterr().out
+    assert '"specimen_grouping"' in out and '"source_augs_excluded": 1' in out and '"max_per_cell": 1' in out

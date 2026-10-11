@@ -137,8 +137,15 @@ def check(root: Path, T=6, cache: Path | None = None, sources=None, comp_t=10, c
         o["criterion_variant_phash_le_1pct_heldout"] = bool(o.get("heldout_vs_trainval", {}).get("variant_pct", 0.0) <= 1.0)
         # specimen components (union-find, variant-aware) within source+class key
         if class_regex:
-            cre = re.compile(class_regex)
-            key = [(cre.search(r[0]).group(1) if cre.search(r[0]) else "?") for r in R]
+            if class_regex == "labels":      # class of the (single) object from the YOLO label file
+                key = []
+                for r in R:
+                    lf = root / "labels" / r[1] / (Path(r[0]).stem + ".txt")
+                    ids = sorted({ln.split()[0] for ln in lf.read_text().splitlines() if ln.strip()}) if lf.exists() else []
+                    key.append(",".join(ids) or "?")
+            else:
+                cre = re.compile(class_regex)
+                key = [(cre.search(r[0]).group(1) if cre.search(r[0]) else "?") for r in R]
             parent = list(range(n))
             def f(x):
                 while parent[x] != x:
@@ -168,7 +175,7 @@ if __name__ == "__main__":
     ap.add_argument("--cache")
     ap.add_argument("-T", type=int, default=6)
     ap.add_argument("--component-t", type=int, default=10)
-    ap.add_argument("--class-regex", help="regex with 1 group on the file name giving the class key (enables component check)")
+    ap.add_argument("--class-regex", help="regex with 1 group on the file name giving the class key, or the word `labels` to use the YOLO label class (enables component check)")
     ap.add_argument("--sources", nargs="*")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args()

@@ -249,3 +249,31 @@ def assign(items: list[tuple[Path, str, str, str]], cache: dict | None = None) -
     report["final_largest"] = max(sizes.values(), default=0)
     report["final_largest_frac"] = round(max(sizes.values(), default=0) / n, 4) if n else 0.0
     return groups, report
+
+
+def round_robin(items: list[tuple[str, str]], cap: int, seed: int = 42) -> list[str]:
+    """items: (sha1, unit). Pick `cap` shas, one per unit per round, units and members in a seeded-hash order, so
+    the choice is reproducible and spread over all units (never 'the first N')."""
+    if len(items) <= cap:
+        return [sha for sha, _ in items]
+    h = lambda t: hashlib.sha1(f"{seed}:{t}".encode()).hexdigest()  # noqa: E731
+    units: dict[str, list[str]] = defaultdict(list)
+    for sha, u in items:
+        units[u].append(sha)
+    order = sorted(units, key=h)
+    for u in order:
+        units[u].sort(key=h)
+    out: list[str] = []
+    r = 0
+    while len(out) < cap:
+        progressed = False
+        for u in order:
+            if r < len(units[u]):
+                out.append(units[u][r])
+                progressed = True
+                if len(out) == cap:
+                    break
+        if not progressed:
+            break
+        r += 1
+    return out

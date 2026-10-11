@@ -22,16 +22,21 @@ def _p(x):
     print(json.dumps(x, indent=2, default=str))
 
 
+def _curation(a) -> dict:
+    return dict(specimen_groups=True if a.specimen_groups else None, exclude_source_augs=a.exclude_source_augs,
+                max_per_cell=a.max_per_cell)
+
+
 def _ingest(a, dirs):
     from .ingestion import datasets
     if bool(a.zip) == bool(a.dir):
         sys.exit("pass exactly one of --zip or --dir")
     if a.zip:
-        return datasets.ingest_zip(Path(a.zip), a.name, a.adapter, dirs, keep_raw=not a.drop_raw)
+        return datasets.ingest_zip(Path(a.zip), a.name, a.adapter, dirs, keep_raw=not a.drop_raw, **_curation(a))
     from .ingestion.ledger import Ledger
     led = Ledger(dirs["staged"] / "ledger.sqlite")
     try:
-        return datasets.ingest(Path(a.dir), a.name, a.adapter, dirs["staged"], led)
+        return datasets.ingest(Path(a.dir), a.name, a.adapter, dirs["staged"], led, **_curation(a))
     finally:
         led.close()
 
@@ -59,6 +64,11 @@ def main(argv=None):
     s.add_argument("--zip"); s.add_argument("--dir"); s.add_argument("--name", required=True)
     s.add_argument("--adapter", default="folders", choices=["agrifreshnet", "folders"])
     s.add_argument("--drop-raw", action="store_true", help="delete the extracted copy after staging")
+    s.add_argument("--specimen-groups", action="store_true",
+                   help="group by specimen (cross-stage pHash) / capture session in the staged names (agrifreshnet); same as PIPELINE_SPECIMEN_GROUPS=1")
+    s.add_argument("--exclude-source-augs", action="store_true", help="skip the dataset's own aug_<n>_<original> files")
+    s.add_argument("--max-per-cell", type=int, default=None,
+                   help="keep at most N images per class x freshness, round-robin over split units")
 
     s = sub.add_parser("prepare", help="merge staged datasets with ml/yolo/prepare_dataset.py")
     s.add_argument("--out"); s.add_argument("--extra-sources", action="append", default=[])

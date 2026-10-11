@@ -93,7 +93,11 @@ def specimen_groups_enabled() -> bool:
 
 
 def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: Ledger,
-           specimen_groups: bool | None = None) -> dict:
+           specimen_groups: bool | None = None, exclude_source_augs: bool = False,
+           max_per_cell: int | None = None) -> dict:
+    """exclude_source_augs: skip the dataset's own `aug_<n>_<original>` files (our pipeline does the augmenting).
+    max_per_cell: keep at most N images per class x freshness, picked round-robin over split units (specimen /
+    session groups) with a deterministic hash order, so the kept set spreads over the whole drop."""
     ad = ADAPTERS[adapter]
     if specimen_groups is None:
         specimen_groups = specimen_groups_enabled()
@@ -121,6 +125,11 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
         plan += [(p, sha1_file(p), parsed, canonical, cls_dir) for p in files]
         for p in files:
             src_cls[p] = f"{canonical}__{parsed.get('source_freshness') or parsed['freshness'] or 'fresh'}"
+    n_aug = 0
+    if exclude_source_augs:
+        kept = [x for x in plan if not generic._AUG.match(x[0].stem)]
+        n_aug = len(plan) - len(kept)
+        plan = kept
     classes_of: dict[str, set] = {}
     for p, sha, _, _, cls_dir in plan:  # conflicts are judged on the source labels, so a
         classes_of.setdefault(sha, set()).add(src_cls[p])  # Fresh/Semi-fresh pair stays a conflict
@@ -136,6 +145,26 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
                 seen_sha.add(sha)
                 items.append((p, sha, canonical, p.parent.name))
         spec_groups, spec_report = specimens.assign(items)
+    keep: set[str] | None = None
+    curation: dict = {}
+    if exclude_source_augs:
+        curation["source_augs_excluded"] = n_aug
+    if max_per_cell:
+        cand: dict[str, list] = {}
+        seen_c: set[str] = set()
+        for p, sha, parsed, canonical, cls_dir in plan:
+            if sha not in conflicts and sha not in seen_c:
+                seen_c.add(sha)
+                grp = spec_groups.get(sha) or ad.group_of(cls_dir, p.stem)[0]
+                cand.setdefault(cls_dir, []).append((sha, grp))
+        keep = set()
+        cells = {}
+        for cell, lst in sorted(cand.items()):
+            sel = specimens.round_robin(lst, max_per_cell)
+            keep |= set(sel)
+            cells[cell] = {"before": len(lst), "after": len(sel)}
+        curation.update(max_per_cell=max_per_cell, cells=cells,
+                        before=sum(c["before"] for c in cells.values()), after=sum(c["after"] for c in cells.values()))
     done: set[str] = set()
     cross_conflicts: list[str] = []  # same bytes as an image staged by an EARLIER run, under another class
     with open(mpath, "a", newline="") as mf:
@@ -147,6 +176,9 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
             class_map[cls_dir] = f"{canonical}:{fr}"
             if sha in conflicts:  # same pixels labelled two ways: trust neither
                 counts["label_conflicts_dropped"] += 1
+                continue
+            if keep is not None and sha not in keep:
+                counts["capped_max_per_cell"] += 1
                 continue
             if sha in done:
                 counts["duplicates_in_drop"] += 1
@@ -184,13 +216,15 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
             if parsed.get("semi_mapped_to_fresh"):
                 counts["semi_fresh_mapped_to_fresh"] += 1
     source = {"name": name, "kind": "folders", "root": str(out.resolve()), "license": ad.LICENCE,
-              "url": ad.URL, "version": getattr(ad, "VERSION", ""), "class_map": dict(sorted(class_map.items()))}
+              "url": ad.URL, "version": getattr(ad, "VERSION", ""), **({"curation": curation} if curation else {}), "class_map": dict(sorted(class_map.items()))}
     (out / "source.json").write_text(json.dumps(source, indent=2) + "\n")
     report = {"dataset": name, "adapter": adapter, **dict(counts), "unmapped_dirs": dict(unmapped),
               "bad_images": bad, "label_conflict_files": conflict_files,
               "label_conflicts_cross_drop_files": cross_conflicts, "classes": len(class_map)}
     if spec_report:
         report["specimen_grouping"] = spec_report
+    if curation:
+        report["curation"] = curation
     if counts.get("semi_fresh_mapped_to_fresh"):
         report["notes"] = ["taxonomy has no semi_fresh class: source 'semi fresh' images were staged as "
                            "'fresh' (see semi_fresh_mapped_to_fresh and the manifest source_freshness column)"]
@@ -199,7 +233,8 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
 
 
 def ingest_zip(zip_path: Path, name: str, adapter: str, dirs: dict[str, Path], keep_raw: bool = True,
-               specimen_groups: bool | None = None) -> dict:
+               specimen_groups: bool | None = None, exclude_source_augs: bool = False,
+               max_per_cell: int | None = None) -> dict:
     raw = dirs["raw"] / name
     marker = raw / ".extracted"
     stamp = f"{zip_path.resolve()}|{zip_path.stat().st_size}|{int(zip_path.stat().st_mtime)}"
@@ -210,7 +245,7 @@ def ingest_zip(zip_path: Path, name: str, adapter: str, dirs: dict[str, Path], k
         marker.write_text(stamp)
     ledger = Ledger(dirs["staged"] / "ledger.sqlite")
     try:
-        rep = ingest(raw, name, adapter, dirs["staged"], ledger, specimen_groups)
+        rep = ingest(raw, name, adapter, dirs["staged"], ledger, specimen_groups, exclude_source_augs, max_per_cell)
     finally:
         ledger.close()
     if not keep_raw:
