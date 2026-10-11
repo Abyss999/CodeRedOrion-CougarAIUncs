@@ -7,9 +7,10 @@ on:
     paths: ["ml/**"]
 
 concurrency:
-  # One run per PR/branch: a new push cancels the stale run instead of queueing behind it.
+  # PRs: a new push cancels the stale run. main: runs queue and are never cancelled mid-run, so the full
+  # UI suite on main always completes.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
