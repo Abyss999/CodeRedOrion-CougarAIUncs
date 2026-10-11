@@ -158,6 +158,8 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
   - Design QA gate (2026-10-11): READY WITH FIXES, fixes applied in `design/qa-gate-fixes`. `mkdark.py` now fails on any unmapped light token. iOS notes: add `onForestChip` to Theme.swift; one `DetectedItemRow` for all add-review lists; MyRequests "Done" waits on `GET /requests?mine=1` (G1); receipt review stays mocked until OCR lands; the photo overlay draws only when `bbox` is present.
   - #62 data: keep the new sources with named risks (ML-51/52/55, ML-62). PL-5 won't fix (beef train-only). In `stratification_check`, cross-split pHash pairs are a warning (leakage_check's ≤ 1% is the gate).
   - A teammate's branch takes `main` merged in, never a rebase or force-push.
+  - iOS recipient rule (#78): send `recipient_id` only on an explicit pick; omit for the claimer default; `null` only for "Someone not on BiteDown"; batch "Shared them" omits it.
+  - Round 3 (owner): the Home profile button becomes a settings gear; the tip stays observation-only; Social keeps "+" only; request notes keep 280 chars and the board clamps to 4 lines; chat and a waste-tracking metric are out of scope.
 - **Open owner items:**
   - the Google OAuth client
   - nothing else blocking
