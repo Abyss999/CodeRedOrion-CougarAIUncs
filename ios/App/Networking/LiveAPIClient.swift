@@ -3,8 +3,8 @@ import Foundation
 /// URLSession-backed client. The base URL is read from `BaseURLProvider` on every request, so the
 /// Debug settings sheet can repoint it (e.g. at a new Cloudflare tunnel) without a rebuild.
 final class LiveAPIClient: APIClient {
-    private let baseURL: BaseURLProvider
-    private let session: URLSession
+    let baseURL: BaseURLProvider
+    let session: URLSession
     let auth: AuthStore
 
     init(baseURL: BaseURLProvider = BaseURLProvider(),

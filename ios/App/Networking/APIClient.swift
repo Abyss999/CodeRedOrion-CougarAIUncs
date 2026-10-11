@@ -74,6 +74,11 @@ protocol APIClient: Sendable {
     func declineFriend(userId: String) async throws
     /// `DELETE /friends/:user_id` to unfriend, or cancel a request you sent.
     func removeFriend(userId: String) async throws
+    /// `GET /friends/code`: your shareable friend code (10 minutes). The QR encodes `url`.
+    func friendCode() async throws -> FriendCodeInfo
+    /// `POST /friends {code}` (a scanned friend QR). 201 = instant friends; 200 = already friends
+    /// (`alreadyFriends`); 400 `invalid_code` expired / forged / malformed.
+    func addFriend(code: String) async throws -> FriendAddResult
 
     // MARK: Groups
     func listGroups() async throws -> [SharingGroup]
