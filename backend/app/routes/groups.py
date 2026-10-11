@@ -13,7 +13,7 @@ bp = Blueprint("groups", __name__, url_prefix="/groups")
 
 def _group(group, role, member_count):
     return {"id": str(group.id), "name": group.name, "role": role, "member_count": member_count,
-            "invite_code": group.invite_code, "created_by": str(group.created_by),
+            "invite_code": group.invite_code, "created_by": str(group.created_by) if group.created_by else None,
             "created_at": iso(group.created_at)}
 
 
@@ -106,4 +106,4 @@ def pantry(group_id):
     rows = (db.session.query(Item, User.display_name).join(User, User.id == Item.owner_id)
             .filter(Item.group_id == gid, Item.removed_at.is_(None))
             .order_by(Item.predicted_expiry, Item.added_at).all())
-    return jsonify(items=[serialize_item(i) | {"added_by": name} for i, name in rows])
+    return jsonify(items=[serialize_item(i, include_share=False) | {"added_by": name} for i, name in rows])

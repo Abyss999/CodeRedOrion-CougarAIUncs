@@ -15,7 +15,10 @@ FOOD_GROUPS = ("protein", "veggies", "fruit", "dairy", "grains", "pantry", "left
                "frozen", "other")
 STORAGES = ("fridge", "pantry", "freezer")
 SOURCES = ("photo", "single_photo", "text", "barcode", "receipt", "manual")
-EXPIRY_SOURCES = ("default", "gemini", "user")
+EXPIRY_SOURCES = ("default", "gemini", "ml", "user")
+FRESHNESS_VALUES = ("fresh", "semi_fresh", "spoiled")
+# food_events.user_id of events whose user deleted their account (no personal data, aggregates survive).
+TOMBSTONE_USER_ID = uuid.UUID(int=0)
 OUTCOMES = ("used", "donated", "thrown_out")
 WASTE_REASONS = ("expired", "didnt_like", "forgot", "other")
 
@@ -59,8 +62,17 @@ class Item(db.Model):
     outcome = db.Column(db.Text, nullable=True)
     waste_reason = db.Column(db.Text, nullable=True)
     removed_after_expiry = db.Column(db.Boolean, nullable=True)
+    freshness = db.Column(db.Text, nullable=True)
+    freshness_checked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    confidence = db.Column(db.Float, nullable=True)
 
     __table_args__ = (
+        CheckConstraint("freshness IS NULL OR freshness IN ('fresh','semi_fresh','spoiled')",
+                        name="ck_items_freshness"),
+        CheckConstraint("(freshness IS NULL) = (freshness_checked_at IS NULL)",
+                        name="ck_items_freshness_checked_iff_freshness"),
+        CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+                        name="ck_items_confidence"),
         CheckConstraint("(removed_at IS NULL) = (outcome IS NULL)", name="ck_items_removed_iff_outcome"),
         CheckConstraint("(outcome = 'thrown_out') = (waste_reason IS NOT NULL)",
                         name="ck_items_reason_iff_thrown_out"),
@@ -132,7 +144,7 @@ class Group(db.Model):
     __tablename__ = "groups"
     id = _uuid_pk()
     name = db.Column(db.Text, nullable=False)
-    created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     invite_code = db.Column(db.Text, nullable=False, unique=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
 

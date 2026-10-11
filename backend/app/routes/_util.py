@@ -1,3 +1,4 @@
+import math
 import uuid
 from datetime import date, datetime
 
@@ -45,6 +46,8 @@ def parse_number(value, field, *, positive=False, allow_none=False):
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise validation_error(f"{field} must be a number.")
+    if isinstance(value, float) and not math.isfinite(value):  # bare NaN / Infinity parse as floats
+        raise validation_error(f"{field} must be a finite number.")
     if value < 0 or (positive and value == 0):
         raise validation_error(f"{field} must be {'positive' if positive else 'non-negative'}.")
     return value
@@ -58,8 +61,10 @@ def f(num):
     return float(num) if num is not None else None
 
 
-def serialize_item(i) -> dict:
-    return {
+def serialize_item(i, share=None, include_share=True) -> dict:
+    """`share` is the owner-view listing summary (see `share_summaries`); `include_share=False`
+    omits the key (group pantry / other users' views)."""
+    out = {
         "id": str(i.id), "owner_id": str(i.owner_id),
         "group_id": str(i.group_id) if i.group_id else None,
         "name": i.name, "category": i.category,
@@ -69,7 +74,33 @@ def serialize_item(i) -> dict:
         "predicted_expiry": i.predicted_expiry.isoformat(), "expiry_source": i.expiry_source,
         "removed_at": iso(i.removed_at), "outcome": i.outcome, "waste_reason": i.waste_reason,
         "removed_after_expiry": i.removed_after_expiry,
+        "freshness": i.freshness, "freshness_checked_at": iso(i.freshness_checked_at),
+        "confidence": i.confidence,
     }
+    if include_share:
+        out["share"] = share
+    return out
+
+
+def share_summaries(item_ids) -> dict:
+    """{item_id: {id, status, claimed_by: {id, name}|None}} for the most recent NOT-cancelled listing of
+    each item, in ONE query (no N+1). Items without such a listing are absent from the dict."""
+    from ..extensions import db
+    from ..models import ShareListing, User
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    rows = (db.session.query(ShareListing, User.id, User.display_name)
+            .outerjoin(User, User.id == ShareListing.claimed_by)
+            .filter(ShareListing.item_id.in_(ids), ShareListing.status != "cancelled")
+            .order_by(ShareListing.created_at.desc(), ShareListing.id).all())
+    out = {}
+    for l, uid, name in rows:
+        if l.item_id in out:
+            continue
+        out[l.item_id] = {"id": str(l.id), "status": l.status,
+                          "claimed_by": {"id": str(uid), "name": name} if uid else None}
+    return out
 
 
 def serialize_listing(l) -> dict:

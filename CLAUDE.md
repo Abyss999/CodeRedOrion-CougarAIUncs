@@ -60,6 +60,14 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 - Work ported from someone else carries `Co-authored-by: <their GitHub noreply email>` on every
   ported commit.
 - Never delete a branch that an open PR targets.
+- Never quote a PR number before `gh pr create` returns it, because other sessions open PRs in the gap.
+- Merge with merge commits. Before merging, rebase onto `main` and confirm CI actually ran and passed. A workflow skipped by its path filters is acceptable only for docs- or script-only PRs.
+- The orchestrator records every ruling (contract, data or design) in `docs/QA.md` or `docs/DECISIONS.md` in the PR that applies it.
+- QA bug IDs are global per area (`BE-n`, `ML-n`, `IOS-n`, `PL-n`): before numbering, check the highest ID in
+  `docs/QA.md` **and** in open PRs' `docs/qa/*.md`, because parallel branches have collided.
+- Big data, venvs and model runs live outside git (`../mldata/`), never in the repo or a worktree.
+- Long-running agents wait for each other's heavy runs (xcodebuild vs the backend suite) instead of
+  running them in parallel; give the waiting agent a time limit and a fallback.
 
 ## Merge gate
 - A PR merges only with a QA pass recorded in `docs/qa/<area>.md`, then folded into
@@ -84,7 +92,9 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 
 ## Design and UI
 - The design canvas (https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx) and `docs/design/` are
-  the source of truth. iOS builds only approved screens.
+  the source of truth. iOS builds only approved screens. Only the orchestrator publishes to the
+  canvas. Read an artboard from the canvas before editing it, publish only the files you changed,
+  and mirror every canvas change into `docs/design/screens/` in the same PR.
 - Translate designs into native SwiftUI. Every colour, size and font comes from
   `ios/App/Theme.swift`, which mirrors `DESIGN_SYSTEM.md`. No ad-hoc values in views.
 - Use native components where the design system says so: the glass `TabView` (Add is a tab that
@@ -94,6 +104,8 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 - Motion follows [`docs/design/MOTION.md`](docs/design/MOTION.md), using the `Theme.Motion` tokens:
   - Never delay an action for an animation. The tap takes effect immediately.
   - Never animate on every data refresh. Staggers run on first load or a new result only.
+  - The whole sequence, stagger delays included, finishes within 0.5 s.
+  - A composite (for example a stacked bar) animates as one unit. Labels appear after the shape they describe.
   - No decorative motion: no confetti, bouncing, parallax or idle loops. Only loading and listening may loop.
   - Pair haptics with key moments only: add, remove, claim, success and error.
   - **Respect Reduce Motion.** Movement, scaling, shakes and shimmer become fades. Counters show their final value. Haptics and colour or state changes stay.
