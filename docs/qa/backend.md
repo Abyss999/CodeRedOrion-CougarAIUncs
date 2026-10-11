@@ -680,3 +680,49 @@ Contract: docs/API.md "Request board", "Groups" (leave), "Auth" (Google rule 2b 
 **Full suite:** run by the coordinator on HEAD `2c1d361` (main merged into `3c2b245`), clean tree. `pytest -q --cov=app` gave 1533 passed and 1 skipped in 211 s, with total coverage 98%.
 
 **Verdict:** PASS.
+
+## feat/donation-recipient (backend QA)
+Contract: docs/API.md `POST /items/:id/remove` ("`recipient_id` has three cases"), `POST /items/remove-batch`, `POST /items/:id/restore`, Share. Orchestrator rulings applied: self-recipient is 400 `validation_error` "You can't give food to yourself."; an unknown id is 404 `not_found` "Recipient not found."; `recipient_id` (even null) with used/thrown_out is 400. Check order: single is body 400, item 404/403, 409 `already_removed`, then recipient 404. Batch is body 400, items 404, 409, then recipient 404 (once per batch).
+
+**New file** `tests/test_donation_recipient.py`. Its world has owner a; friends f and f2; pending friends p (a requested) and p2 (p2 requested a); stranger s; group mate m of group G; former member x of G; and n, who is in another group only.
+- **Three cases x listing state** (none / open / claimed by a friend / claimed in a group, with recipient omitted, null, other friend, group mate, claimer):
+  - listing `fulfilled`, `fulfilled_at` set, `recipient_id` as specified, `claimed_by` never touched
+  - exactly one `remove` event, with `user_id` the owner
+  - impact: saved +1 in week, month and all, wasted unchanged, and the same saved figures as a control user's plain donation
+  - restore returns the listing row byte-for-byte to its prior state, with impact and events exactly as before
+- **Never to the wrong friend:** with null on a claimed listing (friend and group), the claimer id appears in no `food_events` column. It appears in no `recipient_id` in the DB or in the response share block, the claimer's pantry and impact are unchanged, and an omitted twin does credit the claimer.
+- **Boundaries (single):** each of p, p2, s, x, n gives 404 `not_found` for every listing state, with nothing written, impact unchanged and the item still active. Reachable ones (f, f2, m) give 200. Unknown uuid and stranger give the same message "Recipient not found.". Malformed values give 400 (`"not-a-uuid"`, `""`, 123, true, `[]`, `{}`, a short uuid). Self gives 400 with the exact message, with nothing written. Also covered: unfriend and leave-group make a recipient 404 afterwards, and pending then accepted makes one OK.
+- **Wrong outcome:** `recipient_id` with used or thrown_out is 400 for friend, stranger, unknown, self, malformed and null, with nothing written.
+- **Check order:**
+  - 409 `already_removed` beats a bad recipient (friend, stranger, pending, unknown, null)
+  - self on an already-removed item is 400 (body validation runs first)
+  - a foreign item with any recipient gives the same 403 or 404 as without, so there is no reachability probe
+  - a cancelled listing is untouched
+- **Group-pantry item removed by a non-owner member:** the recipient is judged against the remover. The owner's friend is 404, the remover as recipient is 400, and the owner (a group mate of the remover) is 200.
+- **Batch:**
+  - omitted gives a per-item claimer (friend, group mate, unclaimed, no listing), and mixed claimers (f, f2, m, none) each get their own, with restore-batch reopening them all
+  - null gives every recipient null with claims kept, and restore-batch restores the exact prior state
+  - id applies to every listing
+  - bad recipients (p, p2, s, x, n, unknown) are 404 for the whole batch, malformed is 400, self is 400, and used with a recipient is 400; nothing is written in any of them
+  - a foreign or unknown item beats the recipient (404), and 409 beats the recipient
+  - group-pantry batch is judged against the caller
+- **Query count:** `remove-batch` at 2, 20 and 100 items for omitted, null, friend and mate, plus a bound of at most the no-recipient baseline +3.
+- **Rollback:** a forced failure on `INSERT INTO food_events`, `UPDATE share_listings` and `UPDATE items`, for single (recipient friend and null) and batch. It gives a 500 `internal_error`, with items, events, listings and impact unchanged, and the retry succeeds.
+
+**Edited existing tests for the new rules** (the old ones allowed any existing user as recipient, and unknown was 400):
+- `test_removal.py`: `test_donated_fulfils_open_listing` and `test_donated_fulfils_listing_created_via_api` now befriend the recipient first. `test_donated_recipient_must_exist` expects 404.
+- `test_insights_wave2_batch.py::test_remove_batch_validation`: the old `donated + recipient_id=<item id>` case now is `used + recipient_id` and `donated + "not-a-uuid"`, both 400.
+- `test_social.py::test_group_item_removal_donated_with_recipient`: bob (alice's friend, not erin's) is 404, and alice (erin's group mate) is 200.
+
+**Contract/spec gaps:** none open. Self-recipient was unspecified when I started, and the orchestrator ruled it (tested as a normal case).
+
+**Bugs**
+- **BE-17 (low, Backend) - found and fixed in this PR:** `remove-batch` (donated, recipient **omitted**) issues one `UPDATE share_listings` per claimed listing, so the query count grows with the number of claimed listings. A 2 / 20 / 100 item batch with about half shared and a third of those claimed took 8 / 13-14 / 26-29 statements, against API.md "Constant query count regardless of batch size". Null, friend-id and mate-id are constant, because the same value batches into one UPDATE; only per-claimer recipients do not. The behaviour pre-dates this PR (the old default was also claimer-per-row) but is now documented as constant. Test: `test_batch_query_count_constant_2_vs_20[omitted]` failed before the fix. **Fix:** `remove-batch` now runs one bulk UPDATE that sets `recipient_id` to `claimed_by` for the omitted default. The test now passes. Highest ID checked: BE-16 in docs/QA.md and backend.md; the only open PR (#64, iOS) has none.
+
+**Targeted runs:** `test_donation_recipient.py` gave 107 passed, 2 skipped (id_claimer with no claimer) and 1 failed (BE-17, `[omitted]`). `test_removal`, `test_insights_wave2_batch`, `test_wave2_restore`, `test_wave2_item_share` and `test_social` together passed (the only failures in that run were the 2 in the new file: BE-17, plus a wrong test expectation I fixed afterwards).
+
+**Targeted re-run after the BE-17 fix (coordinator):** 186 passed, 2 skipped (by design: "no claimer").
+
+**Full suite:** run by the orchestrator on HEAD `8f3a17c` (main merged in): `pytest -q --cov=app` gave 1642 passed and 3 skipped in 305 s, with total coverage 98%.
+
+**Verdict: PASS (final).** No open bugs; BE-17 was found and fixed in this PR.

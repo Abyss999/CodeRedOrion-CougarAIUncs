@@ -261,6 +261,30 @@ def patch_item(item_id):
     return jsonify(item=_owner_view(item))
 
 
+def _recipient_arg(body, outcome):
+    """Parse the optional `recipient_id` of a donated removal -> (mode, uuid | None).
+    mode "default": key omitted (an open listing goes to its claimer, else nobody);
+    "none": explicit null (someone not on BiteDown: the listing is fulfilled with no recipient,
+    claimed or not); "user": a user id (checked later by `_check_recipient`)."""
+    if "recipient_id" not in body:
+        return "default", None
+    if outcome != "donated":
+        raise validation_error("recipient_id is only allowed when outcome is donated.")
+    if body["recipient_id"] is None:
+        return "none", None
+    rid = parse_uuid(body["recipient_id"])
+    if rid == g.user.id:
+        raise validation_error("You can't give food to yourself.")
+    return "user", rid
+
+
+def _check_recipient(mode, recipient_id):
+    """A user recipient must be an accepted friend of the caller or share a group with them;
+    anyone else (or an unknown id) is a 404, so existence does not leak."""
+    if mode == "user" and recipient_id not in social.reachable_users(g.user.id, [recipient_id]):
+        raise not_found("Recipient not found.")
+
+
 @bp.post("/<item_id>/remove")
 @require_auth
 def remove_item(item_id):
@@ -275,17 +299,12 @@ def remove_item(item_id):
                 f"waste_reason is required for thrown_out and must be one of {', '.join(WASTE_REASONS)}.")
     elif reason is not None:
         raise validation_error("waste_reason is only allowed when outcome is thrown_out.")
-    recipient_id = None
-    if body.get("recipient_id") is not None:
-        if outcome != "donated":
-            raise validation_error("recipient_id is only allowed when outcome is donated.")
-        recipient_id = parse_uuid(body["recipient_id"])
-        if db.session.get(User, recipient_id) is None:
-            raise validation_error("recipient_id does not match a user.")
+    mode, recipient_id = _recipient_arg(body, outcome)
 
     item = _removable(item_id)  # row lock: concurrent removes serialise, one wins
     if item.removed_at is not None:
         raise ApiError(409, "already_removed", "Item has already been removed.")
+    _check_recipient(mode, recipient_id)  # 404 before anything is written
 
     now = datetime.now(timezone.utc)
     item.removed_at, item.outcome, item.waste_reason = now, outcome, reason
@@ -299,9 +318,8 @@ def remove_item(item_id):
     if outcome == "donated":
         listing = ShareListing.query.filter_by(item_id=item.id, status="open").first()
         if listing:
-            if recipient_id is None:
-                recipient_id = listing.claimed_by
-            listing.status, listing.fulfilled_at, listing.recipient_id = "fulfilled", now, recipient_id
+            listing.status, listing.fulfilled_at = "fulfilled", now
+            listing.recipient_id = listing.claimed_by if mode == "default" else recipient_id
     db.session.commit()
     return jsonify(item=_owner_view(item))
 
@@ -391,18 +409,21 @@ def _batch_view(items) -> list:
 def remove_batch():
     """Remove several items with one outcome (used | donated), all or nothing. Mirrors
     `POST /items/:id/remove`: one `remove` event per item in the same transaction, donated fulfils
-    each item's open listing (recipient = its claimer)."""
+    each item's open listing. Optional `recipient_id` (omitted: each item's claimer; null: nobody; a
+    user id: that user) has the same semantics as the single endpoint."""
     body = json_body()
     outcome = body.get("outcome")
     if outcome not in BATCH_OUTCOMES:
         raise validation_error(f"outcome must be one of {', '.join(BATCH_OUTCOMES)}.")
-    unknown = set(body) - {"item_ids", "outcome"}
+    unknown = set(body) - {"item_ids", "outcome", "recipient_id"}
     if unknown:
         raise validation_error(f"Unknown fields: {', '.join(sorted(unknown))}.")
+    mode, recipient_id = _recipient_arg(body, outcome)
     ids = _batch_ids(body)
     items = _batch_items(ids)
     if any(i.removed_at is not None for i in items):
         raise ApiError(409, "already_removed", "One or more items have already been removed.")
+    _check_recipient(mode, recipient_id)  # once for the whole batch
 
     now = datetime.now(timezone.utc)
     for item in items:
@@ -413,9 +434,13 @@ def remove_batch():
         db.session.add(_event(item, "remove", user_id=g.user.id, outcome=outcome, waste_reason=None,
                               co2e_kg=impact.co2e_kg(item.category, item.est_weight_kg)))
     if outcome == "donated":
-        for listing in ShareListing.query.filter(ShareListing.item_id.in_(ids),
-                                                 ShareListing.status == "open").all():
-            listing.status, listing.fulfilled_at, listing.recipient_id = "fulfilled", now, listing.claimed_by
+        # One bulk UPDATE whatever the batch size: omitted -> each listing's own claimed_by
+        # (null if unclaimed), else the single recipient (or null).
+        db.session.query(ShareListing).filter(
+            ShareListing.item_id.in_(ids), ShareListing.status == "open"
+        ).update({"status": "fulfilled", "fulfilled_at": now,
+                  "recipient_id": ShareListing.claimed_by if mode == "default" else recipient_id},
+                 synchronize_session=False)
     out = _batch_view(items)  # before commit: expire_on_commit would reload every item one by one
     db.session.commit()
     return jsonify(items=out)
