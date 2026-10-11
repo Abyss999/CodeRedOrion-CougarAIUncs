@@ -202,7 +202,7 @@ Notes (not bugs): an empty-string `freshness` is normalised to `fresh` with a st
 
 ## 2026-10-10 - PR 2 insights-wave2 (branch feat/insights-wave2)
 
-**Result: PASS on targeted runs, pending the full suite (the orchestrator runs it). BE-9, BE-10 (both parts) and BE-13 are fixed in PR 2; no xfail is left in `backend/tests`. See the two follow-up sections below.**
+**Result: PASS (final).** Full suite on `feat/insights-wave2` (HEAD 3cf6d3c, clean tree), run by the orchestrator from `backend/` on `fwr_test`: `pytest -q --cov=app` = **965 passed, 1 skipped, 101 s, total coverage 98%** (`gemini.py` 96%, `recipe_cache.py` 98%, `candidates.py` 95%). No xfails are left in `backend/tests`. **Fixed in this PR:** BE-9 (`est_price` overflow → 400, plus the `quantity` / `est_weight_kg` caps), BE-10 (both parts: `/impact` week buckets, the zero-fill and the week/month windows no longer depend on the session time zone or DST), and BE-13 (a scalar or non-list Gemini response → 502 / default shelf life, never a 500; filed on #54, root fix here). The targeted-run details and the two follow-up sections below are the evidence.
 
 | File | Result |
 |---|---|
@@ -288,7 +288,7 @@ Both are strict xfails (they flip loudly once fixed):
 
 ### 2026-10-10 - PR 2 insights-wave2, BE-10 part 2 and BE-13 verified fixed
 
-**Result: PASS on targeted runs.** The full suite is pending; the orchestrator runs it.
+**Result: PASS on targeted runs, confirmed by the full suite (965 passed, 1 skipped, coverage 98%; see the final verdict above).**
 
 | File | Result |
 |---|---|
