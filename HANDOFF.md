@@ -1,6 +1,6 @@
 # Handoff
 
-_Last updated: 2026-10-10 (checkpoint 4b). **`food-main` (VPS) is the orchestrator**: it plans, rules,
+_Last updated: 2026-10-10 (checkpoint 4c). **`food-main` (VPS) is the orchestrator**: it plans, rules,
 reviews and merges. `mobile-food` and the first Mac builder session `food-waste` have handed off because
 their context was full. **Mac-only work** (Xcode, simulators, the Mac's Docker stack, MPS, the Colab
 `export.zip` gate, and pushing `.github/workflows`, which the VPS token can't do) needs **a fresh Mac
@@ -9,24 +9,30 @@ builder session**. That session starts from the "In flight on the Mac" table bel
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
-all docs are merged on `main`. Open: #47 (iOS foundation, draft) and #50 (backend PR 1, QA PASS). iOS Wave 2 is underway on the Mac (foundation
-first). The Colab training run is ready for the owner.**
+all docs are merged on `main`. Backend PR 1 merged (#50). Open: #47 (iOS foundation, draft). iOS Wave 2 is underway on the Mac (foundation
+first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Photo add runs on the Gemini fallback until their model lands.**
 
 | Area | State | Evidence |
 |---|---|---|
 | Backend on `main`: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | 523 tests, 96% coverage |
-| Backend PR 1 `feat/items-wave2`: stored freshness and confidence, share on items, `POST /items/:id/restore`, `DELETE /auth/me` | **#50, QA PASS, ready to merge** | 680 passed / 97%; BE-8 fixed, BE-9 (low: huge `est_price` gives a 500) open, xfail-tracked |
-| Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | queued after PR 1 | (none yet) |
-| Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | queued after PR 1 | the owner creates the Google OAuth client (the Mac sends the steps) |
+| Backend PR 1 `feat/items-wave2`: stored freshness and confidence, share on items, `POST /items/:id/restore`, `DELETE /auth/me` | **merged (#50)** | 680 passed / 97%; BE-8 fixed. BE-9 (low: a huge `est_price` gives a 500) is xfail-tracked and ruled non-blocking. **Fix it in PR 2** |
+| Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **next: unblocked**; can be built on the VPS. Includes the BE-9 fix | (none yet) |
+| Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | unblocked, after PR 2 | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **draft #47**; final iOS QA re-verify pending | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
-| ML training | **waiting for the owner's Colab run** | DRY_RUN, then the real run with the same RUN_ID |
+| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **paused: a teammate owns the models** (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
 | Design | 22 screens approved; canvas is the source | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
 | Demo connectivity | merged | `scripts/demo_tunnel.sh` (Cloudflare quick tunnel, HTTP/2) |
 
 ## Next steps
-1. **Owner: Colab run.** Open `ml/yolo/train_colab.ipynb` (T4) and add the Secrets `ROBOFLOW_API_KEY` (the private key) and `KAGGLE_API_TOKEN`. Do the **DRY_RUN** first, then the real run with the same RUN_ID. Hand `export.zip` to the Mac.
-2. **Mac:** the iOS foundation and backend PR 1 to QA PASS, then review and merge. Then build the screens in this order, one PR each with iOS QA, screenshots, a motion recording and a Design delta:
+1. **ML models: off the queue (owner decision, 2026-10-10).** A teammate is working on them. Don't schedule agents for any of these unless the owner asks:
+   - the Colab run and the `export.zip` YOLO gate
+   - weights in `ml/serve` and the from-photo `source: "yolo"` check
+   - GLM-OCR on MPS
+   - further `ml/yolo`, `ml/eval` or pipeline data work
+
+   What's merged stays as it is. The photo flow uses the Gemini fallback.
+2. **Mac (fresh session):** the iOS foundation (#47) re-verify, then merge. Then build the screens in this order, one PR each with iOS QA, screenshots, a motion recording and a Design delta:
    1. Fridge + removal (+ Undo)
    2. Add + photo review + text / barcode / receipt
    3. Item detail
@@ -36,17 +42,17 @@ first). The Colab training run is ready for the owner.**
    7. Social (pantry, composer, connect, group)
    8. Auth (email + Google)
    9. Settings
-3. **Mac:** backend PR 2, then PR 3. **Owner:** the Google OAuth client.
-4. **Mac:** the YOLO gate on `export.zip`, then `ml/serve` with the weights, then check from-photo end to end (`source: "yolo"`).
+3. **VPS or Mac:** backend PR 2 (plus the BE-9 fix), then PR 3. **Owner:** the Google OAuth client.
+4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
 
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Backend PR 1 | `feat/items-wave2`, **#50** | `wt/items-wave2` | QA PASS recorded in `docs/qa/backend.md`. Check CI, merge, fold into `docs/QA.md`. Its compose stack (`items-wave2-*`, 5055/5433) is still up and holds `fwr_test`; reuse it or `docker compose down` there (keep the volume) |
+| Backend PR 1 | `feat/items-wave2`, **#50** | `wt/items-wave2` | **Merged and folded.** Remove the worktree. Its compose stack (`items-wave2-*`, 5055/5433) is still up and holds `fwr_test`; reuse it or `docker compose down` there (keep the volume) |
 | iOS foundation | `feat/ios-foundation`, **draft #47** | `wt/ios-foundation` | Spawn iOS QA to re-verify: update `MotionTests` to cap 6 (it asserts 8); skeleton tests now see one `<screen>.loading`; the debug error is a `Label`; re-run on iPhone 17 Pro and the **"iPhone SE QA"** simulator (UDID FFA5D7A9-…, AX5); toast and Reduce Motion UI tests via `-UITestShowToast` / `-UITestReduceMotion`; record a <2 MB motion clip; confirm IOS-4..10. Then un-draft, check CI on macos-26, merge |
-| Backend PR 2 `feat/insights-wave2` | not started | - | After #50: `/impact` used/donated split, waste-reason breakdown, previous period, gap-filled **last 6 weeks**; recipes `servings` + `uses_items:[{item_id,name,predicted_expiry}]`; per-user suggestion cache (active-items hash, 6 h TTL, log hits); `POST /items/remove-batch {item_ids, outcome: used/donated}` and `POST /items/restore-batch` (atomic; impact exact after the pair); add both to `APIClient` + Mock |
+| Backend PR 2 `feat/insights-wave2` | not started | - | Unblocked. Also fix **BE-9** (range-check `est_price` to numeric(10,2), and `est_weight_kg`/`quantity` if they overflow; flip the strict xfail). `/impact` used/donated split, waste-reason breakdown, previous period, gap-filled **last 6 weeks**; recipes `servings` + `uses_items:[{item_id,name,predicted_expiry}]`; per-user suggestion cache (active-items hash, 6 h TTL, log hits); `POST /items/remove-batch {item_ids, outcome: used/donated}` and `POST /items/restore-batch` (atomic; impact exact after the pair); add both to `APIClient` + Mock |
 | Backend PR 3 `feat/oauth` | not started | - | After #50: **Google only**. `POST /auth/oauth/google {id_token}` (JWKS, aud from `GOOGLE_IOS_CLIENT_IDS`, iss, exp, `email_verified`); generic `user_identities(provider, subject, user_id, email)`; nullable `password_hash`; link by verified email; `DELETE /auth/me` removes identities; tests stub JWKS with local RSA keys. Give the owner the Google OAuth iOS-client steps (bundle id from `Local.xcconfig`, reversed-client-id URL scheme) |
 | Fridge + removal screen | not started | - | After #47 and #50: the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
 
@@ -92,8 +98,8 @@ first). The Colab training run is ready for the owner.**
   - The data split rules and pHash identity gate in `docs/QA.md`.
   - The motion values in `MOTION.md`.
 - **Open owner items:**
-  - the Colab run
   - the Google OAuth client
+  - (the Colab run is paused: a teammate owns the models)
   - nothing else blocking
 - **Watch for:**
   - BE-9.
@@ -102,8 +108,8 @@ first). The Colab training run is ready for the owner.**
   - Jose's (LemurTech22) optional answers on closed #21.
 
 ## QA status
-- **Backend:** PASS on `main` (523 tests, 96%). PR 1 in QA. Open: BE-7 (info), BE-9 (low).
-- **ML:** data, pipeline, parser and notebook PASS. YOLO not evaluated yet. Open: ML-11–14, ML-28, ML-32, ML-40.
+- **Backend:** PASS on `main` after #50 (680 passed, 97%). Open: BE-7 (info), BE-9 (low, PR 2).
+- **ML:** data, pipeline, parser and notebook PASS. YOLO not evaluated (paused: a teammate owns the models). Open: ML-11–14, ML-28, ML-32, ML-40.
 - **Design / motion:** motion demos PASS (two rounds).
 - **iOS:** first build and dark theme PASS. Foundation in QA.
 - **Integration:** not run yet.
