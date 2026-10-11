@@ -3,7 +3,8 @@
 PostgreSQL + TimescaleDB, one database. Relational tables for state; the `food_events`
 **hypertable** is the append-only log the Impact Dashboard is computed from.
 Status: **implemented** in migration `0001_initial` (users, items, share_listings, food_events).
-Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
+Migration `0004_items_wave2` adds `items.freshness`, `freshness_checked_at`, `confidence` and makes
+`groups.created_by` nullable. Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
 and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in migration `0002_social`.
 
 ## Relational tables
@@ -26,11 +27,14 @@ and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in mig
 | source | text | `photo` \| `single_photo` \| `text` \| `barcode` \| `receipt` \| `manual` |
 | added_at | timestamptz | |
 | predicted_expiry | date | |
-| expiry_source | text | `default` \| `gemini` \| `user` |
+| expiry_source | text | `default` \| `gemini` \| `ml` \| `user` (app-validated; no DB CHECK) |
 | **removed_at** | timestamptz, null | soft delete — null means "still in the fridge" |
 | **outcome** | text, null | `used` \| `donated` \| `thrown_out` |
 | **waste_reason** | text, null | `expired` \| `didnt_like` \| `forgot` \| `other` |
 | removed_after_expiry | bool, null | feedback signal for expiry prediction |
+| freshness | text, null | `fresh` \| `semi_fresh` \| `spoiled` (photo assessment; migration 0004) |
+| freshness_checked_at | timestamptz, null | when `freshness` was assessed; null iff `freshness` is null |
+| confidence | float, null | detector confidence 0..1 (candidate round trip); null for manual items |
 
 Constraints:
 ```sql
@@ -42,6 +46,10 @@ Migration 0003 backfill: meat/seafood/eggs -> protein; bakery -> grains; pantry_
 leftovers, frozen, other -> same; produce_leafy/produce_hardy -> `fruit` when the lowercased name
 contains a known fruit word (`\m(apple|banana|...)\M`, list in `app/services/food_group.py`), else
 `veggies`. Downgrade drops the constraint and column.
+`ck_items_freshness` (value set), `ck_items_freshness_checked_iff_freshness`
+(`(freshness IS NULL) = (freshness_checked_at IS NULL)`), `ck_items_confidence` (`0..1`). Downgrade 0004
+drops the columns/constraints; it also restores `groups.created_by NOT NULL` (orphan groups with a null
+creator are handed to their oldest member, or detached and deleted if they have no members: lossy).
 Also CHECKs on `storage`, `outcome` and `waste_reason` value sets (`ck_items_*`).
 Index: `(owner_id, removed_at, predicted_expiry)`.
 `quantity` defaults 1, `unit` defaults `piece`; `predicted_expiry` is NOT NULL (always predicted).
@@ -51,7 +59,7 @@ Index: `(owner_id, removed_at, predicted_expiry)`.
   `(user_id, friend_id)` (user_id = requester). CHECK `user_id <> friend_id`; unique index
   `uq_friendships_pair` on `(LEAST(user_id,friend_id), GREATEST(user_id,friend_id))` so only one
   row exists per pair, whatever the direction. Index on `friend_id`.
-- `groups(id, name, created_by → users, invite_code UNIQUE, created_at)`.
+- `groups(id, name, created_by → users (nullable since 0004: null once the creator deletes their account), invite_code UNIQUE, created_at)`.
 - `group_members(group_id → groups, user_id → users, role owner|member, joined_at)` — pk
   `(group_id, user_id)`; index on `user_id`.
 - `share_listings(id, item_id → items, owner_id, group_id → groups null, status open|fulfilled|cancelled,
@@ -87,7 +95,10 @@ SELECT create_hypertable('food_events', by_range('time'));
 CREATE INDEX ix_food_events_user_time ON food_events (user_id, time DESC);
 ```
 - Written **in the same transaction** as the state change it records.
-- Events are never updated or deleted. `item_id` has no FK (hypertables can't be FK targets cheaply and events must outlive items).
+- Events are append-only **except two deliberate cases**: `POST /items/:id/restore` deletes the item's
+  `remove` event (by `id` + `time`) when a removal is undone within 10 minutes, and `DELETE /auth/me`
+  rewrites `user_id` to the nil-UUID tombstone `00000000-0000-0000-0000-000000000000` (anonymisation;
+  `user_id` stays NOT NULL, no schema change needed). `item_id` has no FK (hypertables can't be FK targets cheaply and events must outlive items).
 - `share` events are written by `POST /share`; `expiry_warning` is reserved (nothing writes it yet).
 - `co2e_kg` uses per-category factors (source in `DECISIONS.md`). For `used`/`donated` it is
   CO₂e **avoided**; for `thrown_out` it is CO₂e **wasted**.

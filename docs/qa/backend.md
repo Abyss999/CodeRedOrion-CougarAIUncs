@@ -167,3 +167,35 @@ Contract grep: `docs/API.md` and the Gemini prompt are 3-value. No two-value enu
 | ID | Severity | Summary | Status |
 |---|---|---|---|
 | BE-7 | info | Backend and pipeline disagree on juice: backend `OJ NFC 52OZ` / `APPL JCE` -> pantry, pipeline receipt output -> `other` (class `juice`, documented in PIPELINE.md). Same name, two groups depending on entry point. | open, optional |
+
+## 2026-10-10 - items wave 2 (branch feat/items-wave2)
+
+**Result: FAIL (1 open bug, BE-8, low severity; everything else passes).** Run from `backend/` against `fwr_test` (localhost:5433, the worktree's compose DB; `fwr_test` was missing and was created): `pytest -q --cov=app` = **661 passed, 1 skipped, 1 xfailed (BE-8), coverage 97%** (before my fix of one stale test: 660 passed + 1 failed). No live Gemini, no train.py or xcodebuild of mine running.
+
+New files (all in `backend/tests/`): `test_wave2_migration_0004.py`, `test_wave2_freshness.py`, `test_wave2_item_share.py`, `test_wave2_expiry_roundtrip.py`, `test_wave2_restore.py`, `test_wave2_account_delete.py` (139 tests). Edited: `test_freshness_contract.py::test_freshness_not_stored_on_item`, which asserted the pre-0004 contract (freshness not stored); renamed `test_freshness_stored_on_item_since_0004` and inverted.
+
+| Area | Checked | Result |
+|---|---|---|
+| Migration 0004 | single head; upgrade from 0003 with existing rows (freshness/confidence/checked_at null); downgrade drops the columns and keeps 0003 data; CHECK rejects bad freshness (insert and update), freshness and stamp must travel together, confidence 0..1; `groups.created_by` nullable, downgrade repairs orphan groups | ok |
+| Freshness | each value on create; variants normalised (`Semi-Fresh`, `rotten`, `use soon`); unknown string -> `fresh` + WARNING (per API.md); non-string -> 400 and nothing written; PATCH set / change / clear (clears stamp), other edits keep the stamp; other user's item 403; no effect on expiry; present in list, `group_by` sections and remove response | ok |
+| Confidence | stored 0..1, out of range / string / bool / list -> 400 and nothing written; not PATCHable (400); `Infinity` rejected | ok; `NaN` -> 500, see BE-8 |
+| `share` object | null when unshared (create, list, patch); open; claimed gives `{id, name}`; cancelled not reported, relist shows the new open one; fulfilled after donation; name follows display_name; absent from other users' lists, Food Pantry entries and group pantry items | ok |
+| N+1 | SQLAlchemy `before_cursor_execute` counting: `GET /items` has the same statement count for 1 and 20 shared/claimed items; `group_by` with 20 items <= 8 statements | ok |
+| Expiry round trip | `expiry_source` default/gemini/ml kept when posted with an expiry; omitted -> user; invalid -> 400; PATCH with a changed expiry -> user, same expiry or other fields keep the source; `candidates.normalize` output posts back intact | ok |
+| Restore | within window (used / donated / both thrown_out reasons): item active, remove event gone, `GET /impact` (all/week/month) equals the pre-removal numbers exactly; neighbouring history untouched; 9 min ok, 11 min -> 409 `restore_window_expired` (time patched in SQL on item and event); not removed -> 409 `not_removed`; double restore 409; other user 403/404; unknown / bad id 404; unauth 401; remove -> restore -> remove leaves exactly one remove event, 3 cycles leave none; atomic (forced failure rolls back the event delete) | ok |
+| Restore + share | donated shared item: listing back to `open`, `fulfilled_at` and `recipient_id` cleared, `claimed_by` kept, item `share.status` open, visible to friends again; explicit `recipient_id` cleared; non-donated removal leaves listing alone; cancelled listing not resurrected; group member may restore a group item, outsider may not | ok |
+| `DELETE /auth/me` | 204; token -> 401 (also login and a second delete); email reusable with an empty account; items, listings (own and on her items), friendships (both directions, pending too), memberships, requests gone; nothing references her id in any table; events kept (same count and values) with `user_id` = nil-UUID tombstone, remove aggregates unchanged, a new user does not inherit them; others' impact/events/items/requests unchanged; listings she claimed reopen and requests she fulfilled reopen; group ownership passes to the oldest remaining member, solo group becomes an empty orphan with `created_by` null and does not 500; no trace of her in others' `/share`, `/requests`, `/friends`, `/groups`; atomic on failure | ok |
+
+### Findings
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| BE-8 | low | `POST /items` with `"confidence": NaN` (Python's JSON parser accepts the bare token) passes `_check_confidence` (`NaN < 0` and `NaN > 1` are both false), then Postgres rejects it on `ck_items_confidence` and the API returns 500 instead of 400. `Infinity` is rejected correctly. Fix: reject non-finite numbers (`math.isfinite`) in `parse_number` or `_check_confidence`. The same hole probably exists for `est_price` / `quantity` via `parse_number`. Test: `test_confidence_nan_inf_rejected[NaN]` (xfail strict, so it fails loudly once fixed). | open |
+
+Notes (not bugs): an empty-string `freshness` is normalised to `fresh` with a stamp, which follows API.md ("unknown strings become fresh") but means a blank client value reads as "assessed fresh"; consider treating `""` like null. `restore` deletes the remove event, so `food_events` is no longer strictly append-only (documented in SCHEMA.md).
+
+### 2026-10-10 - items wave 2, final verdict
+
+**Result: PASS (one open low bug, BE-9, xfail-tracked).** Full `pytest -q --cov=app` from `backend/` on `fwr_test` (localhost:5433) = **680 passed, 1 skipped, 3 xfailed, coverage 97%**. Run note: an iOS xcodebuild was still alive (0% CPU, idle) when the run started; the suite only needs the DB and memory was fine.
+
+- **BE-8 fixed and verified.** `parse_number` now rejects NaN, Infinity and -Infinity with 400. The xfail is now passing tests: `NaN`, `Infinity` and `-Infinity` on create for `confidence`, `est_price`, `quantity` and `est_weight_kg`, and on PATCH for `quantity`, `est_price` and `est_weight_kg`. Each case checks nothing was written (create) or the value is unchanged (PATCH).
+- **BE-9 (low, open):** a finite `est_price` beyond numeric(10,2) (1e8, 1e12, 1e300) overflows in Postgres and returns 500 instead of 400. Repro: `POST /items {"items":[{"name":"x","est_price":1e8}]}`. `test_huge_est_price_is_400_not_500` is xfail strict (3 cases), so it fails loudly once fixed. The same may apply to `est_weight_kg` and `quantity`, which are unbounded `numeric`, so likely only extreme exponents matter there; not tested.
