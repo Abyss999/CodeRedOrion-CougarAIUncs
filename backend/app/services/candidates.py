@@ -106,6 +106,17 @@ def category_from_name(name: str) -> str:
     return _CATEGORY_FROM_GROUP.get(group, "other")
 
 
+# Receipt total/payment lines (TOTAL, SUBTOTAL, SALES TAX, CHANGE DUE, VISA CARD...). Anchored at the
+# start with a word boundary so food like "Cashews", "Cardamom pods" or "Taxi"-style names survive.
+_RECEIPT_TOTAL = re.compile(
+    r"^\s*(?:(?:sales|grand|visa|debit|credit)\s+)?(sub\s*-?\s*total|total|tax|change|cash|card|balance|tender)\b",
+    re.IGNORECASE)
+
+
+def is_receipt_total(name) -> bool:
+    return bool(_RECEIPT_TOTAL.match(str(name or "")))
+
+
 def from_receipt_lines(lines: list[dict], enriched: list[dict] | None = None) -> list[dict]:
     """OCR receipt lines {name, quantity, price} -> full candidates (category, food_group, storage,
     predicted_expiry, ...). `enriched` (same length, from gemini.categorize_receipt_lines) supplies
@@ -114,7 +125,7 @@ def from_receipt_lines(lines: list[dict], enriched: list[dict] | None = None) ->
     for i, line in enumerate(lines):
         line = line if isinstance(line, dict) else {}
         name = str(line.get("name") or "").strip()
-        if not name:
+        if not name or is_receipt_total(name):
             continue
         extra = enriched[i] if enriched and i < len(enriched) and isinstance(enriched[i], dict) else {}
         category = extra.get("category") if extra.get("category") in CATEGORIES else category_from_name(name)

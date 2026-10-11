@@ -402,7 +402,8 @@ def from_receipt():
         body = ml.ocr(data, filename, mime)
     except ml.MLUnavailable as e:
         raise upstream_unavailable(f"Receipt OCR unavailable: {e}")
-    lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()]
+    lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()
+             and not candidates.is_receipt_total(l.get("name"))]
     enriched = None
     if lines and gemini.is_configured():
         try:
@@ -411,7 +412,9 @@ def from_receipt():
             enriched = None  # name-only heuristic below
     out = candidates.from_receipt_lines(lines, enriched)
     total = candidates._money(body.get("total"))
-    return jsonify(candidates=out, total=total, categorized_by="gemini" if enriched else "heuristic")
+    applied = any(isinstance(e, dict) and e.get(k) for e in enriched or []
+                  for k in ("display_name", "category", "food_group", "storage"))
+    return jsonify(candidates=out, total=total, categorized_by="gemini" if applied else "heuristic")
 
 
 @bp.get("/barcode/<code>")
