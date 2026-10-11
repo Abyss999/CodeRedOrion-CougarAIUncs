@@ -398,3 +398,103 @@ Result: **PASS** (`stratification_check.py`, 0 failures). Required cells (images
 - **Stratification / coverage (#28 + rulings): PASS.**
 - Suites: PASS. Notebook: PASS with the two gaps above. Secrets: clean.
 - **#27 = PASS** (dataset-readiness only; no YOLO metric exists yet). **The Colab gate can open**: leakage, pHash, pooled-unit and stratification checks all pass on v3 and the notebook asserts them. Conditions to carry into the metrics: report hien_fridge separately; report spoiled recall per source with CIs and only for potato, tomato, apple (Kaggle) and bell_pepper (Kaggle); real low/warm lighting stays not measurable.
+
+---
+
+# 2026-10-10 - QA of PR #33 (`chore/colab-last-pt`): Drive checkpointing + resume
+
+Ultralytics 8.4.175 (`mldata/.venv-train`), device mps, yolo26n / yolo26n-cls, 62-image synthetic set (builder's fixture), `--epochs 3 --cls-epochs 3`, SIGKILL via a poller. Notebook cannot run here (no Colab); its restore/stamp logic was simulated in plain Python.
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Ultralytics semantics (source read) | **PASS**, with one refinement (ML-35) |
+| 2 | Detector kill in epoch 2, resume | **PASS** |
+| 3 | Classifier kill in epoch 2, resume (detector skipped) | **PASS** |
+| 4 | Truncated `last.pt` -> `best.pt` -> fresh | **PASS** (duplicate-row side effect, ML-34) |
+| 5 | Crash after last epoch, before `final_eval` | **PASS** |
+| 6 | Notebook logic | **PASS with 1 medium finding (ML-33)** and a low one (ML-36) |
+| 7 | Suites | **PASS** (serve 14, ocr 89, yolo 35, eval 138) |
+
+## 1. Source claims (engine/model.py L877-886, trainer.py `check_resume` L1020, `resume_training` L1124, torch_utils `strip_optimizer` L897)
+- Resume needs `epoch >= 0` and an optimizer: **confirmed** (`self.ckpt.get("epoch", -1) >= 0 and self.ckpt.get("optimizer") is not None`, else warning and `args["resume"] = False`).
+- Finished run has `epoch == -1`: **confirmed** (`strip_optimizer`: `x["epoch"] = -1`, optimizer/ema/scaler = None; called by `final_eval` on last.pt and best.pt).
+- results.csv appended: **confirmed** (`self.csv.unlink()` only `if not self.args.resume`; `save_metrics` opens with `"a"`).
+- "Finished run raises if resumed": **only half true (ML-35).** Run empirically:
+  - stripped checkpoint (`epoch == -1`): `WARNING ... is not a resumable training checkpoint ... Starting new training instead.` No exception, a brand-new training starts.
+  - complete but unstripped (`epoch = epochs-1`, optimizer present): `AssertionError: ... training to 3 epochs is finished, nothing to resume.`
+  - `train.py` handles both before calling `train(resume=True)`, so no impact; only the docstring/ML.md wording is wrong.
+- Epoch indexing checked: ckpt `epoch` is the 0-based index just completed; `start_epoch = epoch + 1`; `ep + 1 >= total` in `ckpt_status` is the right "complete" test.
+
+## 2. Detector kill/resume (PASS)
+Kill at csv rows == 1 and `last.pt` present (`last.pt` epoch idx 0, optimizer True). Rerun:
+```
+[det] resuming .../runsA/det/weights/last.pt: last completed epoch 1 of 3
+Resuming training ... from epoch 2 to 3 total epochs
+det resumed; val on last: 0.2704...
+```
+results.csv epochs: `1,2,3` (no duplicates). Classifier trained fresh afterwards, export written.
+
+## 3. Classifier kill/resume (PASS)
+Finished detector copied in, cls killed after epoch 1 saved (`cls last epoch 0 opt True`, cls csv rows `1`). Rerun:
+```
+[det] already finished (...runsB/det/weights/last.pt); skipping training
+det skipped; val on last: 0.2704...
+[cls] resuming .../runsB/cls/weights/last.pt: last completed epoch 1 of 3
+Resuming training ... from epoch 2 to 3 total epochs
+cls resumed
+```
+cls results.csv: `1,2,3`.
+
+## 4. Truncated last.pt (PASS)
+- `head -c 1000 last.pt`, best.pt intact (epoch idx 0): `last.pt unreadable (RuntimeError: PytorchStreamReader failed reading zip archive...)`, `[det] last.pt unreadable, trying best.pt`, `[det] resuming ...: last completed epoch 1 of 3`, finishes, rc 0, no crash.
+- Both last.pt and best.pt truncated: `[det] last.pt unreadable, trying best.pt` -> best.pt unreadable -> `[det] no usable checkpoint (corrupt); training from scratch`, `det fresh`, rc 0. The fresh run unlinks the old results.csv (rows 1,2,3 clean).
+- **ML-34 (low):** the resumed run appends to results.csv even when the checkpoint is older than the csv. Reproduced twice: (a) kill landed after epoch 2's csv row but before its `last.pt` save (`save_metrics` runs before `save_model`), then resume redid epoch 2: csv `1,2,2,3`; (b) best.pt (epoch 1) used as fallback while csv already had epoch 2: `1,2,2,3`. Nothing in `ml/` or the export reads results.csv, so it is cosmetic, but ML.md 5a's "no duplicates" only holds when the kill falls between a completed save and the next csv write. Doc note suffices.
+
+## 5. Crash between last epoch and final_eval (PASS)
+Took a mid-training checkpoint, set `epoch = 2` (epochs=3) on both last.pt and best.pt, optimizer kept. Rerun: `[det] already finished (...); skipping training`, `det skipped; val on last: 0.189...`, classifier fresh, export written. After: `epoch -1 opt None` on last.pt (train.py stripped it). Confirms the reasoning that without this branch `train(resume=True)` would raise the AssertionError above.
+
+## 6. Notebook (static review + simulation)
+JSON valid (nbformat 4.5, 7 cells; all code cells parse as Python once `!`/`%` lines are stubbed; `nbformat` itself not installed).
+- Drive required: PASS. `raise SystemExit("STOP: Google Drive is required ...")` on mount exception, plus a second check for `/content/drive/MyDrive`. Either way cell 2 would NameError on `DATA_ON_DRIVE`, so Run-all cannot proceed.
+- RUN_ID field: PASS (`#@param`, placeholder -> today, regex `[A-Za-z0-9_.-]+`). Nit in ML-36: `.` and `..` match the regex.
+- Stamp / commit marker (simulated with the notebook's own `sha_stamp` and `DATA_ON_DRIVE` expression on a fake Drive):
+  - clean cache -> True, restore extracts 58/58 images
+  - `.sha256` missing -> False (re-prepare)
+  - tar truncated after commit -> False (size differs; re-prepare)
+  - small `dataset_report.json` copy edited -> False
+  - same-size bit flip in the tar -> True (the stamp does not detect it; accepted limitation, it would show up as a tar/gate error)
+  - **tar creation fails midway and the notebook ignores the exit status -> True and the partial tar is restored (ML-33).**
+- Gates run on the restored copy before training: PASS (the gate block in cell 4 is outside the `if DATA_ON_DRIVE`; both branches reach it; training only starts in cell 5). Training reads `/content/fwr_data` (local), not Drive. Cell 5 is `train.py --data /content/fwr_data ... --weights last --resume --project "{RUN_DIR}"`: PASS. Cell 6 zips from `{RUN_DIR}/export`: PASS.
+- Partial restore vs. the gates (real v3 data, 38,931 files, hardlinked copy with 40% of the .jpg removed): `stratification_check.py` fails 17 "report vs manifest ... == disk" checks, so the notebook's `assert not st["failures"]` stops training. Good. But the gates only count `images/*`; `labels/`, `freshness/` and `cls/` are not counted, so a tar cut after `images/` passes (see ML-33).
+
+## Bugs
+- **ML-33 (medium) - notebook ignores `!tar` exit status; a partial tar can be committed and later restored.** Cell 4 `!tar ... -cf "{DRIVE_TAR}.part"` (disk full, Drive quota, Drive I/O error) does not raise; the next lines still `os.replace` the short `.part`, copy the small files and write a `.sha256` that matches the short tar (reproduced: tar rc 1, `DATA_ON_DRIVE -> True`, restore gave 12 of 58 images, `tar -xf` rc 1 also ignored). On the resumed run the gates catch missing images (counts) but not missing `labels/`, `freshness/` or `cls/` files, so a cut that spares `images/` trains on images with no labels. Fix: run tar with `subprocess.run(..., check=True)` (or `%%bash` with `set -e`) for both create and restore; verify the cache before writing the stamp (`tar -tf` succeeds, or store file count in the stamp and compare after extract); also have the gate block compare `labels/<split>` and `cls/` file counts with the report.
+- **ML-34 (low)** - duplicate epoch rows in results.csv after resume from a stale checkpoint (above). Fix: doc note ("no duplicates" is not guaranteed), or dedupe csv by epoch after a resume.
+- **ML-35 (low, doc)** - `ckpt_status` docstring and ML.md 5a say a finished run "raises" on resume. Stripped (`epoch == -1`) silently starts a new training with a warning; only complete-but-unstripped raises. Worth stating because it is the failure mode if `ckpt_status` is ever bypassed (silent retrain into the same folder, overwriting the finished weights).
+- **ML-36 (low)** - (a) `r = !python leakage_check.py --json /content/leakage.json` ignores the exit code; if the check crashes on a re-run in the same VM, the previous run's json is read and the assert passes (same for `strat.json`). Delete both files before each check. (b) `RUN_ID` of `.` or `..` passes the regex and resolves RUN_DIR to `fwr_runs` or `MyDrive`; use `[A-Za-z0-9][A-Za-z0-9_.-]*` and reject `..`.
+
+## Environment notes
+`mldata/fwr_data_v3` disappeared while I was working (another session's data rebuild; `fwr_data_a2` remains). I only deleted hardlink copies inside my own scratch dir. Item-6 gate runs used v3 before it vanished. The builder's `resume_test/` is untouched.
+
+## Verdict for #33
+- Resume logic in `train.py`: **PASS** on all five scenarios (detector, classifier, truncated last, truncated both, crashed-before-final_eval) with no crash and no restart where a resume was possible.
+- Notebook: **PASS conditional on ML-33.** It is a robustness hole (needs a failing tar), not a correctness bug on the happy path; recommend fixing it before the 3-4.5 h run, since this is the exact scenario (Drive trouble) the feature exists for. ML-34..36 are low and can be doc/one-line fixes.
+
+## Re-verification of the ML-33..36 fixes (PR #33, same day)
+Method: executed the notebook's own code (cell 1 helper functions, cell 4 restore and create blocks, extracted from the .ipynb and run against a fake Drive with `/content` redirected; a shadow `tar` on PATH injected the failures). My own cases, not the builder's `sim.py`.
+| Case | Result |
+|---|---|
+| clean create then restore | PASS: stamp JSON `{counts{cls 33,freshness 86,images 86,labels 86}, report_sha256, tar_bytes, tar_members 316}`; `DATA_ON_DRIVE` True; restore re-count matches |
+| tar exits non-zero after leaving a partial archive | PASS: `CalledProcessError`; `.part` removed, no tar, **no stamp** |
+| archive silently cut after `images/` (rc 0) | PASS: `AssertionError: archive file counts {'images': 86, 'labels': 0, 'freshness': 0, 'cls': 0} differ from the dataset ...`; `.part` removed, no stamp |
+| byte-truncated archive (rc 0) | PASS: `ReadError: unexpected end of data`, no stamp |
+| stamp missing / old `hash:size` stamp | PASS: `DATA_ON_DRIVE` False |
+| tar truncated after commit | PASS: size mismatch, False |
+| same-size bit flip | accepted limitation: True, extract still succeeded (as before) |
+| stamp counts tampered (restore mismatch) | PASS: `SystemExit: STOP: restored dataset does not match the Drive stamp ...`, stamp deleted |
+| restore `tar -x` exits 2 | PASS: `CalledProcessError` (no longer ignored) |
+- **ML-33: FIXED.** **ML-36: FIXED.** `run_check()` removes the json first and asserts exit code 0 and that the json exists (read in code; subprocess with `sys.executable`). `RUN_ID` regex `^[A-Za-z0-9][A-Za-z0-9_-]*$`: accepts `fwr_20261010`, `ok-1_2`; rejects `..`, `.`, empty, `a.b`, `-x`.
+- **ML-35: FIXED** (train.py docstring and ML.md 5a now separate the unstripped-raises and stripped-silently-retrains cases). **ML-34: FIXED as documentation** (ML.md 5a caveat: duplicate epoch row after a kill between csv write and `last.pt` save or a `best.pt` fallback; dedupe by `epoch`).
+- Notebook is valid JSON (all code cells still parse); `ml/yolo` tests 35 passed.
+
+**Final verdict for #33: PASS.** (Open, accepted: a same-size bit flip inside the tar is not detected by the stamp.)

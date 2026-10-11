@@ -9,11 +9,14 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 `dataset_report.json` has `split_grouping: "session"` and `ml/eval/leakage_check.py` reports 0 held-out images within 300 s of a train/val image).
 1. Runtime -> Change runtime type -> **T4 GPU**.
 2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped).
-3. **Runtime -> Run all** (Drive mount is optional; it only keeps a copy of the run).
+3. **Runtime -> Run all.** Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted).
+   Cell 1 has a form field `RUN_ID` (default `fwr_YYYYMMDD` = today). Everything for the run lives in `MyDrive/fwr_runs/<RUN_ID>/`.
+   **If you got disconnected: reconnect, keep the same `RUN_ID`, Runtime -> Run all; it resumes from the last epoch on Drive.**
+   Write the `RUN_ID` down: left at the default it is today's date, so resuming after midnight needs it typed in.
 4. Download `export.zip` from the last cell and hand it to the team.
 The notebook downloads VegQual (figshare), the two Roboflow sets (API) and, if Kaggle creds exist, raghavrpotdar; derives a
 `sources.colab.json` from the repo's `sources.json` with `/content/raw/...` roots; runs `prepare_dataset.py`,
-`train.py --device auto` (yolo26s 80 ep + classifier 30 ep) and the export.
+`train.py --device auto --resume` (yolo26s 80 ep + classifier 30 ep) and the export. Expect 3-4.5 h on a free T4.
 
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
@@ -202,12 +205,60 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
    use the repo's `sources.json` with the roots rewritten (the notebook does this).
 4. `python prepare_dataset.py --sources sources.json --out /content/fwr_data`; read `dataset_report.json`
    (classes with no data, dropped labels). Fix mapping before training.
-5. `python train.py --data /content/fwr_data` (detector 80 ep, classifier 30 ep, then exports). Exports
+5. `python train.py --data /content/fwr_data --project <RUN_DIR> --resume` (detector 80 ep, classifier 30 ep, then exports). Exports
    **`last.pt` by default** (`--weights last`): val has no potato and no apple/spoiled (ML-28), so val-picked
    `best.pt` would be blind to them. Fixed epochs; all metrics come from the held-out split.
 6. Collect `runs/export/`: `detector.pt`, `freshness.pt`, `predictions.jsonl`, `heldout_gt.jsonl`, `heldout_manifest.csv`.
    Give the last three to ML QA (`ml/eval/`); weights are gitignored - share via Drive/release and link here.
 CLI equivalent of the notebook: `train.py`. Same code path: `infer.TwoStage` is used for export and serving.
+
+### 5a. Surviving Colab disconnects (checkpoints on Drive + auto resume)
+- **Layout** (`RUN_DIR = /content/drive/MyDrive/fwr_runs/<RUN_ID>`, passed as `train.py --project`): `det/weights/{last,best}.pt`,
+  `cls/weights/{last,best}.pt`, `det/results.csv`, `export/`, plus `fwr_data.tar` (prepared dataset), `fwr_data/` (small readable copy of
+  `dataset_report.json`, `data.yaml`, `class_names.json`, `heldout_manifest.csv`) and `fwr_data.sha256`.
+- **Per-epoch save cost.** Ultralytics writes `last.pt` every epoch (`trainer.save_model`, `engine/trainer.py` ~L780-835) and `best.pt` when
+  fitness improves. Measured on MPS with yolo26n: mid-training `last.pt` = 21 MB (EMA weights + AdamW state, fp16), final stripped file 5.4 MB.
+  Scaling by size (yolo26s.pt is 20 MB stripped, ~3.7x n) puts an in-training yolo26s `last.pt` at roughly 60-80 MB. At Drive-mount
+  write speeds (order of 10-30 MB/s) that is a few seconds per epoch against minutes of compute per epoch, so **`save_period` is not
+  used**: it would only add `epochN.pt` files (more Drive space, no resume benefit). Residual risk: the write is not atomic, so a VM death
+  in the middle of the write can leave a truncated `last.pt`; `train.py --resume` detects an unreadable `last.pt` and falls back to `best.pt`
+  (also a full checkpoint during training), else restarts that stage.
+- **Resume semantics, verified in ultralytics 8.4.175 source** (`site-packages/ultralytics/`):
+  - `YOLO.train(resume=True)` (`engine/model.py` L877-886) uses the loaded checkpoint as the resume point only if
+    `ckpt["epoch"] >= 0` and it still has `optimizer`; otherwise it logs a warning and **silently starts a new training**.
+  - `BaseTrainer.check_resume` (`engine/trainer.py` L1020-1065) reloads `ckpt.train_args` as the run's args, so epochs, imgsz, optimizer,
+    lr, project/name etc. come from the checkpoint. Only `imgsz, batch, device, close_mosaic, save_period, workers, cache, patience, time, freeze, val, plots, ...`
+    can be overridden (other differing args only produce a warning); `data` is overridden by the one passed in. `train.py` passes `data, device, batch, imgsz`.
+  - `resume_training` (L1124-1132) asserts `0 < ckpt.epoch + 1 < epochs`, else **raises "training to N epochs is finished, nothing to resume"**.
+    That only happens for a complete but still *unstripped* checkpoint. A *stripped* finished one (`epoch == -1`) never reaches the assert:
+    `model.py` L877-886 just warns and **silently starts a new training**. The skip logic in `train.py` (`ckpt_status`) is what prevents that silent retrain.
+    A resumed run continues at epoch `ckpt.epoch + 2` (1-based) and appends to the same `results.csv` (L218: only unlinked when not resuming).
+    Caveat: `results.csv` is written before `last.pt` is saved, so a kill in between (or a fallback to `best.pt`) leaves a duplicate epoch row after the
+    resume. Nothing reads `results.csv` for decisions; dedupe by `epoch` if you plot it.
+  - Completion marker: at the end of training `final_eval` (L1001-1010) calls `strip_optimizer(last.pt)` (`utils/torch_utils.py` L897-960), which
+    sets `epoch = -1`, `optimizer = None`. So `ckpt["epoch"] == -1` means **finished**. If the process dies between the last epoch and `final_eval`,
+    `epoch + 1 >= epochs` with the optimizer still present: `train.py` strips it itself and treats the stage as finished.
+  - `train.py` therefore decides per stage (`ckpt_status` / `train_stage`): no checkpoint -> train fresh; `epoch == -1` (or `epoch+1 >= epochs`) ->
+    skip training; otherwise `YOLO(last.pt).train(resume=True, ...)`. Detector and classifier are handled independently, and the
+    `--weights last|best` selection, `det.val`, export and `export_predictions` run after a resumed or skipped stage exactly as after a fresh one.
+    If `--epochs` differs from the finished checkpoint's epochs it prints a note (use a new `RUN_ID` to retrain).
+- **Dataset reuse.** Cell 4 builds the dataset, runs the gates, then caches it on Drive. The tar is created with `subprocess.run(..., check=True)`
+  into `fwr_data.tar.part`, the whole archive is re-read (`tarfile`, fails on truncation) and its file counts for `images/labels/freshness/cls`
+  must equal the local dataset, then it is renamed and the small files are copied. `fwr_data.sha256` (JSON: sha256 of `dataset_report.json`, tar bytes,
+  member count, per-dir file counts) is written **last** as the commit marker; any failure removes the `.part` and leaves no stamp. Ultralytics' `*.cache`
+  files are excluded from the tar and the counts. On resume the stamp matches, cells 2-3 skip secrets and downloads, and cell 4 untars (`check=True`) to the local
+  `/content/fwr_data` (a tar because the set is ~39k small files; copying them one by one through the Drive mount is far slower, and training
+  straight from Drive images would stall the data loader). The restored per-dir counts and `dataset_report.json` must equal the stamp, otherwise cell 4 deletes
+  the stamp and stops (Run all again rebuilds). Then **every gate re-runs on the restored copy**; the leakage and stratification checks delete their JSON
+  first and must exit 0, so a crashed check can never reuse a stale result.
+  Change sources or code -> use a new `RUN_ID` (the cache is keyed by run, not by code). `RUN_ID` must match `^[A-Za-z0-9][A-Za-z0-9_-]*$`.
+- **Determinism of `prepare_dataset.py`:** `--seed` default 42 feeds sha1-based per-image/per-group ordering (`group_hash`, `collect`), traversal is
+  `sorted(...)`, and the synthetic low/warm variants use `np.random.default_rng(seed)` (`lighting.py`). Same pinned inputs -> same split. The inputs are
+  pinned for VegQual (figshare file id) and Roboflow (versions) but **not for the Kaggle dataset** (latest download), so a fresh prepare could differ;
+  that is another reason a resume reuses the cached copy instead of rebuilding.
+- **Local verification (MPS, 2026-10-10):** tiny synthetic dataset, `train.py --epochs 3 --cls-epochs 2 --det-model yolo26n.pt --device mps --resume`;
+  killed (SIGKILL) after detector epoch 1 was saved, rerun resumed "from epoch 2 to 3" and finished (results.csv rows 1,2,3, no duplicates), classifier trained
+  fresh, export written; a third run skipped both trainings and only exported.
 
 ## 5b. Training on Apple Silicon (MPS), measured 2026-10-10
 `train.py --device auto|mps|cuda-index|cpu` (default auto: cuda, then mps, then cpu). Venv and data live outside
