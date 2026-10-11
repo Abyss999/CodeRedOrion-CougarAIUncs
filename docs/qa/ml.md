@@ -1108,3 +1108,72 @@ Other notes (no ID): the view's (and export's) `dataset_report.json` describes t
 
 ## Files written
 `ml/eval/tests/qa_fast_profile.py` (new), `ml/eval/tests/test_notebook_train_cell.py`, `ml/eval/tests/qa_pr62_ml57.py` (ML-66), this section.
+
+# 2026-10-11: ML QA for the compose `ml` service (`feat/ml-compose-service`: f22e2e5 + builder fix-up)
+
+## Verdict: **PASS (static + in-process); ML-70, ML-71 and ML-72 fixed and re-verified**
+Round 1 (f22e2e5) found ML-70 and ML-71. The builder's live build then found ML-72 (the image never built). Round 2 re-verified all
+three fixes. QA did not build or start any container. The live container check (build, `--profile ml up`, photo ->
+`/items/from-photo`) belongs to the builder, and it **must assert `source == "yolo"`**, not just a 200: every ML failure falls back
+to Gemini silently.
+
+## Tests
+`ml/eval/tests/qa_ml_compose.py` (new, 23 tests; run with `-o python_files="test_*.py qa_*.py"`):
+- `.venv-ml`: 22 passed, 1 skipped (the backend-client test needs `requests`); `.venv`: 23 passed.
+- CI-equivalent (`.venv-ml`): `ml/serve` 21, `ml/ocr` 89, `ml/yolo` 68 and `ml/eval/tests` 224 passed; `pipeline/tests/test_receipts.py`
+  (serve integration) 24 passed. With QA files collected: 310 passed, 5 skipped, 1 failed. The failure is
+  `qa_pr73_unrar_independent.py::test_real_pip_failure_shows_error_and_exits_nonzero`, caused by the environment (`.venv-ml` has no `pip`
+  module) and unrelated to this branch.
+
+## What was verified
+1. **Compose**. Checked three ways: text parse, PyYAML, and `docker compose -p qa_dummy config` in a temp project dir whose `.env` is
+   a copy of `.env.example` (config only, nothing built; the real `.env` is never read).
+   - Default `config --services` lists `api, db`; `--profile ml` adds `ml`.
+   - `ml` has no `ports`, `expose`, `network_mode` or `env_file`.
+   - The volume is long syntax: `type: bind`, source `${ML_MODELS_DIR:-../mldata/models/current}`, target `/models`,
+     `read_only: true`, `bind.create_host_path: false`. The normalised config keeps `create_host_path: false`.
+   - The env is exact, and `OCR_BACKEND` is the quoted string `"off"`. Empty `YOLO_DEVICE=` and `ML_MODELS_DIR=` fall back to the
+     defaults through `:-`.
+   - The build context and Dockerfile exist. `db` and `api` are unchanged and bind ports to `127.0.0.1` only. The Dockerfile's
+     `0.0.0.0:8000` bind is container-internal, and nothing is published.
+2. **Image**:
+   - Exactly one `FROM python:3.12-slim`, with no `pytorch/pytorch` base. `ARG TORCH_INDEX` defaults to the CPU wheel index.
+   - `torch==2.9.1 torchvision==0.24.1` install from `TORCH_INDEX` before `serve/requirements.txt`, which has no torch line, so pip
+     keeps the pinned build. These are the versions in `mldata/.venv-train` (py3.12, `+cpu`, with ultralytics 8.4.175).
+   - `libgl1` and `libglib2.0-0` are installed for OpenCV, and the apt lists are removed.
+   - An AST walk of every local import shows that all of them are copied (`yolo/infer.py` imports only `yolo.taxonomy`).
+   - A simulated `/app`, laid out exactly as the `COPY` lines, boots with the compose env: `/health` gives
+     `{"status":"ok","detector":"YoloDetector","ocr":"off"}`, `/ocr` gives 503, and `/detect` with missing weights gives 500
+     `inference_failed`.
+3. **OCR backend**:
+   - `off`, `Off`, ` off ` and `OFF` all give None. Unset or `FAKE` gives FakeOCR, and ` Glm` gives GlmOcr.
+   - `none`, `false`, `0`, `disabled`, `of` and the empty string raise `ValueError`.
+   - Importing `serve.wsgi` (what gunicorn does) with `OCR_BACKEND=none` exits non-zero, so the worker never starts.
+   - `/ocr` with OCR off returns 503 `{"error":{"code":"ocr_not_configured","message"}}` with no lines and no canned receipt, even for a
+     missing or junk image. `/health` reports ocr `"off"`, `/detect` is unaffected, and an explicitly injected engine still wins.
+4. **Backend**: the real `backend/app/services/ml.py`, wired to the ml/serve test client, raises `MLUnavailable` on the `/ocr` 503,
+   and `from_receipt` turns that into 502 `upstream_unavailable`. `from_photo` falls back to Gemini.
+5. **Docs/env**:
+   - `.env.example` keys are present and empty.
+   - SETUP.md and ML.md §6 give the profile command and state that plain `docker compose up -d` leaves `ml` off.
+   - ML.md documents `OCR_BACKEND=fake|glm|off` (any other value fails at startup), the 503, `YOLO_CONFIG_DIR`, the absolute
+     `ML_MODELS_DIR` outside the main checkout, and the `TORCH_INDEX` GPU build arg.
+
+## Bugs
+Highest ML-n before this review was ML-69 (open PR #88, `docs/qa/ml.md`); `docs/QA.md` and this file on origin/main end at ML-68.
+
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-70 | medium | `docker-compose.yml` `ml.volumes` | The short-syntax `${ML_MODELS_DIR:-../mldata/models/current}:/models:ro` default is relative to the compose file. It is right only in the main checkout: from a worktree it points at a missing folder (and the real `.env` has no `ML_MODELS_DIR`). Docker then creates an empty root-owned host folder, `/health` still says ok, every `/detect` returns 500, and photos silently fall back to Gemini. | **fixed**: long-syntax bind with `create_host_path: false` (a missing folder stops `up`); ML.md says to set an absolute `ML_MODELS_DIR` outside the main checkout. Pinned in `test_ml_block_profile_no_ports_ro_volume`, `test_compose_yaml_structure`, `test_compose_config_ml_resolved_with_empty_env_example_values` |
+| ML-71 | low | `ml/serve/backends.py` `ocr_from_env()` | Any value other than exactly `glm`/`off` (`Off`, ` off`, `none`) silently selected FakeOCR, so the canned receipt was served as real. | **fixed**: strip + lowercase, and `ValueError` for anything but `fake`/`glm`/`off`, which stops the gunicorn worker at import. Pinned in `test_ocr_backend_normalised_and_typos_rejected`, `test_bad_ocr_backend_stops_the_wsgi_app_import` |
+| ML-72 | high | `ml/serve/Dockerfile` (found by the builder's live build) | The image never built. The `pytorch/pytorch:2.5.1-cuda12.4` base ships Python 3.11, while `serve/requirements.txt` pins `numpy==2.5.4` (Requires-Python >=3.12), so pip failed with "No matching distribution found for numpy==2.5.4". | **fixed**: `FROM python:3.12-slim` + OpenCV libs + pinned `torch==2.9.1`/`torchvision==0.24.1` from `ARG TORCH_INDEX` (CPU default, cu128 for GPU); ML.md build command updated. Pinned statically in `test_dockerfile_base_python_can_install_pins`; the real build is the builder's live check |
+
+Other notes (no ID):
+- An empty `OCR_BACKEND=` now fails at startup (it used to mean fake). That is acceptable because it fails loudly, and compose never
+  sets it empty.
+- There is no warmup, so the first `/detect` loads both models on CPU inside the backend's 60 s timeout. On a timeout the backend
+  falls back to Gemini.
+- SETUP.md's "copy into `../mldata/models/current/`" is right for the main checkout only. ML.md carries the absolute-path caveat.
+
+## Files written
+`ml/eval/tests/qa_ml_compose.py` (new), this section.
