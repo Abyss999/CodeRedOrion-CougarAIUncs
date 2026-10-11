@@ -322,7 +322,7 @@ decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (def
 | detector | `yolo26n.pt`, 512 px, batch 32, **30 epochs** | `yolo26s.pt`, 640 px, batch 16, 80 epochs |
 | detector train set | **capped**: <= `DET_CAP` (400) boxes per food, `ml/yolo/cap_detector.py` (~4.9k of 11.8k images) | all |
 | classifier | `yolo26n-cls`, 224 px, batch 128, **10 epochs**, all crops | same model, batch 64, 30 epochs |
-| cache / val | `--cache ram`, `--no-epoch-val` (Ultralytics still validates the last epoch) | no cache, val every epoch |
+| cache / val | `--cache ram` (detector only), `--no-epoch-val` (Ultralytics still validates the last epoch) | no cache, val every epoch |
 | checkpoints | `data_<DATA_VER>_fast[_dry]/` | `data_<DATA_VER>[_dry]/` |
 
 - **Why the cap is safe for freshness:** the detector only learns food names; fresh / semi_fresh / spoiled comes from the crop classifier,
@@ -337,11 +337,33 @@ decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (def
 - **Time is an estimate, not measured on a T4**: ~4.9k images/epoch, CPU-bound at roughly 120-150 img/s with RAM cache -> ~35-40 s per
   epoch -> ~20 min detector, ~5 min classifier, ~3 min export. The Ultralytics progress bar shows the real s/epoch; record it here after the
   first run.
+- **The classifier is never RAM-cached (ML-69).** Ultralytics caches classification crops at their original size: the 14,377 train crops
+  are 9.4 GB decoded, which OOM-killed (SIGKILL) the first FAST run on a free Colab (~12.7 GB) at the start of the classifier stage. The
+  detector cache resizes to 512 px first (~3 GB for 4.9k images). A resumed stage passes `cache` / `val` too (Ultralytics allows those
+  overrides), so a checkpoint saved with `cache=ram` can't bring it back. Measured on that run: detector 30 epochs ~26 min on a T4.
 - **Drive sync can truncate the export (seen 2026-10-11).** `train.py` writes `export/` straight into the Drive mount. On the first
   FAST run Drive uploaded `predictions.jsonl` while it was still being written: the Drive copy had 582 KB of NUL bytes and 3,184 of
   5,205 rows (the `.pt` files were intact, zip CRC OK). Score from `export.zip` (cell 6 reads the complete local copy) or run
   `from google.colab import drive; drive.flush_and_unmount()` before reading the export from Drive.
 - Don't train on `pipeline augment-lighting` output in FAST mode: it multiplies the train images (and see `docs/PIPELINE.md` for the lighting sign-off rule).
+
+### 5e. Run log
+**`fwr_20261011` (first real FAST run, Colab T4, 2026-10-11).** Data version `a4729025` (`sources.json` hash); Drive folder
+`MyDrive/fwr_runs/fwr_20261011/data_a4729025_fast/`.
+
+| Step | Result |
+|---|---|
+| Detector train set (`DET_CAP` 400) | 4,848 of 11,517 train images; boxes 6,052 fresh / 569 semi_fresh / 2,190 spoiled |
+| Detector | `yolo26n`, 512 px, 30 epochs, ~26 min (10:54-11:20 UTC) |
+| Classifier | first attempt OOM-killed at the start (ML-69, fixed in #88); rerun without the RAM cache: 10 epochs at ~100 s/epoch (~17 min), train loss 0.61 (epoch 1) -> 0.12 (epoch 8) |
+| Export (11:58-12:01 UTC) | all 7 files. `detector.pt` 5.45 MB and `freshness.pt` 3.19 MB pass their zip CRC and load (23-class detector, 3-class fresh / semi_fresh / spoiled classifier); local copy `../mldata/models/fwr_fast_20261011` |
+| Held-out predictions | **not scored.** `predictions.jsonl` on Drive (and the copy downloaded from it) is truncated by Drive sync: 582,423 NUL bytes, ~3.1k of 5,205 rows parse. **No metrics from this run may be quoted.** |
+| Serving | weights served by `ml/serve` and checked end to end (photo -> `/items/from-photo` `source: "yolo"` -> Gemini enrichment -> `POST /items`). One fridge photo: names right, 2 of 3 fresh items called spoiled (an anecdote, not a metric; the photo may be in this build's train split) |
+
+**Next:** re-export and score. Open the notebook from `main`, keep `RUN_ID=fwr_20261011`, `FAST` on, `DRY_RUN` off, Runtime ->
+Run all: both stages are already finished on Drive, so they are skipped and only the export is rewritten (a few minutes). Take the
+predictions from the `export.zip` that cell 6 downloads (or run `drive.flush_and_unmount()` before reading Drive), check that
+`predictions.jsonl` has as many rows as `heldout_gt.jsonl`, then ML QA runs `ml/eval/detection_metrics.py` and `check_thresholds.py`.
 
 ## 6. Running the service on a GPU box
 **On the same machine as the API (compose, CPU is fine for the yolo26n FAST model):** put `detector.pt` and
