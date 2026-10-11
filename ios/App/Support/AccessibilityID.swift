@@ -34,7 +34,26 @@ enum AccessibilityID {
 
     // Namespaces for the upcoming screens. Each PR adds its element ids inside its own enum
     // (convention `screen.element[.id]`); `screen` is the screen's root id.
-    enum Home { static let screen = "home" }
+    enum Home {
+        static let screen = "home"
+        static let date = "home.date"
+        static let greeting = "home.greeting"
+        static let settings = "home.settings"
+        static let impactPill = "home.impact"
+        static let tip = "home.tip"
+        static let tipDismiss = "home.tip.dismiss"
+        static let useFirst = "home.usefirst"
+        static let seeAll = "home.seeall"
+        static func row(_ id: String) -> String { "home.row.\(id)" }
+        static let addFood = "home.addfood"
+        static let cook = "home.cook"
+        static let cookCard = "home.cook.card"
+        static let cookEmpty = "home.cook.empty"
+        static let banner = "home.banner"
+        static let bannerRetry = "home.banner.retry"
+        static let server = "home.server"
+        static let serverChange = "home.server.change"
+    }
     enum PhotoReview { static let screen = "photoreview" }
     enum ItemDetail { static let screen = "itemdetail" }
     enum Impact { static let screen = "impact" }
