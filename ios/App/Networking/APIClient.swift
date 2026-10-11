@@ -74,6 +74,11 @@ protocol APIClient: Sendable {
     func declineFriend(userId: String) async throws
     /// `DELETE /friends/:user_id` to unfriend, or cancel a request you sent.
     func removeFriend(userId: String) async throws
+    /// `GET /friends/code`: your shareable friend code (10 minutes). The QR encodes `url`.
+    func friendCode() async throws -> FriendCodeInfo
+    /// `POST /friends {code}` (a scanned friend QR). 201 = instant friends; 200 = already friends
+    /// (`alreadyFriends`); 400 `invalid_code` expired / forged / malformed.
+    func addFriend(code: String) async throws -> FriendAddResult
 
     // MARK: Groups
     func listGroups() async throws -> [SharingGroup]
@@ -86,9 +91,16 @@ protocol APIClient: Sendable {
     /// `GET /groups/:id/pantry`.
     func groupPantry(id: String) async throws -> [PantryItem]
 
+    // MARK: Pickup spot (feat/friend-qr-pickup)
+    /// `POST /share {item_id, group_id?, pickup?}`. Friends audience sends no `group_id`.
+    /// 400 `validation_error` for a pickup with neither a note nor a lat+lng pair.
+    func share(itemId: String, audience: ShareAudience, pickup: Pickup?) async throws -> Listing
+    /// `PATCH /share/:id {pickup | null}`. Owner only, while the listing is open (409 `listing_closed` otherwise).
+    func updatePickup(listingId: String, pickup: Pickup?) async throws -> Listing
+
     // MARK: People
     /// `GET /people/reachable` (coming): friends and members of your groups.
-    /// With `itemId` the backend flags the item's claimer (`isClaimer`) and sorts them first.
+    /// With `itemId` (an item you own), the person who claimed its open listing has `is_claimer: true`.
     func reachablePeople(itemId: String?) async throws -> [Person]
 
     // MARK: Insights
@@ -98,6 +110,7 @@ protocol APIClient: Sendable {
 }
 
 extension APIClient {
+    func reachablePeople() async throws -> [Person] { try await reachablePeople(itemId: nil) }
     func createItem(_ item: NewItem) async throws -> Item {
         guard let first = try await createItems([item]).first else {
             throw APIError.decoding("Empty create response")
@@ -117,7 +130,15 @@ extension APIClient {
     func removeBatch(ids: [String], outcome: RemoveOutcome) async throws -> [Item] {
         try await removeBatch(ids: ids, outcome: outcome, recipient: .default)
     }
+    /// Fallbacks so other conformers (test spies) keep compiling; Live and Mock override both.
+    func share(itemId: String, audience: ShareAudience, pickup: Pickup?) async throws -> Listing {
+        let listing = try await createShare(itemId: itemId, groupId: audience.groupId)
+        guard let pickup else { return listing }
+        return try await updatePickup(listingId: listing.id, pickup: pickup)
+    }
+    func updatePickup(listingId: String, pickup: Pickup?) async throws -> Listing {
+        throw APIError.invalidRequest("Pickup spots aren't supported by this client.")
+    }
     func createShare(itemId: String) async throws -> Listing { try await createShare(itemId: itemId, groupId: nil) }
-    func reachablePeople() async throws -> [Person] { try await reachablePeople(itemId: nil) }
     func recipesSuggest() async throws -> [Recipe] { try await recipesSuggest(maxResults: nil, dietary: nil) }
 }

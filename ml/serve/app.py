@@ -6,6 +6,8 @@
      -> {"lines":[{name,quantity,price}], "total": float|null, "raw_text": str}
   GET  /health  -> {"status":"ok", ...}
   Errors: {"error":{"code","message"}}
+  /ocr applies EXIF orientation before OCR; /detect does not. /ocr answers 422 ocr_no_text when the engine
+  reads no text (blank or whitespace-only), never an empty 200.
 """
 from __future__ import annotations
 import io
@@ -13,7 +15,7 @@ import logging
 import os
 
 from flask import Flask, jsonify, request
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 
 from ocr.receipt_pipeline import gemini_structure, parse_receipt_text
@@ -30,7 +32,9 @@ class ApiError(Exception):
         self.status, self.code, self.message = status, code, message
 
 
-def _load_image() -> Image.Image:
+def _load_image(upright: bool = False) -> Image.Image:
+    """Decode the upload to RGB. upright=True applies the EXIF orientation first (/ocr only; /detect keeps
+    the stored pixel frame, see docs/API.md and ML_BBOX_FRAME)."""
     f = request.files.get("image")
     if f is None or not f.filename and not f.content_length:
         raise ApiError(400, "missing_image", "multipart field 'image' is required")
@@ -43,6 +47,11 @@ def _load_image() -> Image.Image:
         img.load()
     except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError):
         raise ApiError(400, "invalid_image", "file is not a valid image")
+    if upright:  # must run on the opened image: EXIF is gone after convert()
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception:  # malformed EXIF must not fail the request; OCR the stored orientation
+            log.warning("exif_transpose failed; using stored orientation", exc_info=True)
     return img.convert("RGB")
 
 
@@ -117,8 +126,12 @@ def create_app(detector=None, ocr=None, structure_with_gemini: bool | None = Non
     def ocr_route():
         if eng is None:
             raise ApiError(503, "ocr_not_configured", "receipt OCR is off on this service (OCR_BACKEND=off)")
-        img = _load_image()
+        img = _load_image(upright=True)
         raw = eng.image_to_text(img)
+        if not (raw or "").strip():
+            log.warning("ocr engine returned no text")
+            raise ApiError(422, "ocr_no_text", "No text could be read from the receipt photo. "
+                                               "Retake the photo flat, well lit and in focus.")
         parsed = parse_receipt_text(raw)
         if use_gemini:
             g = gemini_structure(raw)

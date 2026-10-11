@@ -5,8 +5,9 @@ import Observation
 struct RemoveChoice: Equatable, Sendable {
     var outcome: RemoveOutcome
     var wasteReason: WasteReason?
-    /// Donated only. The app always sends nil: the server credits the listing's claimer (docs/API.md).
-    var recipientId: String?
+    /// Donated only (ruling #78): `.default` omits `recipient_id` (the server credits the claimer),
+    /// `.none` sends `null` ("Someone not on BiteDown"), `.user(id)` names a reachable person.
+    var recipient: RecipientChoice = .default
 }
 
 /// Inline error banner (`fridge.remove.error`): a failed remove or undo was rolled back, or a
@@ -18,8 +19,16 @@ struct FridgeBanner: Identifiable {
     var retry: (() -> Void)?
 }
 
-/// State for the Fridge tab: items per storage, grouped by food group, plus optimistic removal
-/// with Undo and rollback. Views animate through `withMotion`, so Reduce Motion is honoured.
+/// State for the Fridge tab: items per storage, grouped by food group, multi-select, and
+/// optimistic removal (single or batch) with Undo and rollback. Views animate through
+/// `withMotion`, so Reduce Motion is honoured.
+///
+/// Concurrency rules:
+/// - Operations on one item id run one at a time, in the order they were issued (`enqueue`), so a
+///   restore never overlaps the remove it undoes.
+/// - A refresh that lands while a remove/restore is in flight (or settled after the refresh began)
+///   is reconciled against `reconcile`: removed ids stay out, restored ids are re-inserted once.
+/// - `reconcile`, the op tails and the removal records are pruned as soon as they can no longer matter.
 @MainActor
 @Observable
 final class FridgeModel {
@@ -36,7 +45,27 @@ final class FridgeModel {
         let index: Int
     }
 
-    var storage: Storage = .fridge
+    /// What a refresh must respect for one id until the server has caught up.
+    private struct Reconcile {
+        enum Kind { case removed, restored(Item, Location) }
+        var kind: Kind
+        /// The `loadSeq` when the last operation on the id finished; nil while one is in flight.
+        /// Only a load that *started* after this can be trusted, and prunes the entry.
+        var settledAfterLoad: Int?
+    }
+
+    /// Whether the remove request for one user action failed (shared by its items), so Undo can skip the restore.
+    private final class RemovalRecord { var failed = false }
+
+    private struct Tail {
+        let token: UUID
+        let task: Task<Void, Never>
+    }
+
+    var storage: Storage = .fridge {
+        // A selection never survives a segment change: the count and bar actions cover visible rows only.
+        didSet { if storage != oldValue { selection = [] } }
+    }
     var toast: UndoToastItem?
     /// The Undo toast for a removal made from the sheet, held until the sheet has dismissed so the
     /// full 5 s window is visible (`showPendingToast()`). The removal itself is not delayed.
@@ -46,16 +75,18 @@ final class FridgeModel {
     /// DEBUG probe `debug.stagger.count`: staggers run on a storage's first load only.
     private(set) var staggerRestarts = 0
 
+    // Multi-select (FridgeSelect).
+    private(set) var isSelecting = false
+    private(set) var selection: Set<String> = []
+
     private(set) var sections: [Storage: [ItemSection]] = [:]
     private var errors: [Storage: Error] = [:]
     private var everLoaded: Set<Storage> = []
-    /// Removals in flight, keyed by item id. The value says whether the server accepted it.
-    private var pendingRemovals: [String: Task<Bool, Never>] = [:]
-    /// Ids removed locally and not undone, so a refresh racing a removal doesn't bring them back.
-    private var locallyRemoved: Set<String> = []
+    private var reconcile: [String: Reconcile] = [:]
+    private var tails: [String: Tail] = [:]
+    private var loadSeq = 0
+    private var activeLoads = 0
     private let api: APIClient
-    /// Bumped when the signed-in user changes, so a load started for the previous identity is dropped.
-    private var generation = 0
 
     init(api: APIClient) { self.api = api }
 
@@ -81,43 +112,16 @@ final class FridgeModel {
 
     func refresh() async { await load(storage, isRefresh: true) }
 
-    /// The session changed (sign-in, sign-out, 401, different user). A different user (or none)
-    /// drops every per-storage cache, toast and banner; signed out shows the unauthorized error
-    /// instead of stale items. Same user with a new token only clears errors and keeps items.
-    /// Then the visible storage reloads; the others load lazily when selected.
-    func sessionChanged(from old: User?, to new: User?) async {
-        if old?.id == new?.id {
-            guard new != nil else { return }
-            errors = [:]
-            await loadIfNeeded(storage)
-            return
-        }
-        generation += 1
-        sections = [:]
-        errors = [:]
-        everLoaded = []
-        pendingRemovals = [:]
-        locallyRemoved = []
-        pendingToast = nil
-        toast = nil
-        banner = nil
-        guard new != nil else {
-            for s in Storage.allCases { errors[s] = APIError.unauthorized }
-            return
-        }
-        await load(storage, isRefresh: false)
-    }
-
     private func load(_ storage: Storage, isRefresh: Bool) async {
-        let gen = generation
+        loadSeq += 1
+        let seq = loadSeq
+        activeLoads += 1
+        defer { activeLoads -= 1 }
         do {
             let listing = try await api.listItems(storage: storage, groupBy: .foodGroup)
-            guard gen == generation else { return }
-            let fresh = Self.grouped(listing).compactMap { section -> ItemSection? in
-                var s = section
-                s.items.removeAll { locallyRemoved.contains($0.id) }
-                return s.items.isEmpty ? nil : s
-            }
+            var fresh = Self.grouped(listing)
+            applyReconcile(to: &fresh, storage: storage)
+            pruneReconcile(upTo: seq)
             let isFirst = !everLoaded.contains(storage)
             everLoaded.insert(storage)
             // Stagger only on a storage's first load, never on refresh. Restart before the rows exist.
@@ -127,11 +131,11 @@ final class FridgeModel {
             }
             sections[storage] = fresh
             errors[storage] = nil
+            selection = selection.filter { item(id: $0) != nil }
         } catch is CancellationError {
             return
         } catch {
             if (error as? URLError)?.code == .cancelled { return }
-            guard gen == generation else { return }
             if sections[storage] == nil {
                 errors[storage] = error
             } else if isRefresh {
@@ -140,6 +144,29 @@ final class FridgeModel {
                     Task { await self.refresh() }
                 }
             }
+        }
+    }
+
+    /// Removed ids stay out (the listing may predate the server accepting the remove); restored ids
+    /// that the listing predates are put back exactly once.
+    private func applyReconcile(to fresh: inout [ItemSection], storage: Storage) {
+        for (id, entry) in reconcile {
+            switch entry.kind {
+            case .removed:
+                for i in fresh.indices { fresh[i].items.removeAll { $0.id == id } }
+                fresh.removeAll { $0.items.isEmpty }
+            case .restored(let item, let location):
+                guard location.storage == storage,
+                      !fresh.contains(where: { $0.items.contains { $0.id == id } }) else { continue }
+                fresh.insertItem(item, group: location.group, index: location.index)
+            }
+        }
+    }
+
+    /// Drops entries whose operation finished before the load numbered `seq` started.
+    private func pruneReconcile(upTo seq: Int) {
+        for (id, entry) in reconcile {
+            if let settled = entry.settledAfterLoad, seq > settled { reconcile[id] = nil }
         }
     }
 
@@ -154,40 +181,103 @@ final class FridgeModel {
         }
     }
 
+    // MARK: Per-item operation queue
+
+    /// Runs `work` after every earlier operation on any of `ids` has finished.
+    private func enqueue(_ ids: [String], _ work: @escaping @MainActor () async -> Void) {
+        let prior = ids.compactMap { tails[$0]?.task }
+        let token = UUID()
+        let task = Task { @MainActor [weak self] in
+            for p in prior { await p.value }
+            await work()
+            self?.operationFinished(ids, token: token)
+        }
+        let tail = Tail(token: token, task: task)
+        for id in ids { tails[id] = tail }
+    }
+
+    /// The last operation on an id is done: nothing queued behind it, so the tracking can go.
+    private func operationFinished(_ ids: [String], token: UUID) {
+        for id in ids where tails[id]?.token == token {
+            tails[id] = nil
+            guard var entry = reconcile[id] else { continue }
+            if activeLoads == 0 {
+                reconcile[id] = nil     // no refresh in flight, so none can be stale
+            } else {
+                entry.settledAfterLoad = loadSeq
+                reconcile[id] = entry
+            }
+        }
+    }
+
     // MARK: Removal
 
-    /// Optimistic removal: the row goes now, the toast offers Undo for 5 s, and the request runs in
-    /// the background. A failure puts the row back and shows the banner.
-    /// `showToastNow` is for removals made without a sheet (the banner's "Try again"): the toast
-    /// shows at once instead of waiting for a sheet dismissal that will never come.
-    func remove(_ item: Item, choice: RemoveChoice, reduceMotion: Bool, showToastNow: Bool = false) {
-        guard let location = location(of: item.id) else { return }
+    /// Optimistic removal from the sheet: the row goes now, the toast offers Undo for 5 s, and the
+    /// request runs in the background. A failure puts the row back and shows the banner.
+    func remove(_ item: Item, choice: RemoveChoice, reduceMotion: Bool) {
+        perform([item], message: "\(item.name) removed", holdToast: true,
+                failure: "Couldn't remove \(item.name). It's back in your list.", reduceMotion: reduceMotion,
+                retry: { [weak self] in
+                    guard let self, let current = self.item(id: item.id) else { return }
+                    self.remove(current, choice: choice, reduceMotion: reduceMotion)
+                },
+                remote: { api in
+                    _ = try await api.removeItem(id: item.id, outcome: choice.outcome,
+                                                 wasteReason: choice.wasteReason, recipient: choice.recipient)
+                })
+    }
+
+    /// Batch removal (`used` or `donated`). "Shared them" never names a recipient: the server credits
+    /// each listing's claimer, or nobody.
+    func removeBatch(_ items: [Item], outcome: RemoveOutcome, reduceMotion: Bool) {
+        let n = items.count
+        let noun = n == 1 ? "1 item" : "\(n) items"
+        let message = outcome == .used ? "\(noun) marked used" : (n == 1 ? "1 item shared" : "\(n) items shared")
+        let ids = items.map(\.id)
+        perform(items, message: message, holdToast: false,
+                failure: n == 1 ? "Couldn't update that item. It's back in your list."
+                                : "Couldn't update \(n) items. They're back in your list.",
+                reduceMotion: reduceMotion,
+                retry: { [weak self] in
+                    guard let self else { return }
+                    let current = ids.compactMap { self.item(id: $0) }
+                    guard !current.isEmpty else { return }
+                    self.removeBatch(current, outcome: outcome, reduceMotion: reduceMotion)
+                },
+                remote: { api in
+                    _ = try await api.removeBatch(ids: ids, outcome: outcome, recipient: .default)
+                })
+    }
+
+    /// Removes the selected items as one batch and leaves select mode.
+    func removeSelected(outcome: RemoveOutcome, reduceMotion: Bool) {
+        let items = selectedItems
+        guard !items.isEmpty else { return }
+        exitSelection()
+        removeBatch(items, outcome: outcome, reduceMotion: reduceMotion)
+    }
+
+    private func perform(_ items: [Item], message: String, holdToast: Bool, failure: String, reduceMotion: Bool,
+                         retry: @escaping () -> Void, remote: @escaping @Sendable (APIClient) async throws -> Void) {
+        let located = items.compactMap { item in location(of: item.id).map { (item: item, location: $0) } }
+        guard !located.isEmpty else { return }
+        let ids = located.map(\.item.id)
         banner = nil
-        locallyRemoved.insert(item.id)
-        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { delete(item.id) }
-        let undoToast = UndoToastItem(message: "\(item.name) removed") { [weak self] in
-            self?.undo(item, location: location, reduceMotion: reduceMotion)
+        for id in ids { reconcile[id] = Reconcile(kind: .removed, settledAfterLoad: nil) }
+        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { for id in ids { delete(id) } }
+        let record = RemovalRecord()
+        let toastItem = UndoToastItem(message: message, itemIds: Set(ids)) { [weak self] in
+            self?.undo(located, record: record, failureName: located.count == 1 ? located[0].item.name : nil,
+                       reduceMotion: reduceMotion)
         }
-        if showToastNow {
-            pendingToast = nil
-            toast = undoToast
-        } else {
-            pendingToast = undoToast
-        }
+        if holdToast { pendingToast = toastItem } else { toast = toastItem }
         let api = self.api
-        let gen = generation
-        pendingRemovals[item.id] = Task { [weak self] in
+        enqueue(ids) { [weak self] in
             do {
-                _ = try await api.removeItem(id: item.id, outcome: choice.outcome,
-                                             wasteReason: choice.wasteReason, recipientId: choice.recipientId)
-                return true
+                try await remote(api)
             } catch {
-                // The server already removed it (409 already_removed), or answered 2xx with a body
-                // we couldn't read: the removal stands.
-                if error.removeStands { return true }
-                guard let self, self.generation == gen else { return false }
-                self.removeFailed(item, location: location, choice: choice, error: error, reduceMotion: reduceMotion)
-                return false
+                record.failed = true
+                self?.removeFailed(located, failure: failure, retry: retry, reduceMotion: reduceMotion)
             }
         }
     }
@@ -199,61 +289,124 @@ final class FridgeModel {
         toast = pending
     }
 
-    private func removeFailed(_ item: Item, location: Location, choice: RemoveChoice, error: Error, reduceMotion: Bool) {
-        let undone = !locallyRemoved.contains(item.id)
-        locallyRemoved.remove(item.id)
-        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { insert(item, at: location) }
-        if pendingToast?.message == "\(item.name) removed" { pendingToast = nil }
-        if toast?.message == "\(item.name) removed" { toast = nil }
+    private func removeFailed(_ located: [(item: Item, location: Location)], failure: String,
+                              retry: @escaping () -> Void, reduceMotion: Bool) {
+        let ids = Set(located.map(\.item.id))
+        var undone = true
+        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) {
+            for (item, location) in located {
+                if case .removed = reconcile[item.id]?.kind {
+                    undone = false
+                    reconcile[item.id] = nil
+                    insert(item, at: location)
+                }
+            }
+        }
+        if let held = pendingToast, !held.itemIds.isDisjoint(with: ids) { pendingToast = nil }
+        if let shown = toast, !shown.itemIds.isDisjoint(with: ids) { toast = nil }
         guard !undone else { return }   // already back via Undo; nothing to report
         Haptics.error()
-        showBanner("Couldn't remove \(item.name). It's back in your list.") { [weak self] in
-            guard let self, let current = self.item(id: item.id) else { return }
-            self.remove(current, choice: choice, reduceMotion: reduceMotion, showToastNow: true)
-        }
+        showBanner(failure, retry: retry)
     }
 
-    /// Undo: the row comes back now; restore runs after the removal settles. A failed restore
-    /// removes the row again and shows the banner.
-    private func undo(_ item: Item, location: Location, reduceMotion: Bool) {
-        locallyRemoved.remove(item.id)
+    /// Undo: the rows come back now; the restore runs after the removal settles. A failed restore
+    /// removes the rows again and shows the banner.
+    private func undo(_ located: [(item: Item, location: Location)], record: RemovalRecord,
+                      failureName: String?, reduceMotion: Bool) {
         banner = nil
-        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { insert(item, at: location) }
-        let pending = pendingRemovals.removeValue(forKey: item.id)
+        let ids = located.map(\.item.id)
+        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) {
+            for (item, location) in located {
+                reconcile[item.id] = Reconcile(kind: .restored(item, location), settledAfterLoad: nil)
+                insert(item, at: location)
+            }
+        }
         let api = self.api
-        let gen = generation
-        Task { [weak self] in
+        enqueue(ids) { [weak self] in
             // If the removal never reached the server, there is nothing to restore.
-            if let pending, await pending.value == false { return }
-            if self?.generation != gen { return }
+            if record.failed {
+                for id in ids { self?.reconcile[id] = nil }
+                return
+            }
             do {
-                let restored = try await api.restoreItem(id: item.id)
-                guard self?.generation == gen else { return }
-                self?.replace(restored)
+                let restored = ids.count == 1 ? [try await api.restoreItem(id: ids[0])]
+                                              : try await api.restoreBatch(ids: ids)
+                self?.applyRestored(restored)
             } catch {
-                guard self?.generation == gen else { return }
-                self?.restoreFailed(item, location: location, error: error, reduceMotion: reduceMotion)
+                self?.restoreFailed(located, record: record, failureName: failureName, error: error,
+                                    reduceMotion: reduceMotion)
             }
         }
     }
 
-    private func restoreFailed(_ item: Item, location: Location, error: Error, reduceMotion: Bool) {
-        // 409 not_removed: the item is already active, so the restored row is right. No banner.
+    /// Swaps in the server's version of each restored item. Re-inserts one that a refresh dropped,
+    /// unless the person has since removed it again.
+    private func applyRestored(_ restored: [Item]) {
+        for item in restored {
+            guard case .restored(_, let location) = reconcile[item.id]?.kind else { continue }
+            if let current = self.location(of: item.id), var secs = sections[current.storage],
+               let si = secs.firstIndex(where: { $0.foodGroup == current.group }) {
+                secs[si].items[current.index] = item
+                sections[current.storage] = secs
+            } else {
+                insert(item, at: location)
+            }
+        }
+    }
+
+    private func restoreFailed(_ located: [(item: Item, location: Location)], record: RemovalRecord,
+                               failureName: String?, error: Error, reduceMotion: Bool) {
+        // 409 not_removed: the items are already active, so the restored rows are right. No banner.
         if (error as? APIError) == .notRemoved { return }
-        locallyRemoved.insert(item.id)
-        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { delete(item.id) }
+        var changed = false
+        withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) {
+            for (item, _) in located {
+                if case .restored = reconcile[item.id]?.kind {
+                    changed = true
+                    reconcile[item.id] = Reconcile(kind: .removed, settledAfterLoad: nil)
+                    delete(item.id)
+                }
+            }
+        }
+        guard changed else { return }
         Haptics.error()
         let expired = (error as? APIError) == .restoreWindowExpired
-        showBanner(expired ? "It's too late to undo. \(item.name) stays removed."
-                           : "Couldn't undo. \(item.name) is still removed.",
+        let subject = failureName ?? "These items"
+        let verb = failureName == nil ? "stay" : "stays"
+        let stillRemoved = failureName == nil ? "are still removed" : "is still removed"
+        showBanner(expired ? "It's too late to undo. \(subject) \(verb) removed."
+                           : "Couldn't undo. \(subject) \(stillRemoved).",
                    retry: expired ? nil : { [weak self] in
-                       self?.undo(item, location: location, reduceMotion: reduceMotion)
+                       self?.undo(located, record: record, failureName: failureName, reduceMotion: reduceMotion)
                    })
     }
 
     private func showBanner(_ message: String, retry: (() -> Void)?) {
         banner = FridgeBanner(message: message, retry: retry)
         AccessibilityNotification.Announcement(message).post()
+    }
+
+    // MARK: Selection
+
+    func enterSelection() {
+        guard !isSelecting else { return }
+        banner = nil
+        selection = []
+        isSelecting = true
+    }
+
+    func exitSelection() {
+        isSelecting = false
+        selection = []
+    }
+
+    func toggleSelection(_ id: String) {
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+    }
+
+    /// The selected items on screen, in order.
+    private var selectedItems: [Item] {
+        (sections[storage] ?? []).flatMap(\.items).filter { selection.contains($0.id) }
     }
 
     // MARK: List editing
@@ -287,21 +440,21 @@ final class FridgeModel {
     /// Idempotent: does nothing if the item is already listed.
     private func insert(_ item: Item, at location: Location) {
         guard self.item(id: item.id) == nil, var secs = sections[location.storage] else { return }
-        if let si = secs.firstIndex(where: { $0.foodGroup == location.group }) {
-            secs[si].items.insert(item, at: min(location.index, secs[si].items.count))
-        } else {
-            secs.append(ItemSection(foodGroup: location.group, items: [item]))
-            let order = FoodGroup.allCases
-            secs.sort { (order.firstIndex(of: $0.foodGroup) ?? 0) < (order.firstIndex(of: $1.foodGroup) ?? 0) }
-        }
+        secs.insertItem(item, group: location.group, index: location.index)
         sections[location.storage] = secs
     }
+}
 
-    private func replace(_ item: Item) {
-        guard let loc = location(of: item.id), var secs = sections[loc.storage],
-              let si = secs.firstIndex(where: { $0.foodGroup == loc.group }) else { return }
-        secs[si].items[loc.index] = item
-        sections[loc.storage] = secs
+private extension Array where Element == ItemSection {
+    /// Inserts into the item's food-group section (created in `FoodGroup` order if missing).
+    mutating func insertItem(_ item: Item, group: FoodGroup, index: Int) {
+        if let si = firstIndex(where: { $0.foodGroup == group }) {
+            self[si].items.insert(item, at: Swift.min(index, self[si].items.count))
+        } else {
+            append(ItemSection(foodGroup: group, items: [item]))
+            let order = FoodGroup.allCases
+            sort { (order.firstIndex(of: $0.foodGroup) ?? 0) < (order.firstIndex(of: $1.foodGroup) ?? 0) }
+        }
     }
 }
 
@@ -313,26 +466,12 @@ enum ItemText {
         return item.unit == "piece" ? n : "\(n) \(item.unit)"
     }
 
-    /// Row meta line. Spoiled items say so in words (the badge says "Check").
-    static func meta(_ item: Item) -> String {
-        if item.freshness == .spoiled { return "Photo check: looks spoiled" }
-        var parts = [quantity(item)]
-        if item.freshness == .semiFresh { parts.append("photo check: ripe") }
-        else if let added = item.addedAt { parts.append("added \(added.formatted(.dateTime.month(.abbreviated).day()))") }
-        return parts.joined(separator: " · ")
-    }
+    /// Row meta line: the quantity only. The badge is the row's one status (DESIGN_SYSTEM Principle 1).
+    static func meta(_ item: Item) -> String { quantity(item) }
 
-    /// Lower-case expiry phrase for the sheet header, e.g. "expires tomorrow".
+    /// Lower-case expiry phrase for running text, e.g. "expires tomorrow". Keyed on the badge kind.
     static func expiryPhrase(_ item: Item) -> String? {
-        guard let badge = ExpiryBadgeModel.make(for: item) else { return nil }
-        switch badge.text {
-        case "Check": return "looks spoiled"
-        case "Use soon": return "use soon"
-        case "Expired": return "expired"
-        case "Today": return "expires today"
-        case "1 day": return "expires tomorrow"
-        default: return "expires in \(badge.text)"
-        }
+        ExpiryBadgeModel.make(for: item)?.phrase
     }
 
     static func hasOpenListing(_ item: Item) -> Bool { item.share?.status == .open }
@@ -343,14 +482,5 @@ enum ItemText {
         if let e = expiryPhrase(item) { parts.append(e) }
         if hasOpenListing(item) { parts.append("on Share") }
         return parts.joined(separator: " · ")
-    }
-}
-
-private extension Error {
-    /// True when a failed remove call still means the item is removed on the server.
-    var removeStands: Bool {
-        guard let e = self as? APIError else { return false }
-        if case .decoding = e { return true }
-        return e.code == "already_removed"
     }
 }

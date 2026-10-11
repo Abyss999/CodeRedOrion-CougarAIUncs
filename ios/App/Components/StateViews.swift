@@ -9,6 +9,7 @@ struct EmptyStateView: View {
     var systemImage: String = "leaf"
     var actionTitle: String?
     var action: (() -> Void)?
+    var actionIdentifier: String?
 
     var body: some View {
         ContentUnavailableView {
@@ -22,6 +23,7 @@ struct EmptyStateView: View {
                     .tint(Theme.Colors.forest)
                     .foregroundStyle(Theme.Colors.onForest)
                     .controlSize(.large)
+                    .accessibilityIdentifier(actionIdentifier ?? "\(screen).empty.action")
             }
         }
         .foregroundStyle(Theme.Colors.ink)

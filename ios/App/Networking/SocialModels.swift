@@ -159,8 +159,17 @@ struct Listing: Codable, Hashable, Sendable, Identifiable {
     var fulfilledAt: Date?
     /// Owner-side audience block; nil until the backend sends it.
     var audience: ListingAudience?
+    /// Pickup spot: owner and claimer only (nil for everyone else). Backend `feat/friend-qr-pickup`.
+    var pickup: Pickup? = nil
+    /// True when a spot exists, whoever can see it. Nil from older backends.
+    var pickupSet: Bool? = nil
 }
 struct ListingResponse: Codable, Sendable { let listing: Listing }
+
+/// Where to collect a shared item (`pickup` on a listing you claimed or own). Everything is optional:
+/// the sharer may give a note, a pin, or both.
+/// One pickup type for both Social and Item detail (see PickupModels.swift).
+typealias PickupSpot = Pickup
 
 /// An entry of the Food Pantry (`GET /share`), someone else's open listing.
 struct PantryListing: Codable, Hashable, Sendable, Identifiable {
@@ -187,6 +196,10 @@ struct PantryListing: Codable, Hashable, Sendable, Identifiable {
     var createdAt: Date?
     var source: Source
     var item: Food
+    /// True when the sharer set a pickup spot. New field: nil until the backend sends it.
+    var pickupSet: Bool? = nil
+    /// The spot itself; only the claimer and the owner get it. Nil until the backend sends it.
+    var pickup: PickupSpot? = nil
 }
 struct PantryListingsResponse: Codable, Sendable { let listings: [PantryListing] }
 

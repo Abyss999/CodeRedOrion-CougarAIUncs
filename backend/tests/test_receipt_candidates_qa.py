@@ -13,6 +13,16 @@ import requests as real_requests
 
 from app.services import candidates, gemini, ml
 
+
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
 LOGGER = "app.gemini.usage"
 FAKE_KEY = "test-gemini-key-not-real"
 
@@ -68,7 +78,7 @@ def _kv(rec):
 
 
 def img():
-    return {"image": (io.BytesIO(b"\xff\xd8fakejpeg"), "r.jpg", "image/jpeg")}
+    return {"image": (io.BytesIO(TINY_JPEG), "r.jpg", "image/jpeg")}
 
 
 def post_receipt(client, user, **kw):
@@ -199,7 +209,7 @@ def test_no_gemini_call_without_lines(client, user, monkeypatch, gem_on, ml_on):
     fake = FakeGenai(monkeypatch, [])
     set_ocr(monkeypatch, [{"name": "  "}, "junk", {"price": 1}], total=0)
     b = post_receipt(client, user).get_json()
-    assert b == {"candidates": [], "total": 0.0, "categorized_by": "heuristic"} and fake.calls == []
+    assert b == {"candidates": [], "total": 0.0, "categorized_by": "heuristic", "source": "ocr"} and fake.calls == []
 
 
 # ---------- 2. Gemini fails -> heuristic -----------------------------------------------------
@@ -529,7 +539,7 @@ def test_only_totals_no_gemini_call(client, user, monkeypatch, gem_on, ml_on):
     fake = FakeGenai(monkeypatch, [])
     set_ocr(monkeypatch, [{"name": "SUBTOTAL", "price": 1}, {"name": "TOTAL", "price": 1}], total=1)
     b = post_receipt(client, user).get_json()
-    assert fake.calls == [] and b == {"candidates": [], "total": 1.0, "categorized_by": "heuristic"}
+    assert fake.calls == [] and b == {"candidates": [], "total": 1.0, "categorized_by": "heuristic", "source": "ocr"}
 
 
 def test_partial_gemini_answer_counts_as_gemini(client, user, monkeypatch, gem_on, ml_on):

@@ -8,6 +8,14 @@ actor SpyAPIClient: APIClient {
     private(set) var removes: [RemoveCall] = []
     private(set) var restores: [String] = []
     private(set) var lists = 0
+    // Fridge-polish additions: the exact RecipientChoice, batch calls, and an ordered event log.
+    struct BatchCall: Equatable { let ids: [String]; let outcome: RemoveOutcome; let recipient: RecipientChoice }
+    private(set) var choices: [RecipientChoice] = []
+    private(set) var batchRemoves: [BatchCall] = []
+    private(set) var batchRestores: [[String]] = []
+    private(set) var reachableCalls = 0
+    /// "start:remove:id", "end:remove:id", "start:restore:id" ... for serialisation checks.
+    private(set) var log: [String] = []
     init(_ inner: MockAPIClient) { self.inner = inner }
 
     func signup(email: String, password: String, displayName: String) async throws -> AuthSession { try await inner.signup(email: email, password: password, displayName: displayName) }
@@ -18,13 +26,26 @@ actor SpyAPIClient: APIClient {
     func patchItem(id: String, _ patch: ItemPatch) async throws -> Item { try await inner.patchItem(id: id, patch) }
     func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipient: RecipientChoice) async throws -> Item {
         removes.append(.init(id: id, outcome: outcome, reason: wasteReason, recipient: recipient.userId))
+        choices.append(recipient)
+        log.append("start:remove:\(id)")
+        defer { log.append("end:remove:\(id)") }
         return try await inner.removeItem(id: id, outcome: outcome, wasteReason: wasteReason, recipient: recipient)
     }
     func health() async throws -> Bool { try await inner.health() }
     func me() async throws -> Me { try await inner.me() }
     func googleSignIn(idToken: String) async throws -> GoogleAuthResult { try await inner.googleSignIn(idToken: idToken) }
-    func removeBatch(ids: [String], outcome: RemoveOutcome, recipient: RecipientChoice) async throws -> [Item] { try await inner.removeBatch(ids: ids, outcome: outcome, recipient: recipient) }
-    func restoreBatch(ids: [String]) async throws -> [Item] { try await inner.restoreBatch(ids: ids) }
+    func removeBatch(ids: [String], outcome: RemoveOutcome, recipient: RecipientChoice) async throws -> [Item] {
+        batchRemoves.append(.init(ids: ids, outcome: outcome, recipient: recipient))
+        log.append("start:removeBatch:\(ids.joined(separator: ","))")
+        defer { log.append("end:removeBatch:\(ids.joined(separator: ","))") }
+        return try await inner.removeBatch(ids: ids, outcome: outcome, recipient: recipient)
+    }
+    func restoreBatch(ids: [String]) async throws -> [Item] {
+        batchRestores.append(ids)
+        log.append("start:restoreBatch:\(ids.joined(separator: ","))")
+        defer { log.append("end:restoreBatch:\(ids.joined(separator: ","))") }
+        return try await inner.restoreBatch(ids: ids)
+    }
     func fromReceipt(imageData: Data) async throws -> ReceiptResponse { try await inner.fromReceipt(imageData: imageData) }
     func barcode(_ code: String) async throws -> BarcodeResult { try await inner.barcode(code) }
     func listShares() async throws -> [PantryListing] { try await inner.listShares() }
@@ -47,8 +68,13 @@ actor SpyAPIClient: APIClient {
     func leaveGroup(id: String) async throws { try await inner.leaveGroup(id: id) }
     func groupDetail(id: String) async throws -> GroupDetail { try await inner.groupDetail(id: id) }
     func groupPantry(id: String) async throws -> [PantryItem] { try await inner.groupPantry(id: id) }
-    func reachablePeople(itemId: String?) async throws -> [Person] { try await inner.reachablePeople(itemId: itemId) }
-    func restoreItem(id: String) async throws -> Item { restores.append(id); return try await inner.restoreItem(id: id) }
+    func reachablePeople() async throws -> [Person] { reachableCalls += 1; return try await inner.reachablePeople() }
+    func restoreItem(id: String) async throws -> Item {
+        restores.append(id)
+        log.append("start:restore:\(id)")
+        defer { log.append("end:restore:\(id)") }
+        return try await inner.restoreItem(id: id)
+    }
     func fromPhoto(imageData: Data, mode: PhotoMode) async throws -> CandidatesResponse { try await inner.fromPhoto(imageData: imageData, mode: mode) }
     func parseText(_ text: String) async throws -> [Candidate] { try await inner.parseText(text) }
     func impact(range: ImpactRange) async throws -> Impact { try await inner.impact(range: range) }
@@ -177,13 +203,12 @@ final class FridgeModelTests: XCTestCase {
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-strawberries"), choice: .init(outcome: .thrownOut, wasteReason: .forgot), reduceMotion: false)
         m.showPendingToast()   // the sheet's onDismiss
-        m.remove(item(m, "item-spinach"), choice: .init(outcome: .donated, recipientId: "user-marcus"), reduceMotion: true)
+        m.remove(item(m, "item-spinach"), choice: .init(outcome: .donated, recipient: .user("user-marcus")), reduceMotion: true)
         m.showPendingToast()   // the second sheet's onDismiss
         await until { await spy.removes.count == 2 }
-        // The two background tasks race, so the arrival order is not part of the contract.
         let calls = await spy.removes
-        XCTAssertTrue(calls.contains(.init(id: "item-strawberries", outcome: .thrownOut, reason: .forgot, recipient: nil)), "\(calls)")
-        XCTAssertTrue(calls.contains(.init(id: "item-spinach", outcome: .donated, reason: nil, recipient: "user-marcus")), "\(calls)")
+        XCTAssertEqual(calls[0], .init(id: "item-strawberries", outcome: .thrownOut, reason: .forgot, recipient: nil))
+        XCTAssertEqual(calls[1], .init(id: "item-spinach", outcome: .donated, reason: nil, recipient: "user-marcus"))
         await until { await self.serverItem(mock, "item-spinach").share?.status == .fulfilled }
         XCTAssertEqual(m.toast?.message, "Baby spinach removed", "a second removal replaces the toast")
     }
@@ -354,8 +379,12 @@ final class FridgeModelTests: XCTestCase {
         let (m, _, _) = make()
         await m.loadIfNeeded(.fridge)
         XCTAssertEqual(ItemText.sheetMeta(item(m, "item-spinach")), "Veggies · 5 oz · expires tomorrow · on Share")
-        XCTAssertEqual(ItemText.meta(item(m, "item-strawberries")), "Photo check: looks spoiled")
-        XCTAssertTrue(ItemText.meta(item(m, "item-bananas")).contains("photo check: ripe"))
+        XCTAssertEqual(ItemText.expiryPhrase(item(m, "item-spinach")), "expires tomorrow")
+        // Fridge polish: meta is the quantity only; the badge is the row's one status.
+        for id in ["item-strawberries", "item-bananas", "item-spinach", "item-chicken", "item-eggs"] {
+            XCTAssertEqual(ItemText.meta(item(m, id)), ItemText.quantity(item(m, id)), id)
+            XCTAssertFalse(ItemText.meta(item(m, id)).lowercased().contains("photo check"), id)
+        }
         XCTAssertEqual(ItemText.quantity(item(m, "item-eggs")), "8")
         XCTAssertEqual(ItemText.quantity(item(m, "item-chicken")), "1.4 lb")
         XCTAssertTrue(ItemText.hasOpenListing(item(m, "item-carrots")))

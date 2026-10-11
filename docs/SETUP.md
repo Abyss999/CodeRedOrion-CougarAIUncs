@@ -167,6 +167,13 @@ docker compose --profile ml up -d --build
 ```
 Plain `docker compose up -d` leaves `ml` off. Details: `docs/ML.md` section 6.
 
+### Receipt reading
+Receipt uploads go through `POST /items/from-receipt`. If `ML_SERVICE_URL` is set, the backend tries the ML service's `/ocr` endpoint first. If the service is empty or unavailable, it falls back to Gemini vision instead; that path needs `GEMINI_API_KEY` and `GEMINI_MODEL`. The response includes `source: "ocr"` or `source: "gemini"` so you can tell which path produced the parsed items.
+
+`OCR_BACKEND` and `OCR_WARMUP` are ML service settings only. `OCR_BACKEND` accepts `fake`, `glm`, or `off`; in compose the default is `off`. `OCR_WARMUP=1` loads the OCR engine when the service starts.
+
+`HF_TOKEN` is optional and only for downloading models on the host machine. The public GLM-OCR model does not require a token. Never add `HF_TOKEN` to Compose, Dockerfiles, or container images.
+
 ## 6. Claude Code: plugins, skills, MCP servers
 Install these **before** starting the matching work, then **restart Claude Code** — new MCP
 servers and skills are not picked up mid-session.

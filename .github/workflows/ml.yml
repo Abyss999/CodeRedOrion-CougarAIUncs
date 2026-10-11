@@ -6,6 +6,12 @@ on:
     branches: [main]
     paths: ["ml/**"]
 
+concurrency:
+  # PRs: a new push cancels the stale run. main: runs queue and are never cancelled mid-run, so the full
+  # UI suite on main always completes.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest

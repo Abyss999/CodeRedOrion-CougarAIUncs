@@ -430,12 +430,36 @@ Mac: Apple M4 Pro, Xcode 26.6. Simulator: a throwaway iPhone 17 Pro (iOS 26.3), 
 | `PageSweepFixTests.swift` (new) | 29 | A2: object, `name` null or missing, legacy bare string, unknown values, round trip, POST `/requests` response, mock author/group names. A3: `?item_id=` present, absent, percent-encoded; mock claimer first and only one flagged. A4: stale token keeps the newer session, current token signs out, signed out in flight. F1: banner retry shows the toast at once and leaves no pending toast; failure before the sheet dismisses leaves no toast. F2: 409 `already_removed` and `.decoding` stand (no rollback, no banner, toast, no haptic); 500, network, other 409, 404, 400, unauthorized roll back with banner and error haptic; Undo after `already_removed` |
 | `FridgeModelTests.swift` | n/a | `SpyAPIClient` now forwards `reachablePeople(itemId:)`. `testThrownOutSendsReasonAndDonatedSendsRecipient` no longer asserts the arrival order of two racing background tasks (it failed once under load; the race pre-dates these changes) |
 | `ContractDecodingTests`, `MockFoundationTests` | n/a | `.source == .x` changed to `.source.type == .x` |
+## 2026-10-11: Home (feat/ios-home), artboards Home, HomeEmpty, ServerError
+Mac: Apple M4 Pro, Xcode 26.6. Simulators: iPhone 17 Pro, iPhone SE QA (iOS 26.5). Bug block IOS-40 to IOS-49. Mock API via launch flags (`-UITestSeed empty`, `-UITestServerDown`, `-UITestFailListOnce`, `-UITestLoadingForever`, `-UITestRecipes502`).
+### Tests added (`ios/Tests`)
+| `UnitTests/HomeModelTests.swift` | 23 | Loading to content, soonest-3 and removed items, month pill, tip, recipe `usesItems`, eyebrow and detail text, HomeEmpty (no tip, no recipe call), item-list failure is the error state, retry, impact / tips / recipes failures degrade quietly, refresh failure keeps stale content + banner |
+| `UnitTests/HomeRequestShapeTests.swift` | 4 | Live client: `GET /impact?range=month` exactly once, only the 4 documented calls, flat list, recipe request, no recipe call for an empty fridge |
+| `UnitTests/HomeAccessibilityTests.swift` | 19 | Gear label / closure / 44 pt, no profile control, pill closure, pill in lb or kg via WeightFormatter with spoken words, pill below greeting at AX5 (320 pt), tip dismiss closure and 44 pt, error card Try again and Change closures, banner retry, row and cook card as one VoiceOver stop |
+| `UITests/HomeUITests.swift` | 29 + 5 AX5 + 1 narrow | Every state in the real UI, tip position / dismissal / persistence, retry from banner and card, Add food opens the sheet, See all opens Fridge, skeleton is one element, 44 pt targets, AX5 reachability |
 
 ### Results
 | Run | Result |
 |---|---|
 | Unit (`FoodWasteReducerTests`) | 381 run, 3 skipped (Keychain, unsigned host), **0 failures** |
 | UI (`FoodWasteReducerUITests`) | 51 run, **0 failures** |
+| iPhone 17 Pro, full suite (unit + UI) | Unit 400 run, 0 failures. UI 85 run, 1 skipped (`HomeNarrowUITests`, only meaningful on a 375 pt phone), 1 failure: `FridgeUITests.testRetryAfterOneFailureLoads` (IOS-42, caused by Home) |
+| iPhone SE QA, `HomeUITests` + `HomeAX5UITests` + `HomeAccessibilityTests` | 19 unit + 5 AX5 + 28 UI run, 0 failures (the tip-dismiss test skips when the tip was already dismissed on that install) |
+| iPhone SE QA, `HomeNarrowUITests` | 1 run, 1 failure: IOS-43 pill width 93 pt (wrapped) |
+## Auth (Launch, SignUp, LogIn, SessionExpired, GoogleSignInError), QA `auth-qa`
+### Tests added
+| File | Tests | Covers |
+| `ios/Tests/UnitTests/AuthFlowTests.swift` | 23 | launch flags to mock behaviour; `me()` signed in / signed out / server down; central 401 from any authed call signs out and sets `sessionExpired` (mock and live); login 401 and Google 409 never sign out; `email_taken`, `invalid_credentials`, validation; logout clears token and storage; Google hidden for empty / placeholder client id |
+| `ios/Tests/UITests/AuthUITests.swift` | 20 | Launch routing (tabs / Landing / server-down retry / indicator), SessionExpired banner and recovery, LogIn (wrong password, validation, generic message with `-UITestEmailUnknown`, success, password toggle), SignUp (taken email, validation, success, cross links), Google hidden by default, below the form, 409 card with prefilled email, 44 pt targets, light/dark screenshot attachments |
+| same file, `AuthAX5UITests` | 3 | AX5 via the content-size launch argument (written, not run) |
+| `LaunchUITests.swift` | 1 | changed to launch with `-UITestMockAPI -UITestSignedIn` (the flagless launch now goes through AuthGate) |
+### Results (iPhone 17 Pro)
+| Full suite, first pass | unit 377 run, 0 failures; UI 70 run, 3 failures (2 SignUp, 1 TabShell) |
+| Targeted re-run (AuthUITests + TabShellUITests + LaunchUITests + AuthFlowTests) | 32 run, 1 failure (the Google layout test, passed on a second run) |
+| Second targeted re-run | 2 run, 1 failure: IOS-61 |
+- SignUp UI failures were iOS's "Use Strong Password?" popover swallowing typing. Test-side fix (`typeInto` closes the popover); both SignUp tests then passed. **The UI tests do not cover the real `.newPassword` path** (mock launches use `.password`).
+- TabShell IOS-10 test failed once in the first pass and passed in the re-run (identifier lookup on the tab bar, see IOS-4); not an Auth regression.
+- Not run: the full suite after the final builder fixes, AX5 (`AuthAX5UITests`), screenshots, Release-config build. The 17 Pro run of `testAttachScreens` produced no exported shots yet.
 
 ### Bugs
 | ID | Severity | Summary | Status |
@@ -485,3 +509,65 @@ Sign out then in as a different user on the Fridge tab with the Pantry segment s
 `remove()` and `undo()` capture `generation` and drop late completions. The two pinned tests are now plain assertions and pass; full unit + UI suites green. Note: an Undo tapped and then followed by an account switch before the removal settles skips the server restore (item stays removed for the old user); acceptable, since the old session is gone.
 
 ### Verdict: PASS. IOS-71 and IOS-72 fixed, no open bugs.
+| IOS-40 | medium | `home.server.change` was not queryable: `.accessibilityIdentifier(home.server)` on the row container replaced the Change button's id (`HomeErrorCard.serverRow`). Tests: `testErrorCardTryAgainAndChangeFireTheirClosures`, `testErrorCardTargetsHoldAtAX5`, `testErrorCardChangeIsLabelledForVoiceOver` | fixed (row is `children: .contain`), verified |
+| IOS-41 | low | `MockAPIClient.impact` ignores the fixture, so `-UITestSeed empty` still shows "23.2 lb saved" instead of the artboard's "0 lb saved" (SCREENS #26). Cross-PR: the Impact PR fixes the mock. Tests (`testEmptySeedReportsZeroSavedSoThePillReadsZero`, UI pill check) use a non-strict `XCTExpectFailure` and will flag it when fixed | open, cross-PR |
+| IOS-42 | low | `-UITestFailListOnce` fails the FIRST `listItems` call. Home now loads at launch and consumes it, so `FridgeUITests.testRetryAfterOneFailureLoads` never sees its error (`FridgeUITests.swift:128`). No app bug; `FridgeUITests.testRetryAfterOneFailureLoads` now tolerates either Home or Fridge taking the failure and recovers through Try again | fixed (test), verified on the SE |
+| IOS-43 | low | At the default text size on a 375 pt phone (iPhone SE) the Impact pill label wraps to two lines ("23.2 lb / saved"). Fix: `lineLimit(1)` plus `minimumScaleFactor`, or let the greeting shrink. Test `HomeNarrowUITests.testImpactPillStaysOnOneLineOnANarrowPhone`. Builder fix: `lineLimit(1)` + `fixedSize(horizontal: true)` + `layoutPriority(1)` | fixed, verified on the SE |
+### Design differences
+- The Impact pill reads "23.2 lb saved" (mock data), the artboard "21.2 lb saved"; HomeEmpty shows it non-zero (IOS-41).
+- The strawberries row badge reads "Check" (artboard family says "Looks off" after the Fridge polish PR).
+- Tip is below the header, as in v53. The mock tip wraps to three lines at 17 Pro width (allowed by SCREENS #4).
+- ServerError names the host in use (`127.0.0.1` on the mock) where the artboard shows a tunnel URL.
+- Gear and "Change" are wired to no-op closures in `RootTabView` until the Settings PR (stub, not a bug).
+Screenshots: `scratchpad/home-shots/qa-{home,empty,servererror,loading,ax5}-{light,dark}.png` (17 Pro) and `se-{home,servererror,empty}-light.png` (SE).
+### Re-run after fixes (iPhone SE QA, own DerivedData, one invocation)
+`HomeNarrowUITests` 1, `HomeUITests` 28, `HomeAX5UITests` 5, `FridgeUITests.testRetryAfterOneFailureLoads` 1: **35 run, 0 failures, 0 skipped.** This follows the 17 Pro full run (unit 400 pass; UI 85, the only failure being IOS-42, now fixed) and the earlier SE run of `HomeAccessibilityTests` (19 pass).
+Verdict: **PASS**. IOS-40, IOS-42 and IOS-43 are fixed and verified. IOS-41 (mock impact ignores the empty seed) stays open, low, cross-PR (Impact PR); it does not block Home.
+## 2026-10-11: Fridge polish (feat/ios-fridge-polish)
+Mac: Apple M4 Pro, Xcode 26.6. Simulators: iPhone 17 Pro and iPhone SE QA (iOS 26.5). Spec: HANDOFF "Fridge polish" + recipient rule #78, canvas v53 (#82, mirrored in `scratchpad/design-v53`). Tests were written against the builder's finished tree.
+### Tests added or changed (`ios/Tests`)
+| `UnitTests/FridgePolishTests.swift` (new) | 26 | #78 at model level (`.default` / `.none` / `.user` reach the API unchanged; batch Shared them and Used them always `.default`; mock honours the three cases on a claimed listing). Select lifecycle, empty selection, `remove-batch` then Undo then `restore-batch` (one batch call, no N single restores), toast wording ("3 items marked used", "N items shared"), failed batch and failed batch restore, expired window has no retry. Toast keyed by item id (two "Baby spinach" items, one fails: the other's toast survives). Refresh during a single and a batch restore: one row each, none dropped. Per-item serialisation (restore never starts before its remove ends; remove, undo, remove, undo runs in order; different items run concurrently; a batch waits for a queued restore on one of its ids). Tracking pruned after settling |
+| `UnitTests/FridgePolishAccessibilityTests.swift` (new) | 12 | Hosted-view VoiceOver tree. Row has exactly one "Remove" custom action and it fires the callback; IOS-13 (no `FoodGroup...` stop in the row or the sheet header); badge spoken as "Looks off, may be spoiled" / "Expires tomorrow"; select row is one checkbox button with Selected / Not selected; AX5: badge stacks under the text, stays one line and on screen at 320 pt; sheet tiles are reachable 68 pt buttons labelled Used it / Shared it / Threw it away with no hints; listing badge; reason rows are 68 pt buttons in order |
+| `UnitTests/ExpiryBadgeTests.swift` | rewritten, 15 | "Looks off", "Tomorrow", range vocabulary at every boundary (2–3 days … 6–7 days, 1–2 weeks, 2–3 weeks, 3+ weeks), typed dates stay exact, status priority, spoken text has no en dash |
+| `UnitTests/FridgeModelTests.swift`, `MockAPIClientTests.swift` | updated | `SpyAPIClient` records the exact `RecipientChoice`, batch calls and an ordered event log; meta is quantity only; badge copy |
+| `UITests/FridgePolishUITests.swift` (new) | 21 | No search button on Fridge, FridgeSelect, BatchUndo and FridgeEmpty; Add food on the empty state opens the Add sheet; Select chrome (count, Done, bar replaces tab bar, disabled at 0); Used them then Undo; Shared them (claimed and unclaimed) then Undo; failed batch rolls back; sheet: Shared it label, no visible "What happened to it?" heading while the group label stays, 68 pt tiles, no captions, listing and expiry badges; Given-to menu (claimer first, then others, one menu, no "(claimed it)"); Someone not on BiteDown; Cancel after Shared it removes nothing; double Done; RemoveReason title, grouped list, 68 pt rows, back; Reduce Motion; AX5 select bar stacks, badges do not wrap, Given-to fits |
+| `UITests/FridgeUITests.swift`, `RemoveFlowUITests.swift` | updated | Badge copy; the old "Gave it away" and `remove.recipient` tests now cover Shared it + Done and the Given-to default |
+| Device | Run | Result |
+| iPhone 17 Pro | full unit | 396 run, 0 failed |
+| iPhone 17 Pro | full UI | 72 run, 71 passed, 1 failed (`testSwitchingStorageDoesNotKeepAHiddenSelection`, IOS-19) |
+| iPhone SE QA at AX5 | unit: `FridgePolishTests`, `FridgePolishAccessibilityTests`, `ComponentAccessibilityTests` | 72 run, 0 failed |
+| iPhone SE QA at AX5 | UI: `FridgeUITests` + `RemoveFlowUITests` | all passed (same tree) |
+| iPhone SE QA at AX5 | UI: `FridgePolishUITests` (final run, own derived data, build and test in one script) | 21 run, 20 passed, 1 failed (IOS-19) |
+| iPhone 17 Pro | `FridgePolishUITests` re-run after the AX5 test fixes | 21 run, 20 passed, 1 failed (IOS-19) |
+Notes on the runs: another agent removed my heavy lock mid-run (about 05:30), so the first full runs overlapped a foreign build. Every failure was investigated and the Pro run was clean apart from IOS-19. XCUITest reports frames inside a presented sheet about 4% small (a 68 pt tile reads 65.3), so sheet sizes are asserted exactly on the hosted view and with 5% slack in UI.
+| ID | Severity | Summary | Where |
+| IOS-19 | low | Select mode keeps the selection when the storage segment changes. Select a Fridge item, switch to Pantry: the header still says "1 selected", Used them / Shared them stay enabled and act on an item that is not on screen. Repro: Select, tick Chicken, tap Pantry. Expected: clear the selection on a storage change (or limit `selectedItems` to the current storage). Test: `testSwitchingStorageDoesNotKeepAHiddenSelection` | `FridgeModel.swift` `selectedItems` (about line 405) spans every storage; `toggleSelection` / storage change never prune |
+| IOS-20 | low | The Given-to menu cannot reflect the claimer from the server. `FridgeView` calls `reachablePeople()` without `item_id` (SCREENS #7 says `?item_id=`), so on the live API `is_claimer` is always false; and the Mock marks Marcus as claimer for every item, so (from reading the code; not run) on an unclaimed listing (carrots) the claimer option "Marcus Ojeda" is offered as `.default` (key omitted, the server then records nobody). Today the sheet falls back on `item.share.claimedBy`, which is right for the owner, so the live impact is small. Fix: add `itemId` to the client method (and the mock), and key the sheet on it | `FridgeView.swift:52`, `RemoveSheet.swift:45-47`, `MockSocialFixtures.swift:100` |
+| IOS-21 | low | At AX5 on the SE the Given-to row is cramped: the label "Given to" wraps over three lines and the value button is 97 pt wide, so "Marcus Ojeda" is truncated to one line; the system menu is taller than the screen, so "Someone not on BiteDown" is only reachable by scrolling the menu. The artboard row never stacks. Fix: stack the label above the menu at accessibility sizes (like the sheet header) and allow the value two lines | `RemoveSheet.swift` `givenTo` (about line 150) |
+### Design differences (screenshots vs canvas v53)
+- RemoveSheet: no "(claimed it)" and no visible heading (matches v53). The artboard marks the claimer in the menu with a "Claimed it" icon; the system Menu cannot, so the claimer is only first in the list (delta, low). The sheet is taller than its content: about 90 pt of empty space under Cancel / Done (the detent is `contentHeight + Spacing.l` plus the safe area); the artboard ends right under the buttons.
+- RemoveReason: native glass back button in a circle (builder's declared delta; acceptable), 68 pt rows and grouped card match.
+- FridgeSelect: the bar is a `.regularMaterial` capsule over the list (declared delta), circular checkbox; it floats over the last row, which is expected. At AX5 the "N selected" and Done scroll away with the list (they are not pinned); the bar stays pinned.
+- Swipe action: forest pill with a take-out icon and the system caption "Remove" (matches the round 3 note).
+- The 2-days-out badge reads "1–2 days" (the artboard vocabulary starts at "2–3 days"; a day-1 item is "Tomorrow"). Kept as a product question, not a bug.
+### Not covered
+- The reachable-people fallback ("Given to" still offers the claimer and "Someone not on BiteDown" when `GET /people/reachable` fails): no launch flag fails only that call (`-UITestFailNetwork` also kills the list). Request: `-UITestFailPeople`.
+- Real VoiceOver on a device (duplicate "Remove" between the swipe action and the row custom action, IOS-13 on hardware): the hosted tree shows one custom action and no asset-name stop; the swipe-action duplication needs a device check.
+- Dark-mode contrast of the swipe tint is by eye only (screenshots below).
+- Screenshots: `scratchpad/fridge-polish-shots/` (`fridge-light/dark`, `fridgeselect-light/dark`, `removesheet-given-light/dark`, `removesheet-givenmenu-light`, `removereason-light/dark`, `fridge-swipe-light`).
+### Verdict: FAIL (one open low bug that blocks a clean PASS: IOS-19; IOS-20 and IOS-21 are low and can be follow-ups)
+Everything else in the Fridge polish spec passes on both devices. After IOS-19 is fixed, re-run `FridgePolishUITests` on the 17 Pro; no other test needs to change. At AX5 on the SE the Given-to menu is clipped (IOS-21), so `testGivenToSomeoneNotOnBiteDown` skips there by design.
+| IOS-60 | low | `GoogleSignInSection.swift`: the `google409` button override and `mock-id-token` branch were compiled into Release (unreachable, since `LaunchConfiguration.current` is `#if DEBUG`) | fixed by builder (now inside `#if DEBUG`), not re-verified on a Release build |
+| IOS-61 | medium | "Create an account" (LogIn) and "Log in" (SignUp) links are 19.3 pt tall, under the 44 pt target. `AuthForms.swift` (LogInView / SignUpView bottom `HStack`) puts `.frame(minHeight: Theme.Size.minTouch)` on the Button outside its label, so the hit area is not enlarged. Test: `testInlineLinksAndGoogleButtonMeet44ptTargets` | open |
+| IOS-62 | low | Google button renders 40 pt tall (`GoogleSignInButton` ignores the 50 pt `frame(minHeight:)`), under 44 pt. Check once the real SDK button is on. Same test, not reached after IOS-61 | open, unconfirmed |
+### Security checklist (food-main)
+1. Token only in the Keychain: `KeychainSessionStorage`, `AuthStore.swift:37-52` (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`). The only `UserDefaults`/`@AppStorage` uses in `App/` are the unit preference (`WeightFormatter.swift`) and the base-URL / debug settings. Mock runs use `InMemorySessionStorage`. Tests: `AuthStoreTests`, `testSignOutClearsTokenAndStorage`.
+2. Client id: read only from Info.plist `GIDClientID`, filled from `$(GOOGLE_IOS_CLIENT_ID)` in `project.yml:50`; `ios/Local.xcconfig` is gitignored (`.gitignore:45`) and absent; grep of `ios/` Swift for `googleusercontent` found nothing. Test: `testGoogleHiddenWhileClientIDEmptyOrPlaceholder`. (Grep over `.plist`/`.yml` was not repeated after the builder's last edit.)
+3. DEBUG paths: `LaunchConfiguration.current` is `#if DEBUG` (`LaunchConfiguration.swift:153`), so flags are inert in Release. The two Google mock paths were not `#if DEBUG` (IOS-60, fixed).
+4. LogIn shows one generic failure ("That email and password don't match. Try again.") for every non-network error. Test: `testLogInUnknownEmailShowsGenericMessageNoEnumeration`. SignUp's `email_taken` ("already registered") is expected behaviour.
+5. Global 401 to SessionExpired, token cleared: `testExpireSessionFlagLifecycle`, `testLive401SetsSessionExpiredAndClearsStorage`, `testExpiredSessionSignsOutFromAnyAuthenticatedCall`, UI `testExpiredSessionShowsBannerAndLogInRecovers`.
+6. `/auth/me` at launch: `AuthGate.swift:47`; UI `testValidSessionGoesToTabs`, `testServerDownShowsRetryAndRetryStaysOnError`, `testSignedOutShowsLandingNotTabs`.
+7. Password fields use `SecureField` (`AuthComponents.swift:136`); LogIn `.password` (`AuthForms.swift:132`); SignUp `.newPassword` in real builds, `.password` under the mock flag (`AuthForms.swift:212`). Not UI-tested for `.newPassword`.
+8. Logs: the only logger near auth is `AuthStore.swift:54`, which logs an OSStatus only. No `print`/`os_log`/`NSLog` in `App/Auth` or the API clients.
+- Landing (not an artboard in this set) is built; Google appears only with a client id (or `-UITestGoogle409` in DEBUG). GoogleSignInError is shown as a card on LogIn with the email prefilled, as drawn. Pixel comparison against the artboards was NOT done (no screenshots).
+### Verdict: FAIL (open: IOS-61 medium; IOS-62 unconfirmed). Everything else exercised passes.

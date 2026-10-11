@@ -7,6 +7,16 @@ import requests as real_requests
 from app.services import gemini, ml, barcode
 
 
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
     def boom(*a, **k):
@@ -16,7 +26,7 @@ def _no_network(monkeypatch):
 
 
 def img(name="a.jpg"):
-    return {"image": (io.BytesIO(b"\xff\xd8fakejpeg"), name, "image/jpeg")}
+    return {"image": (io.BytesIO(TINY_JPEG), name, "image/jpeg")}
 
 
 def err_code(r):

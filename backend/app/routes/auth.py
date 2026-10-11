@@ -8,9 +8,9 @@ from ..auth import make_token, require_auth
 from ..errors import ApiError, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (TOMBSTONE_USER_ID, FoodEvent, Friendship, Group, GroupMember, HelpRequest, Item,
-                      RequestAudience, ShareListing, User, UserIdentity)
+                      RequestAudience, ShareListing, FriendCode, User, UserIdentity)
 from ..services import google_auth
-from ._util import iso, json_body
+from ._util import check_len, iso, json_body
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -43,6 +43,10 @@ def signup():
     email = _str(body, "email").lower()
     name = _str(body, "display_name")
     password = body.get("password")
+    check_len(email, "email", 254)
+    check_len(name, "display_name", 60)
+    if isinstance(password, str):
+        check_len(password, "password", 256)
     if not _EMAIL.match(email):
         raise validation_error("email is not a valid address.")
     if not isinstance(password, str) or len(password) < 8:
@@ -64,6 +68,9 @@ def login():
     body = json_body()
     email = _str(body, "email").lower()
     password = body.get("password")
+    check_len(email, "email", 254)
+    if isinstance(password, str):
+        check_len(password, "password", 256)
     user = User.query.filter_by(email=email).first()
     # OAuth-only accounts have no password_hash: same 401 as a wrong password (never a 500).
     if (not user or not isinstance(password, str) or not user.password_hash
@@ -180,6 +187,7 @@ def delete_account():
             heir.role = "owner"
     Group.query.filter_by(created_by=uid).update({"created_by": None})
     GroupMember.query.filter_by(user_id=uid).delete()
+    FriendCode.query.filter_by(user_id=uid).delete()
     ShareListing.query.filter(ShareListing.owner_id == uid).delete(synchronize_session=False)
     ShareListing.query.filter(ShareListing.item_id.in_(item_ids)).delete(synchronize_session=False)
     ShareListing.query.filter_by(claimed_by=uid).update({"claimed_by": None})

@@ -86,7 +86,7 @@ extension MockAPIClient {
         let sortedGroups = groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         let r = HelpRequest(id: "req-new-\(nextID)", authorId: me.id, authorName: me.displayName, text: trimmed, status: .open,
                             fulfilledBy: nil, fulfilledByName: nil, createdAt: Date(),
-                            audiences: RequestAudiences(friends: friends, groups: sortedGroups), source: .init(type: .me, name: me.displayName),
+                            audiences: RequestAudiences(friends: friends, groups: sortedGroups), source: RequestSourceInfo(type: .me),
                             groupId: sortedGroups.first?.id, groupName: sortedGroups.first?.name)
         social.requests.insert(r, at: 0)
         return r
@@ -226,14 +226,16 @@ extension MockAPIClient {
 
     // MARK: People
 
+    /// Like the server: `is_claimer` is true only for the person who claimed `itemId`'s open listing
+    /// (the owner's own item); no item, no claim, or an unclaimed listing means all false.
     func reachablePeople(itemId: String?) async throws -> [Person] {
         try await gate("reachablePeople")
-        guard let itemId, let listing = social.listings.first(where: { $0.itemId == itemId }) else { return social.people }
-        let people = social.people.map { p -> Person in
-            var p = p
-            p.isClaimer = listing.claimedBy != nil && p.id == listing.claimedBy
+        let claimer = items.first(where: { $0.id == itemId })
+            .flatMap { $0.share?.status == .open ? $0.share?.claimedBy?.id : nil }
+        return social.people.map { person in
+            var p = person
+            p.isClaimer = person.id == claimer
             return p
         }
-        return people.filter { $0.isClaimer == true } + people.filter { $0.isClaimer != true }
     }
 }

@@ -1,6 +1,6 @@
 # API (v0 contract)
 
-Status: ✅ = implemented and merged on `main` (backend core, social, items wave 2, insights wave 2, Google sign-in, multi-audience requests; migrations `0001`-`0006`). Base URL:
+Status: ✅ = implemented and merged on `main` (backend core, social, items wave 2, insights wave 2, Google sign-in, multi-audience requests; migrations `0001`-`0008`). Base URL:
 `http://127.0.0.1:5055`. JSON in/out, `snake_case`, ISO-8601 UTC timestamps (`...Z`). Auth:
 `Authorization: Bearer <jwt>` (HS256, 30-day expiry) on everything except `/health`, `/auth/signup`, `/auth/login` and `/auth/oauth/google` (`DELETE /auth/me` needs the token).
 Errors always: `{"error": {"code": "...", "message": "..."}}` (including 404/405/413/500).
@@ -8,8 +8,8 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 
 | Status | `code` values | Meaning |
 |---|---|---|
-| 400 | `validation_error` | Bad/missing fields, e.g. `waste_reason` on a non-`thrown_out` removal |
-| 401 | `unauthorized`, `invalid_credentials`, `invalid_token` | Missing/invalid/expired token; bad login; rejected Google ID token |
+| 400 | `validation_error`, `invalid_code` | Bad/missing fields, any string containing a NUL (`\u0000`) anywhere in a JSON body, over-long strings (limits below), e.g. `waste_reason` on a non-`thrown_out` removal; `invalid_code` = an expired, forged or malformed friend code |
+| 401 | `unauthorized`, `invalid_credentials`, `invalid_token` | `unauthorized`: missing/invalid/expired bearer token (the only code the auth guard emits); `invalid_credentials`: bad login; `invalid_token`: rejected Google ID token (`POST /auth/google` only) |
 | 403 | `forbidden`, `email_not_verified` | Authenticated but not your item / not a member of that group / not the owner or author; Google account email not verified |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
 | 405 | `method_not_allowed` | |
@@ -19,11 +19,19 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 | 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts / Google JWKS unavailable or not configured |
 | 503 | `oauth_not_configured` | `POST /auth/oauth/google` while `GOOGLE_IOS_CLIENT_IDS` is unset |
 
+### Input limits and path ids
+
+String caps (over-limit -> `400 validation_error`): item `name` 200, item `unit` 32, `display_name` 60, `email` 254 (signup, login, `POST /friends`), `password` 256 (signup min 8; login max 256), group `name` 60, `invite_code` 64, request `text` 280. A malformed path id is `404 not_found` naming the resource ("Item/Group/User/Request/Listing not found.").
+
+`POST /recipes/suggest`: the body goes through the same JSON-object check as every endpoint (any `\u0000` in any string -> `400 validation_error`); `dietary` has at most 10 entries of at most 40 characters each (`400` otherwise).
+
+Group pantry items: editing (`PATCH`), removing and restoring them (single and batch) needs CURRENT group membership, including for the user who added them. Ex-member: single endpoints `403 forbidden`; batch endpoints `404 not_found` (whole batch, no existence leak). An ex-member's old group items are also excluded from `POST /recipes/suggest` (an `item_ids` entry naming one -> `404 not_found`, like an unknown id) and from `GET /tips` (expiry observations); `GET /people/reachable?item_id=` for such an item -> `404 not_found`. `GET /impact` is unchanged: it counts the user's own past food events.
+
 ## Health
 - ✅ `GET /health` → `200 {"status": "ok"}`
 
 ## Auth
-- ✅ `POST /auth/signup` `{email, password (>=8 chars), display_name}` → `201 {token, user}`;
+- ✅ `POST /auth/signup` `{email (<=254), password (8-256 chars), display_name (<=60)}` → `201 {token, user}`;
   `409 email_taken`. Emails are case-insensitive.
 - ✅ `POST /auth/login` `{email, password}` → `200 {token, user}`; `401 invalid_credentials`. An
   account created through Google has no password, so email login for it is also
@@ -236,6 +244,12 @@ Candidates are **not saved** until `POST /items`. Every candidate also carries a
 post it straight back.
 - ✅ `POST /items/parse-text` `{text (<=4000 chars)}` → `200 {candidates: [item…]}` (Gemini);
   `502 upstream_unavailable` when Gemini is not configured/failing.
+- **Image uploads (`from-photo`, `from-receipt`).** The `image` bytes are checked before any Gemini or ML call.
+  Accepted: JPEG, PNG, WEBP and HEIC/HEIF (HEIC is recognised by its `ftyp` brand, since Pillow here has no HEIF decoder;
+  it is forwarded as `image/heic`). Anything else (a text file renamed `.jpg`, PDF, GIF, a cut-off JPEG/PNG, a
+  decompression bomb) → `400 validation_error` ("image must be a JPEG, PNG, WEBP or HEIC photo.") with no upstream
+  call. Empty or missing → `400`; over 10 MB → `413`. The MIME type sent to Gemini/ML is derived from the bytes, not
+  from the client's `Content-Type` part header.
 - ✅ `POST /items/from-photo` multipart `image` (required), `mode=fridge|single` (default `fridge`) →
   `200 {candidates: [{name, category, confidence, freshness: "fresh"|"semi_fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
   …}], source: "yolo"|"gemini"}`. Uses `ML_SERVICE_URL`/detect when set; if unset **or the ML
@@ -277,7 +291,11 @@ post it straight back.
   - *Log.* One INFO line on `app.enrich` per request: status, reason, source, facets and counts only, never a food
     name or an image. The Gemini call itself writes the usual `gemini_usage` line.
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [item…], total, categorized_by:
-  "gemini"|"heuristic"}` via `ML_SERVICE_URL`/ocr; `502` when unset or failing. Each candidate is a full
+  "gemini"|"heuristic", source: "ocr"|"gemini"}`. **Reader and fallback** (like `/items/from-photo`): the ML
+  service's `/ocr` (`ML_SERVICE_URL`) is tried first and gives `source: "ocr"`; if it is unset or fails, Gemini
+  vision reads the image directly (`gemini.receipt_from_image`, one call, JSON schema, `purpose=receipt_read` in
+  the `gemini_usage` log) and gives `source: "gemini"`. `502 upstream_unavailable` only when both are
+  unavailable; the message names both reasons. `source` is additive: older clients ignore it. Each candidate is a full
   item like the other add paths (`name, category, food_group, storage, quantity, unit, est_price,
   predicted_expiry, expiry_source`) plus `price` (= `est_price`, kept for older clients) and
   `receipt_text` (the line as printed), so it can be posted straight back to `POST /items`.
@@ -310,8 +328,22 @@ post it straight back.
 
 ## Share / Food Pantry
 `listing` = `{id, item_id, owner_id, group_id, status (open|fulfilled|cancelled), recipient_id,
-claimed_by, created_at, fulfilled_at}`.
-- ✅ `POST /share` `{item_id, group_id?}` → `201 {listing}` (`status=open`; writes a `share` event).
+claimed_by, created_at, fulfilled_at, pickup, pickup_set}`.
+
+**Pickup spot** (optional, set by the sharer): `pickup` = `{note: string|null, lat: number|null, lng: number|null,
+place_name: string|null} | null`. Rules: a note (trimmed, 1-120 chars) or a pin (`lat`+`lng` pair) is required, so an empty object `{}` (or one with only `place_name`) is `400 validation_error`; `pickup: null` removes it; `lat`/`lng`
+come together (lat -90..90, lng -180..180, finite numbers); `place_name` is optional (trimmed, <=120 chars); a blank
+string counts as absent. **Visibility:** `pickup` is populated only for the listing's **owner** and its **claimer**;
+everyone else gets `pickup: null` plus `pickup_set: true|false`, so the Food Pantry can say a spot exists without
+revealing it. `pickup_set` is on every listing JSON. The same applies to the `GET /share` entries and to the owner's
+`item.share` object (which carries `pickup`, always visible to the owner). Pickup never writes events and never
+affects Impact; cancel and restore keep it, as does removing as donated.
+```json
+"pickup": {"note": "Left on the porch shelf", "lat": 29.7604, "lng": -95.3698, "place_name": "12 Elm St"}
+```
+- ✅ `POST /share` `{item_id, group_id?, pickup?}` → `201 {listing}` (`status=open`; writes a `share` event).
+  `pickup` (see above) with neither a note nor a lat+lng pair, a lone lat or lng, an out-of-range value or an
+  over-long string → `400 validation_error`, nothing written.
   No `group_id` = shared to the owner's accepted friends; `group_id` = shared to that group only.
   `403` not your item / not a member of `group_id`; `404` unknown item or group; `409
   already_removed` / `already_shared`; `400` for a group-pantry item (those cannot be shared).
@@ -321,7 +353,10 @@ claimed_by, created_at, fulfilled_at}`.
   you claimed show with `claimed_by_me: true`. Each entry: `{id, item_id, owner_id, owner_name,
   group_id, status, claimed_by_me, created_at, source: {type: "friend"|"group", name}, item: {name,
   category, quantity, unit, predicted_expiry}}` (`source.name` = owner's display name for `friend`,
-  group name for `group`).
+  group name for `group`). Entries also carry `pickup` (non-null only on a listing **you claimed**) and `pickup_set`.
+- ✅ `PATCH /share/:id` `{pickup: {...} | null}` → `200 {listing}`. Sets, replaces or (`null`) clears the pickup spot.
+  Allowed while the listing is `open`, whether or not it has been claimed. Owner only: `403 forbidden` for a viewer who can see it, `404` if invisible/unknown, `409 listing_closed` if the listing is not
+  `open` (fulfilled or cancelled), `400 validation_error` for a missing `pickup` key or an invalid object (lat/lng range-checked).
 - ✅ `DELETE /share/:id` → `200 {listing}` (`status=cancelled`). Owner only: `403` for a viewer who
   can see it, `404` if invisible/unknown, `409 listing_closed` if not open.
 - ✅ `POST /share/:id/claim` → `200 {listing}` (`claimed_by` = you). `404` if you cannot see the
@@ -335,6 +370,20 @@ Friendship is one row, requester → target; once accepted it is symmetric. Entr
 `{user_id (the other person), display_name, status, created_at}`.
 - ✅ `POST /friends` `{email}` → `201 {friend}` (`status=pending`). `404` unknown email, `400` self /
   missing email, `409 already_friends` / `409 request_pending` (in either direction).
+- ✅ `POST /friends` `{code}` (a scanned friend QR code, alternative to `email`; send **exactly one** of the two,
+  else `400 validation_error`) → `201 {friend}` with `status=accepted` immediately (no accept step). If a pending
+  request already exists between you and the code's owner, in either direction, it becomes accepted and the
+  response is `200`. Already friends: `200` with the existing friend (idempotent, no `409`). Errors: `400
+  invalid_code` ("That code isn't valid any more.", identical for expired, bad signature and malformed), `400
+  validation_error` your own code. The email flow is unchanged (`409 already_friends` there).
+- ✅ `GET /friends/code` → `200 {code, expires_at, url}`. `code` is an **opaque** random URL-safe code
+  (16 chars, `secrets.token_urlsafe`) stored server-side with its owner and expiry; it encodes nothing about the
+  user (no id, no email), and neither does the response. Valid for 10 minutes. Each call prunes the caller's
+  expired codes and reuses their newest unexpired code if it has at least 2 minutes left; otherwise it issues
+  a new code. Older unexpired codes keep working. `url` = `bitedown://friend/<code>` is what the QR encodes.
+  ```json
+  {"code": "Xk3v9Qw1ZpT7mR2a", "expires_at": "2026-10-11T18:10:00Z", "url": "bitedown://friend/Xk3v9Qw1ZpT7mR2a"}
+  ```
 - ✅ `POST /friends/:user_id/accept` → `200 {friend}` (`status=accepted`). Only the target can accept:
   `404` when there is no pending request *from* `:user_id` to you.
 - ✅ `GET /friends` → `200 {friends: [...], incoming: [...], outgoing: [...]}` (accepted; pending
@@ -530,14 +579,16 @@ after 1.5 s, so the worst case is 2 x 30 + 1.5 = 61.5 s, under gunicorn's 120 s 
 Every Gemini call (`parse_text`, `detect`, `receipt_categorize`, `recipes`, `shelf_life`, `enrich`) writes one INFO line on the
 logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compose logs api`):
 
-    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
+    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error code=<http|null>
 
 A response that is not usable JSON (unparseable, a scalar such as `null`/string/number/bool, or an
 object whose `items`/`candidates`/`recipes`/`days` value is not a list) counts as a failed call
 (`status=error`, one line) and the endpoint returns `502 upstream_unavailable` (BE-13); for the shelf-life
 estimate on `POST /items` it falls back to the default table.
 Tokens come from the response's `usage_metadata` (`output_tokens` includes thinking tokens); they are
-`null` when it is missing, and on `status=error` when the call failed. Prompts, response text, user
+`null` when it is missing, and on `status=error` when the call failed. `code` is the upstream HTTP status:
+`200` on `status=ok`; on `status=error` the `.code` of the google-genai `APIError`/`ClientError`/`ServerError` (`code=429`), or
+`code=null` when the failure carried none (timeout, network error, unusable JSON). Prompts, response text, user
 data and the API key are never logged. Cost report:
 
     docker compose logs api | python scripts/gemini_cost.py

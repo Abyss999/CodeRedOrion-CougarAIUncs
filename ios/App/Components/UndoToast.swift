@@ -4,6 +4,9 @@ import SwiftUI
 struct UndoToastItem: Identifiable {
     let id = UUID()
     var message: String
+    /// The items this toast is about. Failure handling matches on ids, never on the message text,
+    /// so two items with the same name can't clear each other's toast.
+    var itemIds: Set<String> = []
     var actionTitle = "Undo"
     /// Called when the person taps Undo (the toast dismisses itself).
     var onUndo: () -> Void
@@ -95,12 +98,13 @@ struct UndoToastView: View {
                         EmptyView()
                     }
                     .progressViewStyle(.linear)
-                    .tint(Theme.Colors.onForestMuted)
+                    .tint(Theme.Colors.toastBar)
                 } else {
                     Color.clear
                 }
             }
             .frame(height: Theme.Size.toastProgress)
+            .background(Theme.Colors.toastTrack)
             .clipped()
             .accessibilityHidden(true)
             .accessibilityIdentifier(AccessibilityID.Toast.progress)

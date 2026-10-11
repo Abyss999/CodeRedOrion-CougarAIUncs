@@ -6,7 +6,8 @@ Status: **implemented** in migration `0001_initial` (users, items, share_listing
 Migration `0004_items_wave2` adds `items.freshness`, `freshness_checked_at`, `confidence` and makes
 `groups.created_by` nullable. Migration `0005_user_identities` adds `user_identities` and makes
 `users.password_hash` nullable (OAuth-only accounts). Migration `0006_request_audiences` adds `request_audiences` and drops
-`requests.group_id`. Migration `0007_items_nutrition` adds `items.nutrition` (JSONB, per-100 g nutrition). Social tables
+`requests.group_id`. Migration `0007_items_nutrition` adds `items.nutrition` (JSONB, per-100 g nutrition). Migration `0008_share_pickup` adds the optional pickup spot to
+`share_listings` (`pickup_note`, `pickup_lat`, `pickup_lng`, `pickup_place`) and the `friend_codes` table. Social tables
 (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
 and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in migration `0002_social`.
 
@@ -87,14 +88,27 @@ Index: `(owner_id, removed_at, predicted_expiry)`.
 - `group_members(group_id → groups, user_id → users, role owner|member, joined_at)` — pk
   `(group_id, user_id)`; index on `user_id`.
 - `share_listings(id, item_id → items, owner_id, group_id → groups null, status open|fulfilled|cancelled,
-  recipient_id null, claimed_by → users null, created_at, fulfilled_at)`; group null = shared to
-  friends. Index `(status, group_id)`.
+  recipient_id null, claimed_by → users null, created_at, fulfilled_at, pickup_note null, pickup_lat null,
+  pickup_lng null, pickup_place null)`; group null = shared to friends. Index `(status, group_id)`.
+  Pickup columns (0008, all nullable, no defaults): `pickup_note` text <=120 chars, `pickup_lat` / `pickup_lng`
+  double precision, both or neither (`ck_share_pickup_latlng`) and in -90..90 / -180..180
+  (`ck_share_pickup_range`), `pickup_place` text <=120 chars (`ck_share_pickup_note_len`,
+  `ck_share_pickup_place_len`). The app trims text and requires a note or a lat+lng pair. Only the owner and
+  the claimer are shown the values.
 - `items.group_id → groups` (FK added in 0002; index `(group_id, removed_at)`).
   `food_events.group_id` stays a plain uuid (hypertable, no FK).
 - `requests(id, author_id → users, text 1-280 chars, status open|fulfilled|cancelled, fulfilled_by →
   users null, created_at)`. CHECKs: text length, and `(status='fulfilled') = (fulfilled_by IS NOT
   NULL)`. Indexes `(status, created_at DESC)`, `author_id`. (`group_id` was dropped in 0006: who
   sees a request lives in `request_audiences`.)
+
+### friend_codes (migration `0008_share_pickup`)
+Opaque, short-lived codes behind the friend QR (`GET /friends/code`).
+| Column | Type | Notes |
+|---|---|---|
+| code | text pk | `secrets.token_urlsafe(12)`, 16 chars; encodes nothing about the user |
+| user_id | uuid → users, `ON DELETE CASCADE` | the issuer; indexed |
+| expires_at | timestamptz | issue time + 10 minutes; indexed. Expired rows are pruned on each issue |
 
 ### request_audiences (migration `0006_request_audiences`)
 | Column | Type | Notes |
