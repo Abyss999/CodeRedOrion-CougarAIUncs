@@ -45,7 +45,16 @@ struct RootTabView: View {
 
     var body: some View {
         TabView(selection: tabSelection) {
-            tab(.home) { HomeView() }
+            tab(.home) {
+                HomeView(api: env.api,
+                         onOpenSettings: {},        // Settings screen: later PR
+                         onOpenImpact: {},          // Impact screen: later PR
+                         onOpenRecipe: { _ in },    // Recipe detail: later PR
+                         onOpenItem: { _ in },      // Item detail: later PR
+                         onOpenServerSettings: {},  // Settings › Debug "Server address": later PR
+                         onSeeAllFood: { selection = .fridge },
+                         onAddFood: { showAdd = true })
+            }
             tab(.recipes) { RecipesView() }
             tab(.add) { Color.clear }  // never shown: selecting Add presents `AddSheetView`
             tab(.fridge) { FridgeView(api: env.api) }

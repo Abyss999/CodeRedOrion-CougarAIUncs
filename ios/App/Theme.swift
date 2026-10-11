@@ -24,6 +24,9 @@ enum Theme {
         static let tabInactive = Color(light: 0x5C6E5F, dark: 0x8FA391)
         static let onForest = Color(light: 0xF4F8E8, dark: 0x13261A)
         static let onForestMuted = Color(light: 0xC9D8BE, dark: 0x2F4A2A)
+        /// Text on the fixed `lime` fill (Home impact pill). Identical in both modes, like `lime`
+        /// (artboard: #1F4D2B in light and dark). Not in `hexTable`: it is deliberately not adaptive.
+        static let onLime = Color(light: 0x1F4D2B, dark: 0x1F4D2B)
         static let urgentBg = Color(light: 0xFBE3CF, dark: 0x4A2614)
         static let urgentInk = Color(light: 0x8A3B0E, dark: 0xFFB98A)
         static let noteYellow = Color(light: 0xFFF6C7, dark: 0x3A3720)

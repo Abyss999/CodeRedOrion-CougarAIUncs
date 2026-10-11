@@ -123,10 +123,22 @@ final class FridgeUITests: XCTestCase {
         XCTAssertFalse(app.fridgeRow("item-chicken").exists)
     }
 
+    /// `-UITestFailListOnce` fails the FIRST item-list call of the launch. Home also loads the list at
+    /// launch (IOS-42), so either Home or Fridge can take that one failure. Whoever got it must recover
+    /// through Try again; the Fridge tab must end with its rows and no error.
     func testRetryAfterOneFailureLoads() {
-        let app = XCUIApplication.fridge(["-UITestFailListOnce"])
-        XCTAssertTrue(app.any(FID.error).waitForExistence(timeout: 5))
-        app.buttons[FID.retry].tap()
+        let app = XCUIApplication.mockSignedIn(["-UITestFailListOnce"])
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
+        // Let both launch loads settle: Home shows its content or its error card.
+        let homeError = app.any("home.error")
+        let homeContent = app.any("home.usefirst")
+        let homeSettled = NSPredicate { _, _ in homeError.exists || homeContent.exists }
+        wait(for: [expectation(for: homeSettled, evaluatedWith: nil)], timeout: 10)
+        if homeError.exists { app.buttons["home.error.retry"].tap() }   // Home took the failure
+        app.tab(ID.fridge).tap()
+        let errorOrRow = NSPredicate { _, _ in app.any(FID.error).exists || app.fridgeRow("item-chicken").exists }
+        wait(for: [expectation(for: errorOrRow, evaluatedWith: nil)], timeout: 10)
+        if app.any(FID.error).exists { app.buttons[FID.retry].tap() }   // Fridge took the failure
         XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 5))
         XCTAssertFalse(app.any(FID.error).exists)
     }
