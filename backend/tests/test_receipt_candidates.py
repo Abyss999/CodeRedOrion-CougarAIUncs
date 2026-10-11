@@ -46,7 +46,7 @@ def test_full_candidate_shape_and_post_back(client, user, post):
     r = post([L("GV WHL MILK GAL", 1, 3.48)], total=3.48)
     assert r.status_code == 200
     b = r.get_json()
-    assert set(b) == {"candidates", "total", "categorized_by"} and b["total"] == 3.48
+    assert set(b) == {"candidates", "total", "categorized_by", "source"} and b["total"] == 3.48
     c = b["candidates"][0]
     assert FULL <= set(c)
     assert c["price"] == c["est_price"] == 3.48 and c["receipt_text"] == "GV WHL MILK GAL"

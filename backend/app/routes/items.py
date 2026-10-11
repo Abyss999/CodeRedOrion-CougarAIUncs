@@ -555,14 +555,29 @@ def from_photo():
     return jsonify(**body)
 
 
+def _read_receipt(data, filename, mime):
+    """(body, source): the ML service's OCR first; Gemini vision on the image if the service is unset
+    or fails. Both unavailable -> 502 naming both."""
+    ml_reason = "ML service is not configured"
+    if ml.is_configured():
+        try:
+            return ml.ocr(data, filename, mime), "ocr"
+        except ml.MLUnavailable as e:
+            ml_reason = str(e)
+    gemini_reason = "Gemini is not configured"
+    if gemini.is_configured():
+        try:
+            return gemini.receipt_from_image(data, mime), "gemini"
+        except gemini.UpstreamError as e:
+            gemini_reason = str(e)
+    raise upstream_unavailable(f"Receipt OCR unavailable ({ml_reason}) and Gemini fallback unavailable ({gemini_reason}).")
+
+
 @bp.post("/from-receipt")
 @require_auth
 def from_receipt():
     data, filename, mime = _image_upload()
-    try:
-        body = ml.ocr(data, filename, mime)
-    except ml.MLUnavailable as e:
-        raise upstream_unavailable(f"Receipt OCR unavailable: {e}")
+    body, source = _read_receipt(data, filename, mime)
     lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()
              and not candidates.is_receipt_noise(l.get("name"), l.get("price"))]
     enriched = None
@@ -575,7 +590,8 @@ def from_receipt():
     total = candidates._money(body.get("total"))
     applied = any(isinstance(e, dict) and e.get(k) for e in enriched or []
                   for k in ("display_name", "category", "food_group", "storage"))
-    return jsonify(candidates=out, total=total, categorized_by="gemini" if applied else "heuristic")
+    return jsonify(candidates=out, total=total, categorized_by="gemini" if applied else "heuristic",
+                   source=source)
 
 
 @bp.get("/barcode/<code>")

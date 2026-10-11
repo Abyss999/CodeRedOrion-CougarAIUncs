@@ -399,8 +399,12 @@ should treat as "fall back to Gemini vision" (docs/ARCHITECTURE.md).
 Contract: `POST /detect` (multipart `image`, form `mode`=fridge|single; default fridge) ->
 `{"candidates":[{name,category,food_group,confidence,freshness: fresh|semi_fresh|spoiled,bbox|null}],"model"}` (single = top-1 only; an empty list means
 nothing detected); `POST /ocr` -> `{"lines":[{name,quantity,price}],"total","raw_text"}`; `GET /health`.
-Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 500 `inference_failed`,
-503 `ocr_not_configured` (`OCR_BACKEND=off`).
+`/ocr` applies the EXIF orientation to the photo before the engine sees it (`/detect` does not: its bbox frame is
+raw, see `ML_BBOX_FRAME` in `docs/API.md`). `OCR_WARMUP=1` loads the OCR engine at start (a failed warmup is logged
+and the service stays up; default off).
+Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 422 `ocr_no_text`
+(`/ocr` only: the engine returned blank text; the backend turns any non-200 into its 502 and falls back to Gemini
+vision), 500 `inference_failed`, 503 `ocr_not_configured` (`OCR_BACKEND=off`).
 
 ## 7. Receipt OCR
 GLM-OCR (`zai-org/GLM-OCR`, MIT; pipeline also uses Apache-2.0 PP-DocLayoutV3 in the official SDK, not used here)
