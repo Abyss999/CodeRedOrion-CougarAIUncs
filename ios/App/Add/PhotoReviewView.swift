@@ -47,8 +47,12 @@ struct PhotoReviewView: View {
                 .scrollBounceBehavior(.basedOnSize)
                 footer
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier(AccessibilityID.PhotoReview.screen)
+            .background {
+                Theme.Colors.ground
+                    .accessibilityElement()
+                    .accessibilityLabel("Photo review")
+                    .accessibilityIdentifier(AccessibilityID.PhotoReview.screen)
+            }
             .onAppear { shown = true }
         }
     }
@@ -268,7 +272,12 @@ struct PhotoReviewView: View {
             }
             .padding(.horizontal, Theme.Spacing.gutter).padding(.top, Theme.Spacing.xl)
         }
-        .accessibilityIdentifier(AccessibilityID.PhotoReview.done)
+        .background {
+            Theme.Colors.ground
+                .accessibilityElement()
+                .accessibilityLabel("Photo review complete")
+                .accessibilityIdentifier(AccessibilityID.PhotoReview.done)
+        }
         .onChange(of: model.tossFailures.isEmpty) { _, empty in if empty { onFinished() } }
     }
 }

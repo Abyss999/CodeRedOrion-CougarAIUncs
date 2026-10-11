@@ -43,8 +43,12 @@ struct PhotoAnalyzingView: View {
         }
         .padding(.horizontal, Theme.Spacing.gutter)
         .padding(.top, Theme.Spacing.xl).padding(.bottom, Theme.Spacing.l)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.Add.analyzing)
+        .background {
+            Theme.Colors.ground
+                .accessibilityElement()
+                .accessibilityLabel("Analyzing photo")
+                .accessibilityIdentifier(AccessibilityID.Add.analyzing)
+        }
         .task {
             try? await Task.sleep(for: Theme.AddFlow.slowNoticeAfter)
             if !Task.isCancelled { withAnimation(Theme.Motion.quick) { slow = true } }

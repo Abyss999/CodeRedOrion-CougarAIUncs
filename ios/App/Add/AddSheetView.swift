@@ -22,12 +22,15 @@ struct AddSheetView: View {
             if let flow { content(flow) } else { Color.clear }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.Colors.ground.ignoresSafeArea())
+        .background {
+            Theme.Colors.ground.ignoresSafeArea()
+                .accessibilityElement()
+                .accessibilityLabel("Add sheet")
+                .accessibilityIdentifier(AccessibilityID.Add.sheet)
+        }
         .presentationDetents(flow?.isMenu ?? true ? [.medium, .large] : [.large], selection: $detent)
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(Theme.Radius.sheet)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.Add.sheet)
         .task {
             if flow == nil { flow = AddFlowModel(api: env.api) }
             refreshCameraAccess()
@@ -118,9 +121,10 @@ struct AddSheetView: View {
         return Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.tileGap), count: count)
     }
 
-    /// The Receipt tile is unavailable while OCR isn't live (the live backend answers 502). The mock (UI tests,
-    /// demos) keeps it on.
-    private var receiptAvailable: Bool { env.launch.useMockAPI && !env.launch.receiptUnavailable }
+    /// The live backend's OCR is unavailable; mocks enable Receipt unless the launch flag disables it.
+    private var receiptTileState: AddTileState {
+        env.launch.useMockAPI && !env.launch.receiptUnavailable ? .enabled : .unavailable("Unavailable")
+    }
 
     private func enabledMenu(_ flow: AddFlowModel) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sheetSection) {
@@ -129,8 +133,8 @@ struct AddSheetView: View {
                 OptionTile(key: "text", symbol: "keyboard", title: "Type it", subtitle: "\"2 lb chicken, milk\"", state: .enabled) { flow.open(.text) }
                 OptionTile(key: "say", symbol: "mic.fill", title: "Say it", subtitle: "\"Two lemons and some milk\"", state: .enabled) { flow.open(.say) }
                 OptionTile(key: "barcode", symbol: "barcode", title: "Barcode", subtitle: "Boxes, cans, jars", state: .enabled) { flow.open(.barcode) }
-                OptionTile(key: "receipt", symbol: "receipt", title: "Receipt", subtitle: receiptAvailable ? "Add a whole shop" : "Not available right now",
-                           state: receiptAvailable ? .enabled : .unavailable("Unavailable")) { flow.open(.receipt) }
+                OptionTile(key: "receipt", symbol: "receipt", title: "Receipt", subtitle: receiptTileState.isEnabled ? "Add a whole shop" : "Not available right now",
+                           state: receiptTileState) { flow.open(.receipt) }
             }
             Button { libraryMode = .fridge; showLibrary = true } label: {
                 Text("Choose a photo from your library")
@@ -153,11 +157,16 @@ struct AddSheetView: View {
                 OptionTile(key: "text", symbol: "keyboard", title: "Type it", subtitle: "\"2 lb chicken, milk\"", state: .enabled) { flow.open(.text) }
                 OptionTile(key: "say", symbol: "mic.fill", title: "Say it", subtitle: "\"Two lemons and some milk\"", state: .enabled) { flow.open(.say) }
                 OptionTile(key: "barcode", symbol: "barcode", title: "Barcode", subtitle: nil, state: .off) {}
-                OptionTile(key: "receipt", symbol: "receipt", title: "Receipt", subtitle: nil, state: .off) {}
+                OptionTile(key: "receipt", symbol: "receipt", title: "Receipt", subtitle: nil,
+                           state: receiptTileState.isEnabled ? .off : receiptTileState) {}
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.Add.cameraDenied)
+        .background {
+            Theme.Colors.ground
+                .accessibilityElement()
+                .accessibilityLabel("Camera access is off")
+                .accessibilityIdentifier(AccessibilityID.Add.cameraDenied)
+        }
     }
 
     // MARK: Capture
