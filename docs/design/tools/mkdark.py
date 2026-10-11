@@ -58,6 +58,10 @@ def html(src):
         if tag.lower() not in VOID and not attrs.rstrip().endswith("/"): stack.append(own_lime)
     out.append(src[pos:]); return "".join(out)
 def script(js):
+    # Background-valued keys whose value is an expression with bare colour literals, e.g.
+    # `rowBg: on ? '#EEF5D6' : '#FFFFFF'`. Runs first, on the raw light values, so nothing is mapped twice.
+    js = re.sub(r"\b(\w*(?:[bB]g|[bB]ackground)\w*)\s*:([^,\n}]*)",
+                lambda a: a.group(1)+":"+re.sub(r"'#([0-9A-Fa-f]{6})'", lambda h: "'#"+m(BG,h.group(1),False)+"'", a.group(2)), js)
     js = re.sub(r"\b(stroke|fill|color)\s*:\s*'#([0-9A-Fa-f]{6})'", lambda a: a.group(1)+": '#"+m(FG,a.group(2),False)+"'", js)
     js = re.sub(r"tile\('#([0-9A-Fa-f]{6})'\)", lambda a: "tile('#"+m(BG,a.group(1),False)+"')", js)
     js = re.sub(r"'([^'\n]*:[^'\n]*#[0-9A-Fa-f]{6}[^'\n]*)'", lambda a: "'"+css(a.group(1))+"'", js)
