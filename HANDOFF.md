@@ -2,7 +2,7 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-10 (checkpoint 4d). **`food-main` (VPS) only orchestrates**: it plans, rules,
+_Last updated: 2026-10-10 (checkpoint 5). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
 building** (owner decision): builder + QA sub-agents, Xcode and simulators, Docker and every test run,
 backend included, plus any `.github/workflows` push (the VPS token can't). It starts from the "In flight on
@@ -11,19 +11,20 @@ the Mac" table below and reports to `food-main`. Nothing is built or tested on t
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
-all docs are merged on `main`. Backend PR 1 merged (#50). Open: #47 (iOS foundation, draft). iOS Wave 2 is underway on the Mac (foundation
+all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). Open: #47 (iOS foundation, draft, final QA) and #54 (Jose's receipt candidates, fixes and QA on the Mac). iOS Wave 2 is underway on the Mac (foundation
 first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Photo add runs on the Gemini fallback until their model lands.**
 
 | Area | State | Evidence |
 |---|---|---|
-| Backend on `main`: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | 523 tests, 96% coverage |
-| Backend PR 1 `feat/items-wave2`: stored freshness and confidence, share on items, `POST /items/:id/restore`, `DELETE /auth/me` | **merged (#50)** | 680 passed / 97%; BE-8 fixed. BE-9 (low: a huge `est_price` gives a 500) is xfail-tracked and ruled non-blocking. **Fix it in PR 2** |
-| Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **next: unblocked**, built on the Mac. Includes the BE-9 fix | (none yet) |
-| Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | unblocked, after PR 2 | the owner creates the Google OAuth client (the Mac sends the steps) |
+| Backend on `main`: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | 965 passed / 98% after #57 |
+| Backend PR 1 `feat/items-wave2`: stored freshness and confidence, share on items, `POST /items/:id/restore`, `DELETE /auth/me` | **merged (#50)** | 680 passed / 97%; BE-8 fixed |
+| Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **merged (#57)** | 965 passed / 98%; BE-9, BE-10, BE-13 fixed |
+| Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **next** (after #54) | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **draft #47**; final iOS QA re-verify pending | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **paused: a teammate owns the models** (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
-| Design | 22 screens approved; canvas is the source | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
+| Receipts → full candidates (#54, Jose / LemurTech22) | **independent QA FAIL → fixes on the Mac** (BE-11, 12, 14; BE-13 via #57); merge `main` in, full suite, then merge | ML check PASS (independent) |
+| Design | 22 screens approved; canvas is the source (renamed BiteDown) | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
 | Demo connectivity | merged | `scripts/demo_tunnel.sh` (Cloudflare quick tunnel, HTTP/2) |
 
 ## Next steps
@@ -44,7 +45,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    7. Social (pantry, composer, connect, group)
    8. Auth (email + Google)
    9. Settings
-3. **Mac:** backend PR 2 (plus the BE-9 fix), then PR 3. **Owner:** the Google OAuth client.
+3. **Mac:** #54 to PASS, then backend PR 3 (Google OAuth), then the gthread one-liner (one process, threads, lock-guarded recipe cache) before integration QA. **Owner:** the Google OAuth client.
 4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
@@ -52,11 +53,10 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Backend PR 1 | `feat/items-wave2`, **#50** | `wt/items-wave2` | **Merged and folded.** Remove the worktree. Its compose stack (`items-wave2-*`, 5055/5433) is still up and holds `fwr_test`; reuse it or `docker compose down` there (keep the volume) |
-| iOS foundation | `feat/ios-foundation`, **draft #47** | `wt/ios-foundation` | Spawn iOS QA to re-verify: update `MotionTests` to cap 6 (it asserts 8); skeleton tests now see one `<screen>.loading`; the debug error is a `Label`; re-run on iPhone 17 Pro and the **"iPhone SE QA"** simulator (UDID FFA5D7A9-…, AX5); toast and Reduce Motion UI tests via `-UITestShowToast` / `-UITestReduceMotion`; record a <2 MB motion clip; confirm IOS-4..10. Then un-draft, check CI on macos-26, merge |
-| Backend PR 2 `feat/insights-wave2` | not started | - | Unblocked. Also fix **BE-9** (range-check `est_price` to numeric(10,2), and `est_weight_kg`/`quantity` if they overflow; flip the strict xfail). `/impact` used/donated split, waste-reason breakdown, previous period, gap-filled **last 6 weeks**; recipes `servings` + `uses_items:[{item_id,name,predicted_expiry}]`; per-user suggestion cache (active-items hash, 6 h TTL, log hits); `POST /items/remove-batch {item_ids, outcome: used/donated}` and `POST /items/restore-batch` (atomic; impact exact after the pair); add both to `APIClient` + Mock |
-| Backend PR 3 `feat/oauth` | not started | - | After #50: **Google only**. `POST /auth/oauth/google {id_token}` (JWKS, aud from `GOOGLE_IOS_CLIENT_IDS`, iss, exp, `email_verified`); generic `user_identities(provider, subject, user_id, email)`; nullable `password_hash`; link by verified email; `DELETE /auth/me` removes identities; tests stub JWKS with local RSA keys. Give the owner the Google OAuth iOS-client steps (bundle id from `Local.xcconfig`, reversed-client-id URL scheme) |
-| Fridge + removal screen | not started | - | After #47 and #50: the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
+| iOS foundation | `feat/ios-foundation`, **draft #47** | `wt/ios-foundation` | Review items from food-main are being fixed (tab `Binding`, backend-microsecond date decoding, Theme tokens, a11y ids, no Undo haptic, `CFBundleDisplayName: BiteDown`; IOS-5/10/11). iOS QA's final run is on both simulators (17 Pro and SE QA at AX5). Then un-draft, CI green on macos-26, and food-main merges |
+| Receipts #54 (Jose) | `feat/receipt-gemini-link` | `wt/receipt-gemini-link` | Ported fixes for BE-11/12/14 with Jose as co-author, plus independent QA, all committed. Merge `main` in (no force-push), resolve `_generate` (retry loop, json.loads, shape check), flip the BE-13 xfails, full suite once, push, then ping food-main |
+| Backend PR 3 `feat/oauth` | not started | - | Next after #54: **Google only**. `POST /auth/oauth/google {id_token}` (JWKS, aud from `GOOGLE_IOS_CLIENT_IDS`, iss, exp, `email_verified`); generic `user_identities(provider, subject, user_id, email)`; nullable `password_hash`; link by verified email; `DELETE /auth/me` removes identities; tests stub JWKS with local RSA keys. Give the owner the Google OAuth iOS-client steps (bundle id from `Local.xcconfig`, reversed-client-id URL scheme) |
+| Fridge + removal screen | not started | - | After #47: the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
 
 **Mac notes:**
 - **Worktrees** are in `../wt/<name>` next to the main checkout. Remove merged ones with `git worktree remove`, and only the ones this project created.
@@ -105,13 +105,14 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
   - (the Colab run is paused: a teammate owns the models)
   - nothing else blocking
 - **Watch for:**
-  - BE-9.
+  - The first screen that decodes recipes (Home) must switch `Recipe.usesItems` to the object shape (#57).
+  - The batch client methods (`remove-batch` / `restore-batch`) go into the first iOS screen PR that uses them.
   - IOS-2/3: glass tab bar inactive colours accepted as system.
   - The Impact screen scrolls (its waste-reasons section is below the fold).
   - Jose's (LemurTech22) optional answers on closed #21.
 
 ## QA status
-- **Backend:** PASS on `main` after #50 (680 passed, 97%). Open: BE-7 (info), BE-9 (low, PR 2).
+- **Backend:** PASS on `main` after #57 (965 passed, 98%). Open: BE-7 (info). BE-11, 12 and 14 are fixed on #54, pending merge.
 - **ML:** data, pipeline, parser and notebook PASS. YOLO not evaluated (paused: a teammate owns the models). Open: ML-11–14, ML-28, ML-32, ML-40.
 - **Design / motion:** motion demos PASS (two rounds).
 - **iOS:** first build and dark theme PASS. Foundation in QA.

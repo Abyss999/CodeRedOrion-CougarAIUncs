@@ -2,6 +2,16 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — Backend wave 2 rulings (#57, #54)
+- **Number caps (BE-9):** `est_price` ≤ 99,999,999.99 (numeric(10,2)), `quantity` ≤ 1e6, `est_weight_kg` ≤ 1e5. Anything above → 400 `validation_error`. The last two columns are unbounded, but huge floats overflowed the CO₂e and weight maths into invalid JSON.
+- **`uses_items` is `[{item_id, name, predicted_expiry}]`**, matched back to the user's items. The iOS `Recipe` model changes in the first screen PR that decodes recipes (Home).
+- **The recipe cache is in-process** (6 h TTL, keyed on a hash of the active items). gunicorn runs one process, so the cache is shared. No Redis. Follow-up before integration QA: the gthread worker class (one process, threads) with a lock-guarded cache, so a slow Gemini call doesn't block other requests.
+- **Backend PRs stay backend-only.** iOS client additions for new endpoints (`remove-batch` / `restore-batch`) go into the iOS screen PR that uses them.
+- **Times are bucketed in UTC** (BE-10). Week buckets start Monday 00:00 UTC, and windows are exactly N × 24 h.
+- **A malformed Gemini reply is an upstream error** (BE-13). `_generate` rejects anything that isn't a list or object: 502, or the default table for shelf life. Never a 500.
+- **Receipt totals and coupons are filtered in the backend** (#54, BE-11 / BE-14). A line is dropped when an optional prefix plus a total / tax / payment / coupon keyword is followed only by numbers, card digits or a closed set of receipt words. So "TOTAL DUE" is dropped but "Total Cereal" is kept. A negative price is dropped too.
+- **Self-signed QA doesn't pass the gate.** A builder's own QA, including a teammate's, is kept as their record, but only an independent QA verdict counts.
+
 ## 2026-10-10 — The app is called BiteDown (owner)
 - **Product name: BiteDown** (owner). Teammate Truc (FrankinstyLe) proposed a rename as "BiteUp" in #49, and the owner chose **BiteDown**. #49's tagline, "Use what you have. Share what you spare.", and its positioning toward students and shared households come with it until the owner says otherwise.
 - **The rename is user-facing only.** That covers the canvas (sign-in mark, settings version line, titles), the doc titles, the README and the iOS `CFBundleDisplayName`. Internal names stay: the Xcode target and scheme `FoodWasteReducer`, the repo, the Docker services and the bundle id. Renaming those would churn every open branch for no user-visible gain.
