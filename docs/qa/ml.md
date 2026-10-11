@@ -1108,3 +1108,32 @@ Other notes (no ID): the view's (and export's) `dataset_report.json` describes t
 
 ## Files written
 `ml/eval/tests/qa_fast_profile.py` (new), `ml/eval/tests/test_notebook_train_cell.py`, `ml/eval/tests/qa_pr62_ml57.py` (ML-66), this section.
+
+## Addendum (2026-10-11): ML-69 fix re-check (commit e4f967c). Verdict stays **PASS**
+The first real FAST run was SIGKILLed (OOM) at the start of the classifier stage. Ultralytics 8.4.175 `ClassificationDataset.cache_images`
+(`data/dataset.py` L1303-1319) decodes every crop at its original size (`self.imread`, no resize), so the 14,377 train crops came to 9.4 GB
+against ~12.7 GB of Colab RAM. The detector cache resizes to imgsz first, and the detector stage finished (~26 min for 30 epochs on a T4).
+Fix in `ml/yolo/train.py`: `cls_speed = dict(speed, cache=False)` for the classifier; the resume branch now passes `cache` and `val`.
+
+Verified, by test and by reading the Ultralytics source:
+- **The classifier gets `cache=False` for every `--cache` value** (none/ram/disk). The detector keeps the requested cache, and `--no-epoch-val`
+  still reaches both stages (`test_speed_kwargs_reach_both_stages`, 4 cases).
+- **Resume only overrides keys Ultralytics accepts.** `train(resume=True, data, device, batch, imgsz, cache, val)`: every key is in
+  `check_resume`'s `allowed` set (L1039-1056: imgsz, batch, device, cache, val, ...) or its exempt set (model, data, mode, resume, pretrained).
+  So nothing is silently replaced by the checkpoint value, and `epochs` is not passed. The `allowed` set is pinned in the test and checked
+  against the installed `mldata/.venv-train` ultralytics source (`test_pinned_allowed_set_matches_installed_ultralytics`; it skips when no
+  install is present).
+- **A resume with both stages mid-training through `main(--resume --cache ram)`**: the detector resumes with `cache="ram"` and the
+  classifier with `cache=False`, so the override beats the `cache=ram` saved in the OOM'd checkpoint. With no `cache`/`val` kwargs, resume
+  defaults to `cache=False, val=True`.
+- Docs (`docs/ML.md` §5d), the notebook cell 1 comment and `test_notebook_dry_run.py` are consistent. ML-69 doesn't collide with any other ID
+  (`docs/QA.md`, `docs/qa/*`, no open PRs).
+
+Tests: `qa_fast_profile.py` went from 26 to 33 tests. The 3 tests that pinned the old both-stages cache behaviour were rewritten as ML-69
+assertions, and 7 tests were added for resume and the allowed set. All 33 pass, including the real-data test and the allowed-set check.
+Suites: `ml/yolo/tests` 68 passed; `ml/eval/tests` (CI) 224 passed. With `qa_*` included: 294 passed, 5 skipped and 1 failed. That failure is
+the same environmental `qa_pr73` pip test as above (`.venv-ml` has no pip).
+
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-69 | high | `ml/yolo/train.py` (`--cache` passed to the classifier stage) | `--cache ram` RAM-cached the classifier crops at full resolution: 9.4 GB, OOM-killed on Colab when the classifier stage started (found on the first real FAST run). | **fixed** (e4f967c), QA-verified |
