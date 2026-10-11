@@ -2,7 +2,7 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-10 (checkpoint 5b). **`food-main` (VPS) only orchestrates**: it plans, rules,
+_Last updated: 2026-10-10 (checkpoint 6). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
 building** (owner decision): builder + QA sub-agents, Xcode and simulators, Docker and every test run,
 backend included, plus any `.github/workflows` push (the VPS token can't). It starts from the "In flight on
@@ -22,7 +22,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **merged (#60)**; 1411 passed / 98% | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **merged (#47)** | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
-| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **paused: a teammate owns the models** (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
+| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22 owns the data + model track.** The 8-source dataset passed independent QA (#62), so Colab can run (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
 | Receipts → full candidates (#54, Jose / LemurTech22) | **merged (#54)**; BE-11–14 fixed | ML check PASS (independent) |
 | Design | 22 screens approved; canvas is the source (renamed BiteDown) | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
 | Demo connectivity | merged | `scripts/demo_tunnel.sh` (Cloudflare quick tunnel, HTTP/2) |

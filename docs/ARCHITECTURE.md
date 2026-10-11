@@ -24,7 +24,7 @@
 | DB | Docker `db` service | `timescale/timescaledb` (pinned tag). One database. Migrations run automatically when the api container starts (`backend/entrypoint.sh`). |
 | ML service | `ml/serve/` | Flask: `POST /detect` (YOLO26 food-name detector, then a fresh / semi_fresh / spoiled crop classifier), `POST /ocr` (GLM-OCR, then the deterministic receipt parser), `GET /health`. Runs where there's a GPU, with fake backends for CPU tests. Backend reaches it at `ML_SERVICE_URL`. **If it's unset or returns an error, `/items/from-photo` falls back to Gemini vision**, so the demo never depends on a GPU being up. Receipts have no fallback. It has no auth, so keep it on loopback or a tunnel. Details: `docs/ML.md`. |
 | Gemini | external | One service module (`backend/app/services/gemini.py`). Model id in `.env` (`GEMINI_MODEL`), recorded in `DECISIONS.md`. Every call logs token usage (`scripts/gemini_cost.py`), and recipe suggestions are cached per user. |
-| Training | Colab + `ml/yolo/train_colab.ipynb` | Data from 5 sources through `pipeline/` and `prepare_dataset.py`. Leakage and stratification gates run before training, with checkpoints and resume on Drive. Weights never go in git. |
+| Training | Colab + `ml/yolo/train_colab.ipynb` | Data from 8 sources (VegQual, fridge_objects, hien_fridge, food_spoilage_status, Kaggle fresh/stale, AgriFreshNET, MeatScan, DaFiF; food_hvk7g pending) through `pipeline/` (`fetch-*`, `ingest-dataset`) and `prepare_dataset.py`. Leakage, stratification and parent-photo gates run before training, with checkpoints and resume on Drive under a `sources.json`-hash cache key. Weights never go in git. |
 
 ## Key flows
 - **Add by photo:** iOS uploads image → `POST /items/from-photo` → ML service (or Gemini) returns

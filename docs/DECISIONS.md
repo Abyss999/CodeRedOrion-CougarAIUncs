@@ -2,6 +2,21 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — New training sources and data rulings (#62; data owner LemurTech22, owner rulings)
+- **Three sources added, all CC BY 4.0:** MeatScan (Zenodo 16764338, cow meat), DaFiF (Mendeley vx4ptwk3pb, fish) and Food Spoilage Status (Roboflow v1, produce). food_hvk7g stays `pending` (no downloadable version, no freshness labels). Attribution is in `docs/ML.md` and the README.
+- **DaFiF freshness labels come from days on ice:** 1–3 fresh, 9–11 spoiled, 4–8 dropped. The paper's per-species cut-offs are paywalled. This is a data-owner ruling.
+- **The new sources are kept, with their risks named** (data owner; ML QA had suggested capping beef):
+  - beef is train-only, and its spoiled class is scene-confounded (ML-52);
+  - fish tray colour tracks the label (ML-55);
+  - fish held-out is one unseen batch (ML-51).
+  Spoiled recall is reported per source with Wilson CIs.
+- **MeatScan is never downloaded whole:** range reads from the 25 GB RAR, excluding the authors' augmentations. Roboflow copies of one photo share a split group (ML-50). A demoted cell moves wholly to train (ML-53). The Colab dataset cache is keyed by a `sources.json` hash.
+- **Owner: cross-split pHash pairs are a warning in `stratification_check`.** `leakage_check`'s identity pHash ≤ 1% per source stays the gate. The pHash session merge is used only for measurability (with the 600 cap), never to loosen the span rule.
+- **Owner: PL-5 won't be fixed.** MeatScan's two markets shoot in the same minute, so no timestamp-sound key gives more than 3 units. Beef stays train-only.
+- **Owner: #62 merged on the go-ahead** after independent QA on the full 8-source dataset (food-main-mac): leakage PASS on every source, stratification PASS, parent_sibling 0. Held-out spoiled is 495 images, 68% AgriFreshNET.
+- **The pre-#62 dataset (a2b) had a real leak** (fridge_objects held-out vs train 13 s apart), caught by the fixed ML-59 rule and absent from the #62 build. No model was trained on a2b, so no quoted metric is affected.
+- **The ML / data track belongs to teammate LemurTech22.** Other sessions build there only when the owner asks, as for #62's QA fixes. Work lands through PRs with independent QA.
+
 ## 2026-10-11 — Dark-mode artboards (owner)
 - **The canvas has a Dark page with a dark artboard for every screen**, no longer deferred. They're generated from the light artboards with the adaptive tokens (`docs/design/tools/mkdark.py`), so the light artboards stay the single source and dark can't drift. iOS QA compares dark screenshots against them.
 
@@ -24,7 +39,7 @@ A UI/UX QA pass checked every comment. The owner made the product calls, and the
 
 ## 2026-10-10 — Google Sign-In and removal rulings (#60, Fridge screen)
 - **`POST /auth/oauth/google` returns `created: true|false` in the body** as well as 201/200, so the app doesn't depend on status codes.
-- **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim is present. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
+- **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim equals the email domain. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
 - **One Google identity per user.** A different Google subject for the same user → 409 `identity_conflict`, checked before the domain rule.
 - **JWKS:** cached per `max-age`, an unknown `kid` is refetched at most every 30 s, 60 s leeway on `exp` / `iat`. Migration 0005's downgrade sets null password hashes to `'!'`, which can never match a password.
 - **Gave it away on a claimed item always goes to the claimer** (no "Someone else" for v1, no API change). When the listing is open with no claimer, the recipient chooser is hidden and nothing is recorded as recipient.
