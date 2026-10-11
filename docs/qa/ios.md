@@ -156,3 +156,142 @@ No open iOS bugs from this round. Still open from earlier: IOS-2 (glass tab bar 
 - [toast-motion.mp4](media/ios-foundation/toast-motion.mp4) (494 KB, 9.8 s, 440×960, `avconvert` Preset960x540): launch, then the toast with its 5 s progress bar, then it slides away. A frame sheet sampled every 0.5 s shows the toast for about 5 s.
 - **No stagger is shown**: no screen in the foundation uses `staggeredAppearance` yet. It is covered by unit tests; record it with the first list screen (Fridge).
 - Screenshots: [light](media/ios-foundation/toast-light.png), [dark](media/ios-foundation/toast-dark.png). In dark mode the toast uses the lime surface with dark text and stays legible.
+
+## 2026-10-11: Fridge + removal (feat/ios-fridge)
+Head: the worktree after the builder's final build, which includes the IOS-12 fix and the recipient ruling (a static claimer line, and no `recipient_id` sent). Mac: Apple M4 Pro, Xcode 26.6, XcodeGen 2.45.4, `CODE_SIGNING_ALLOWED=NO`. Every `xcodebuild` ran under the shared heavy lock.
+
+### Verdict: PASS
+One low bug is still open: IOS-13, which needs a VoiceOver check.
+
+The demo path holds, in light and dark and with Reduce Motion on and off: swipe → Remove → outcome (→ reason) → the row collapses → Undo toast → Undo restores the row, or the toast expires and the removal stays. A failed remove or a failed restore rolls back and shows a banner.
+
+| Device | Unit | UI |
+|---|---|---|
+| iPhone 17 Pro (iOS 26.5), light, `large` | **144 run, 0 failed, 3 skipped** (the Keychain tests, IOS-7 by design) | Full run: **49 run, 0 failed**. After the final test-helper edits, the Fridge and Remove suites were rerun: **25/25**. Dark screenshot run 5/5. Clip run 1/1 |
+| iPhone SE QA (iOS 26.5), **AX5** | **144 run, 0 failed, 3 skipped** | Full run: 49 run, 1 failed. The failure was test-side: `openRemove` swiped the carrots row while its centre sat under the floating tab bar, the drag hit the bar and switched to Home. After the `reveal` fix, the Fridge and Remove suites ran **25/25**, and the other 24 passed in the full run. **49/49 in total** |
+
+The SE was reset to `large` and shut down. The 17 Pro was left on light / `large`.
+
+### Tests added (`ios/Tests/**`)
+**`FridgeModelTests` (19, unit).** These drive `FridgeModel` through a `SpyAPIClient` that wraps `MockAPIClient`.
+- States: loading → content in design order (protein, veggies, fruit, dairy), with rows sorted by expiry. Empty. Error, then retry. Storage is per segment.
+- Stagger: runs once per storage's first non-empty load. It doesn't run on `loadIfNeeded` again, on `refresh()`, or on an empty pantry.
+- A failed refresh with rows on screen keeps the rows and shows the banner with a retry.
+- Remove is synchronous: the row is gone before any `await`. The toast reads "Chicken thighs removed".
+- Each removal makes exactly one API call with outcome, reason and recipient. A donated removal fulfils the listing on the mock.
+- Removing the last item in a group drops that section. A second removal replaces the toast.
+- A refresh that races an in-flight removal does not bring the row back.
+- Failed remove: the row returns to its original index, the toast is cleared, the banner offers a retry, and the haptic is `.error`. The banner retry succeeds once the server recovers.
+- Undo puts the row back in the same place immediately, calls restore once, reopens the donated listing, and plays no haptic.
+- Undo before the remove settles waits for it and then restores. Undo after a failed remove calls no restore, shows no banner and makes no duplicate row.
+- A failed restore removes the row again and shows the banner with a retry and `.error`. With `restore_window_expired`, the banner says "too late" and has no retry.
+- When the toast times out, the removal stays: no restore call, and the item stays removed on the server.
+- `ItemText` covers the sheet meta "Veggies · 5 oz · expires tomorrow · on Share", the spoiled meta and the quantities.
+- The `listing` fixture matches the artboard. The mock rejects `recipient_id` on a non-donated removal.
+
+**`RemoveRequestShapeTests` (8, unit, `StubURLProtocol`).** These check the request bodies:
+- `used` sends `{"outcome"}` only, and nil keys are omitted rather than sent as null.
+- `thrown_out` sends snake_case `waste_reason` for all four reasons.
+- `donated` sends `recipient_id`, or omits the key when there is none (the app's path after the ruling).
+- Restore is a POST with no body.
+- 409 `restore_window_expired` and `not_removed` map to typed errors. `already_removed` becomes a server 409.
+- The encoder omits nil.
+
+**`FridgeUITests` (12).**
+- Group headers are in design order and labelled "Protein, 2 items". Empty groups are omitted. This is checked across scroll positions, because the `List` is lazy.
+- The storage filter has a ≥ 44 pt segment. The empty pantry shows `fridge.empty`, and switching back restores the rows.
+- Badge labels: "Expires today", "Expires in 1 day", "Check, looks spoiled", "Use soon", "Expires in 12 days", and "Expired" in the `expired` seed.
+- States:
+  - empty
+  - skeleton: exactly **one** `fridge.loading` element labelled "Loading", via `-UITestLoadingForever`
+  - error with a retry button of ≥ 44 pt (IOS-12)
+  - retry after `-UITestFailListOnce` loads the list
+- Row VoiceOver: the combined text includes "looks spoiled", so spoilage is in words and not colour alone. The title is "Your food".
+- The swipe cell is ≥ 44 pt.
+- The stagger probe stays at `1` after switching segments and pulling to refresh.
+- The `long` seed scrolls to the Other group.
+- AX5: the badge is not clipped and the outcome tiles are ≥ 44 pt.
+
+**`RemoveFlowUITests` (13).**
+- Used: the row collapses, the toast appears, and the haptics are exactly `success`.
+- Gave away:
+  - With no listing (eggs), no claimer line is shown.
+  - With a claimed listing (spinach), `remove.recipient` is a static, non-button, unselected line containing "Marcus Ojeda", and the subtitle reads "Closes your Share listing". Haptics are exactly `success`.
+  - With an open listing that has no claimer (carrots), no recipient UI is shown.
+- Threw away pushes the reason step, and the row stays until a reason is picked. There are four reason tiles, each ≥ 44 pt and labelled. Haptics are exactly `selection, warning`.
+- Cancel keeps the row and shows no toast.
+- Undo restores the row in order with no new haptic. When the toast expires, the removal survives a pull-to-refresh.
+- Failed remove:
+  - the row comes back
+  - the banner names the item
+  - Try again and Dismiss are both ≥ 44 × 44
+  - Dismiss hides the banner
+  - there is no toast
+  - the haptics are `success, error`
+- Failed restore: the banner shows and the row stays removed.
+- Reduce Motion:
+  - The toast fades in place: its frame doesn't move over 0.6 s, and it sits above the tab bar.
+  - The threw-away flow still plays `.warning`.
+- The removal is effective on tap, with Reduce Motion on and off. This is a smoke bound. Immediacy itself is proved by the unit test, because XCUITest's `tap()` waits for idle.
+
+**Support and docs:** `FridgeUITestSupport.swift` adds `FID`, `app.reveal(_:)` and `openRemove`, and handles a full swipe opening the sheet directly. `ios/Tests/README.md` gains the launch arguments, seeds and the tab-bar swipe caveat.
+
+### Motion
+| Rule | Result |
+|---|---|
+| The tap takes effect immediately | Yes. `FridgeModel.remove` deletes the row synchronously, and the API call runs after it. The sheet holds 200 ms for the checkmark (`Theme.Motion.confirmHold`), then dismisses. The row collapses behind the sheet at the tap. This was approved by the orchestrator, and MOTION.md is to be reworded |
+| Total ≤ 0.5 s | The row collapse and the toast use `standard` (spring 0.35). The stagger is 40 ms, capped at 6, with 0.3 s items, for 0.5 s in total. `MotionTests` pins it |
+| One composite = one animation | Each row and each header uses `.staggeredAppearance` with `compositingGroup`. Each row's tile, text and badge fade as one unit |
+| Stagger on first load only | `debug.stagger.count` stays 1 after a segment switch and a refresh (UI). The unit test covers refresh, re-entry and the empty pantry |
+| Haptics | Used/Gave away → `success`. Threw away → `selection` (MOTION: outcome tiles), then reason → `warning`. Undo → none. Storage segment → `selection`. A failed remove or restore → `error`, after the optimistic `success`. That fits CLAUDE.md's error moment, but MOTION lists `.error` only for sign-in, so **the orchestrator should note it in MOTION.md** |
+| Reduce Motion | The toast fades without moving, the flows complete, the haptics stay, and the 5 s timeout is unchanged |
+
+Clip: [remove-undo-motion.mp4](media/ios-fridge/remove-undo-motion.mp4). It is 1.25 MB and 11.5 s, recorded with `simctl recordVideo` (its PID was recorded and only that PID was stopped), trimmed and exported at 960×540. It shows swipe → circular Remove action → sheet → Used it with checkmark → the sheet dismisses, the row collapses (Protein · 1) and the toast with its progress bar appears → Undo → the row returns. Frame sheet: [remove-undo-frames.png](media/ios-fridge/remove-undo-frames.png).
+
+### Screenshots (iPhone 17 Pro, 960 px tall)
+- Fridge: [light](media/ios-fridge/fridge-light.png), [dark](media/ios-fridge/fridge-dark.png)
+- RemoveSheet: [light](media/ios-fridge/remove-sheet-light.png), [dark](media/ios-fridge/remove-sheet-dark.png); with a claimed listing: [light](media/ios-fridge/remove-sheet-listing-light.png), [dark](media/ios-fridge/remove-sheet-listing-dark.png)
+- RemoveReason: [light](media/ios-fridge/remove-reason-light.png), [dark](media/ios-fridge/remove-reason-dark.png)
+- After a removal, with the toast: [light](media/ios-fridge/after-remove-toast-light.png), [dark](media/ios-fridge/after-remove-toast-dark.png)
+- States: [loading](media/ios-fridge/fridge-loading-light.png), [empty](media/ios-fridge/fridge-empty-light.png), [error](media/ios-fridge/fridge-error-light.png)
+- Rollback banners: [remove failed](media/ios-fridge/remove-failed-banner-light.png), [remove failed, dark](media/ios-fridge/remove-failed-banner-dark.png), [restore failed](media/ios-fridge/restore-failed-banner-light.png)
+- SE at AX5: [fridge](media/ios-fridge/se-ax5-fridge.png), [sheet](media/ios-fridge/se-ax5-remove-sheet.png), [sheet with listing](media/ios-fridge/se-ax5-remove-sheet-listing.png), [reason](media/ios-fridge/se-ax5-remove-reason.png), [toast](media/ios-fridge/se-ax5-after-remove-toast.png), [loading](media/ios-fridge/se-ax5-fridge-loading.png), [empty](media/ios-fridge/se-ax5-fridge-empty.png), [error](media/ios-fridge/se-ax5-fridge-error.png), [remove failed](media/ios-fridge/se-ax5-remove-failed.png)
+
+At AX5 the segmented control stacks, rows wrap with the badge below the text, the sheet scrolls, the reason grid is one column, and the toast and banner stack. Nothing is clipped.
+
+### Design delta (vs `Fridge`, `RemoveSheet` and `RemoveReason`)
+QA verified the builder's 15 items against the screenshots. All 15 match what is drawn, except where a note is added.
+1. The storage filter is hand-built: a 36 pt segment in a 44 pt hit area, and the segments stack at AX sizes. Matches visually ([fridge-light](media/ios-fridge/fridge-light.png), [se-ax5-fridge](media/ios-fridge/se-ax5-fridge.png)).
+2. The search button (the 44 pt circle top right on the artboard) is not built.
+3. Native inset-grouped `List`: the system section radius and margins, a native header, and the title and filter scroll with the list.
+4. The row meta is derived from data: "8 · added Oct 8" instead of "8 of 12 left", and "2 lb · added Oct 8" instead of "2 lb bag".
+5. Each row has two VoiceOver stops (text, badge) plus a "Remove" custom action.
+6. There is no skeleton-to-content cross-fade; the stagger fades the rows in.
+7. The "Gave it to" select becomes a static claimer line ("Gave it away goes to Marcus Ojeda"), shown only for a claimed open listing. This is the orchestrator's ruling.
+8. The Gave-away subtitle depends on the listing: "Counts as food saved" without one, the artboard text with one.
+9. The outcome tiles use SF Symbols, a trailing checkmark, and a chevron on Threw it away.
+10. The header tile radius is 12 vs 14.
+11. The sheet height is fitted, with `.large` as a second detent.
+12. The reason step uses the native glass back button instead of the white 44 pt circle.
+13. At AX sizes the reason grid is one column. A tapped reason tile gets a lime fill, a forest border and a checkmark.
+14. The reason tip is static ("…so next time we can remind you sooner") instead of the artboard's personalised "Spinach was forgotten twice before…".
+15. Subtitles are 15 pt vs 14.
+
+Added by QA:
+
+16. The swipe action is the iOS 26 native style: a circular forest button with a checkmark and a "Remove" caption. The artboard draws a full-height 96 pt forest block. See the frame sheet. It is native, so accept it.
+17. The sheet scrim is the system dimming, lighter than the artboard's solid `#4C5A4F`. DESIGN_SYSTEM already says that on device the scrim is `ink` at 60%.
+18. While the Undo toast is visible it overlays the bottom visible row (as in [after-remove-toast](media/ios-fridge/after-remove-toast-light.png)), and the list does not inset for it. It is transient (5 s) and the rows can scroll, so this is noted rather than filed as a bug.
+19. The row collapses at the tap, behind the sheet, before the sheet dismisses. MOTION says "as the sheet dismisses". This is approved by the orchestrator and MOTION.md is to be reworded.
+
+### Bugs
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| IOS-12 | medium | The `ErrorStateView` retry (`fridge.error.retry`) was 28 pt tall, because `.borderedProminent` sat inside `ContentUnavailableView`. The `EmptyStateView` action and the banner's Try again had the same defect. | **fixed** in this round: `.controlSize(.large)` plus a `minTouch` label. `testErrorStateAndRetry` and `testFailedRemoveRollsBackAndShowsError` now assert ≥ 44 pt on both devices |
+| IOS-13 | low | In XCUITest each Fridge row exposes an `Image` labelled with the asset name (`FoodGroupFruit`, `FoodGroupProtein`), the 40 × 40 food-group tile, even though `FoodGroupIcon` sets `.accessibilityHidden(true)`. It shows up because the row is an `.accessibilityElement(children: .contain)` container. If VoiceOver lands on it, it is a stray stop that reads "FoodGroupFruit". Builder: check with VoiceOver or Accessibility Inspector. If it is reachable, fix it, for example with `Image(decorative:)` for the asset glyphs or an `accessibilityHidden` on the glyph image itself. This was not reproduced with VoiceOver on (not available headless) | open |
+
+Still open from earlier rounds: IOS-2 (owner).
+
+### Notes
+- After the ruling, the app sends no `recipient_id`. That is verified in the code: `RemoveSheet.finish` builds `RemoveChoice(outcome:)`. On the wire, `testDonatedWithoutRecipientOmitsKey` checks that the key is omitted.
+- The `debug.haptics` and `debug.stagger.count` probes are under `#if DEBUG` and appear only on mock launches.

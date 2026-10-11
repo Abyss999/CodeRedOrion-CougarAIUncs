@@ -42,11 +42,24 @@ at a time on the shared Mac (`pgrep -x xcodebuild`); never kill by pattern.
 | `-UITestSlowNetwork` | every mock call waits 3 s (loading/skeleton states) |
 | `-UITestShowToast` | Home shows one Undo toast ("Baby spinach removed"); `toast.undo.marker` appears after Undo |
 | `-UITestReduceMotion` | forces Reduce Motion on (simctl has no switch) |
+| `-UITestLoadingForever` / `-UITestFailList` / `-UITestFailListOnce` | item list never returns / fails / fails once then Retry succeeds |
+| `-UITestFailRemove` / `-UITestFailRestore` | only remove / restore fails (rollback + `fridge.remove.error` banner) |
+| `-UITestSlowRemove` / `-UITestSlowRestore` | remove / restore take 3 s |
+| `-UITestRecordHaptics` | haptics recorded on the `debug.haptics` probe (comma-joined, "none" when empty); `debug.stagger.count` counts Fridge staggers |
 | `-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXXXL` | AX5 text (system, not ours) |
 
 Use `XCUIApplication.mockSignedIn([extra args])` from `UITestSupport.swift`. The base-URL override is
 persisted in UserDefaults across launches: reset it through the debug sheet at the start of a test
 (never via a `-api_base_url_override` launch argument, which shadows saved values).
+
+## Fridge and remove
+Seeds: `fridge` (and `listing`) has item-spinach on an open listing claimed by Marcus Ojeda and
+item-carrots on an open listing with no claimer; the pantry is empty. Ids live in `FID` and
+`RemoveArgs` (`FridgeUITestSupport.swift`, `RemoveFlowUITests.swift`). The Fridge `List` is lazy and
+rows are tall at AX5, so use `app.reveal(element)` (scrolls until the element is hittable **and above
+the floating tab bar**: a swipe that starts under the bar drags the bar and switches tabs) and
+`openRemove(app, item:)` (a long swipe is a full swipe and opens the sheet directly). Probes behind a
+sheet may be hidden from accessibility; read them after the sheet dismisses.
 
 ## Debug base URL entry
 Long-press the version label on Home (`debug.versionlabel`) to open `debug.settings`: field
