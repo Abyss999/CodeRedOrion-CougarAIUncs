@@ -142,6 +142,12 @@ def test_series_and_staged_names():
         P.group_key("s", Path("banana__fresh__IMG_20250101_123456.rf.y.jpg"))
     k, t = P.parse_capture_time(Path("Screen Shot 2018-06-08 at 4.59.36 PM.png"))
     assert k == "screenshot" and P.parse_capture_time(Path("Screen Shot 2018-06-08 at 4.59.36 AM.png"))[1] == t - 12 * 3600
+    # Kaggle augmentation prefixes and WhatsApp names share the screenshot clock
+    kk, tt = P.parse_capture_time(Path("rotated_by_15_Screen Shot 2018-06-08 at 4.59.36 PM.png"))
+    assert (kk, tt) == ("screenshot", t) and P.parse_capture_time(Path("saltandpepper_Screen Shot 2018-06-08 at 4.59.36 PM.png"))[1] == t
+    assert P.parse_capture_time(Path("WhatsApp Image 2020-11-07 at 11.35.36 PM.jpg_0_577.jpg"))[0] == "screenshot"
+    assert P.parse_capture_time(Path("fresh_stale_rotated_by_15_Screen_Shot_2018-06-08_at_4_59_36_PM_a3db64.jpg"))[1] == t
+    assert P.base_stem(Path("vertical_flip_Screen Shot 2018-06-08 at 4.59.36 PM.png")) == "Screen Shot 2018-06-08 at 4.59.36 PM"
     assert P.parse_capture_time(Path("0000000004053_jpg.rf.x.jpg")) is None        # barcode, not an epoch
 
 
@@ -236,3 +242,57 @@ def test_stratified_split_covers_every_cell_with_two_groups():
     one = [dict(src="s", path=Path(f"o{i}.jpg"), group="same", boxes=[dict(name="onion", freshness="spoiled")]) for i in range(20)]
     split, info = P.assign_splits(recs + one, 0.1, 0.1, 42)
     assert split["same"] == "train" and "onion/spoiled" in info["single_group_cells_kept_in_train_not_measurable"]
+
+
+def test_no_cell_exists_only_outside_train():
+    import random
+    for seed in range(25):
+        rnd = random.Random(seed)
+        recs, n = [], 0
+        for cell in ("eggplant/spoiled", "onion/fresh", "potato/spoiled", "tomato/fresh", "apple/spoiled"):
+            for gi in range(rnd.choice([1, 2, 2, 3, 5])):             # few big groups per cell
+                for _ in range(rnd.choice([5, 40, 300])):
+                    nme, fr = cell.split("/")
+                    recs.append(dict(src="s", path=Path(f"x{n}.jpg"), group=f"{cell}#{gi}",
+                                     boxes=[dict(name=nme, freshness=fr)])); n += 1
+        split, info = P.assign_splits(recs, 0.1, 0.1, seed)
+        per = {}
+        for r in recs:
+            k = f"{r['boxes'][0]['name']}/{r['boxes'][0]['freshness']}"
+            per.setdefault(k, set()).add(split[r["group"]])
+        for k, sp in per.items():
+            assert "train" in sp, (seed, k, sp)                           # never held-out/val only
+            if k in info["single_group_cells_kept_in_train_not_measurable"]:
+                assert sp == {"train"}
+
+
+def _sess_recs(spec):
+    """spec: {cell: [session sizes]} -> one group per session, one image per box"""
+    recs, n = [], 0
+    for cell, sizes in spec.items():
+        nm_, fr = cell.split("/")
+        for si, sz in enumerate(sizes):
+            for _ in range(sz):
+                recs.append(dict(src="s", path=Path(f"x{n}.jpg"), group=f"{cell}#{si}",
+                                 boxes=[dict(name=nm_, freshness=fr)])); n += 1
+    return recs
+
+
+def test_required_cells_get_a_whole_session_in_heldout_and_others_stay_in_train():
+    # real cases: apple/spoiled 26/125/1/98, bell_pepper/spoiled 45/158/47/6/332, eggplant/spoiled 369+3
+    recs = _sess_recs({"apple/spoiled": [26, 125, 1, 98], "bell_pepper/spoiled": [45, 158, 47, 6, 332],
+                       "eggplant/spoiled": [369, 3], "onion/fresh": [411], "potato/fresh": [300, 200, 150]})
+    split, info = P.assign_splits(recs, 0.1, 0.1, 42, min_session_images=10)
+    d = info["cell_decisions"]
+    assert d["apple/spoiled"]["decision"] == "required_in_heldout" and split["apple/spoiled#3"] == "heldout"   # the 98
+    assert split["apple/spoiled#1"] == "train" and split["apple/spoiled#0"] in ("train", "val")                 # 125 stays; 26 may feed val
+    assert d["bell_pepper/spoiled"]["decision"] == "required_in_heldout"
+    assert any(split[f"bell_pepper/spoiled#{i}"] == "heldout" for i in range(5))
+    assert any(split[f"bell_pepper/spoiled#{i}"] == "train" for i in range(5))
+    assert d["eggplant/spoiled"]["decision"] == "not_measurable_on_heldout" and d["eggplant/spoiled"]["sessions"] == 2
+    assert split["eggplant/spoiled#0"] == split["eggplant/spoiled#1"] == "train"                              # entirely train
+    assert d["onion/fresh"]["decision"] == "not_measurable_on_heldout" and split["onion/fresh#0"] == "train"
+    assert not info["required_cells_missing_from_heldout"]
+    # configurable: with --min-session-images 1 the 3-image eggplant session counts and the cell becomes required
+    _, info1 = P.assign_splits(recs, 0.1, 0.1, 42, min_session_images=1)
+    assert info1["cell_decisions"]["eggplant/spoiled"]["decision"] == "required_in_heldout"

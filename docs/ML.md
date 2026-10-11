@@ -141,14 +141,26 @@ same eval without reading `class_names.json`.
      gives identical "<= 6" decisions on 44,850 test pairs) with Hamming <= `--phash-threshold` (default 6), across all
      sources, merges groups. A merged component larger than `--max-unit-images` (600) is not stratified; it is forced into
      train (reported in `grouping.near_duplicates.images_forced_to_train_by_source`).
-  Groups are assigned by **greedy stratified balancing** on class x freshness (+ source + image count): largest weighted groups
-  first, each into the split that minimises the squared relative deficit of its cells, then a repair pass moves the smallest
-  train group holding a missing cell into held-out/val. Cells with >= 10 images should appear in held-out and val. A cell held
-  by ONE group (one capture session) cannot be split without leakage: it stays in train and is listed under
-  `stratification.single_group_cells_kept_in_train_not_measurable`; cells with < 10 images under
-  `not_measurable_cells_lt_min_images` (nothing is dropped silently). `dataset_report.json.leakage_by_source` reports, per
-  source, held-out originals with a train/val timestamp neighbour within 60 s / 300 s and pHash and (independent, coarser)
-  dHash near-duplicates. `--session-gap 0` disables sessions (series grouping only). Fractions are image-count targets, but
+  Groups (sessions / series / merged near-duplicate clusters) are indivisible and are assigned by **greedy stratified
+  balancing** on class x freshness (+ source + image count). Rules (orchestrator ruling, final):
+  - A cell is **required in held-out** if it has >= 10 images and >= 2 independent units: sessions with >=
+    `--min-session-images` (default **10**) images of the cell, or a pool of >= 2 smaller groups (independent single photos,
+    e.g. web images). One whole session is then placed in held-out (least collateral first, then the largest session that
+    leaves train at least as many images of the cell as were moved: apple/spoiled sessions 26/125/98/1 -> the 98 session is
+    held out), while train keeps at least one session. Moves and collateral are listed in `required_cell_moves` and
+    `heldout_session_upgrades`.
+  - Otherwise the cell is **not measurable on held-out** and goes ENTIRELY to train (e.g. eggplant/spoiled 369 + 3 images,
+    single-session cells banana, onion, orange). `stratification.cell_decisions` records, for every cell, the image and
+    session counts, the session sizes, the decision, the reason and the train/val/held-out box counts.
+  - No cell may exist only outside train (asserted; unit test `test_no_cell_exists_only_outside_train`).
+  - Near-duplicates: groups whose images have pHash-64 Hamming <= 6 are merged, EXCEPT components larger than
+    `--max-unit-images` (600) - look-alike white-background fruit photos chain into one 1,751-image component - which are
+    left as separate capture groups; afterwards the (few) held-out/val images that still have a near-duplicate in another
+    split are **dropped** (not moved), counted in `grouping.near_duplicate_drops`.
+  `dataset_report.json.leakage_by_source` reports, per source, held-out originals with a train/val timestamp neighbour
+  within 60 s / 300 s and pHash and (independent, coarser) dHash near-duplicates. **Reproducibility parameters** (all defaults): `--seed 42`, `--session-gap 300`, `--phash-threshold 6`, `--max-unit-images 600`,
+`--min-session-images 10`, `--heldout 0.10 --val 0.10`, Kaggle `max_per_class: 250` per class x freshness (images picked by SHA1
+of `seed:path`). Same sources + parameters give identical splits; QA copies live in `mldata/fwr_data_v2` / `fwr_data_v3`. `--session-gap 0` disables sessions (series grouping only). Fractions are image-count targets, but
   because sessions are big the real held-out share is lumpy (see the report).
 - **Lighting tag**: auto from mean luma (<70 => `low`) and mean R/B (>1.35 => `warm`), else `normal`
   (`lighting_method=auto`; hand-correct via `--lighting-overrides file.csv` with columns `image,lighting` ->

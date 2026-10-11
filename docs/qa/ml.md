@@ -287,3 +287,60 @@ Whole worktree plus `mldata/*.json`/`*.md` (none exist at top level) and `fwr_da
 - Dataset (this rerun, VegQual only): mechanics PASS (ids, mapping, drop reasons); **evaluation readiness FAIL (ML-21, ML-23, ML-17, ML-15)**.
 - Eval harness plumbing on smoke export: PASS (runs, real/synthetic separated). Detector metrics: no sign-off.
 - Suites: PASS (12 / 89 / 3 / 74). Notebook: PASS on JSON/secrets, re-check after update. Secrets: PASS (none found).
+
+---
+
+# 2026-10-10 (night) - Re-review of the 4-source reworked split (PR #27): fwr_data, then fwr_data_v2
+
+Tools (ml/eval, mine): `leakage_check.py` now reports **per source** (60 s / 300 s neighbour rates with `re.search` timestamp patterns for epoch-ms, `IMG_YYYYMMDD_HHMMSS`, `Screen_Shot_..._at_H_MM_SS_PM`, `WhatsApp_Image_..._at_...`; independent `imagehash` pHash-64 and dHash-64, Hamming <= 6, held-out originals vs train+val originals; numbered-series index check). Its JSON keeps flat `within_60s`/`within_300s` keys for the notebook gate. New `stratification_check.py` (cells x sessions, class x source, report-vs-manifest). Hash tooling ran in a throwaway venv (`scratchpad/qa-venv`); no heavy jobs were running (`pgrep` clean).
+
+## Verdict against QA.md ML-21 (#25) + orchestrator rulings (#28)
+| Source | fwr_data (first rework) | **fwr_data_v2** |
+|---|---|---|
+| vegqual | 0 / 0 within 60 / 300 s (520 timestamped), pHash 0% | **PASS**: 60 s 0, 300 s 0 (519 ts, min gap 798 s), pHash 0 (0%), numbered series 0 |
+| fridge_objects | PASS (no timestamps; pHash 0) | **PASS**: ts n=1; pHash 0 (0%) |
+| hien_fridge | pHash 0; dHash 38% | **PASS (gate = pHash)**: ts n=1, pHash 0 (0%); dHash 86/206 = 41.7% informational, see below |
+| fresh_stale_fruits_veg (Kaggle) | **FAIL**: 50/192 held-out (26%) within 60 s and 300 s (min gap 1 s). Builder's "0" was wrong: the WhatsApp-named images (`WhatsApp_Image_2020-11-07_at_11_30_46_PM...`) had no parsed time (142 of 192 timestamped; 192 of 192 with my regexes) | **PASS**: 107/107 timestamped, 0 within 60/300 s (min gap 52,754 s), pHash 1/107 = 0.93% (<= 1%; the one pair is a green vs a red wrinkled pepper, a false positive) |
+**ML-21: FIXED on fwr_data_v2 for all four sources.** Not fixed on fwr_data (superseded). The mechanical Colab gate (`within_300s == 0`) opens on v2 (aggregate 0). Caveat: Kaggle "capture times" are screenshot/phone-file times and the hold-out is 107 images; the pHash margin there is 0.93% vs 1%.
+
+## hien_fridge dHash flags (eyeballed)
+37% on v1, 41.7% on v2. I viewed 30 sampled flagged pairs on v1 and 12 on v2 (side-by-side images). **Every pair is a different photo from the same fixed camera in the same fridge**: identical shelf geometry, same jar, same milk box, with different contents (apples vs eggs vs yogurt cups vs soda). Many "hub" train images (ID16 apple_001, ID23 egg_tray_x2_004) pair with dozens of held-out images because dHash on a flat, mostly-white fridge background is low-entropy. No same-shot or burst duplicate found, so per #28 this is **not a grouping bug**; gate passes. Two v2 pairs (`milk_yogu_othe_00x` vs `milk_yogu_egg__002`) are the same shelf with one object added/removed: the nearest thing to a real near-duplicate, still a different photo and pHash > 6. **Risk (report, do not hide):** hien_fridge is one camera/one fridge, so its held-out score measures "same fridge, rearranged items" and will be optimistic for a new fridge; quote hien_fridge metrics separately and labelled.
+
+## Stratification (#28: cell required in held-out if >= 10 images AND >= 2 capture sessions)
+fwr_data: eggplant/spoiled was **only in held-out** (0 train / 3 val / 369 held-out): model never trained on it. FAIL. (Also apple/spoiled and the 6 single-session cells missing.)
+**fwr_data_v2 (train/val/held-out images):** eggplant/spoiled 369/3/0 (fixed: now trained on); apple/spoiled 250/0/0; bell_pepper/spoiled 256/332/0; banana, onion, orange fresh+spoiled single-session, all train. No cell held-out/val-only; no cell < 10 images. Report counts match manifest/disk (ML-24: 12 checks incl. per-source and by-lighting, all equal). Totals train 5,911 / val 1,577 / held-out 945 originals (2,617 rows); val is VegQual-heavy (1,114 of 1,577).
+Cells the rule requires but that are missing from held-out, my session counts (300 s chain; untimestamped by series stem):
+- **bell_pepper/spoiled: FAIL.** Sessions: Kaggle 45 + 158 + 47 (all train), VegQual 6 (train) and 332 (val). Five sessions, held-out has 0 and val holds 332 images. Moving a Kaggle session (or the 332 val one) to held-out leaks nothing, because the cell has other sessions in train. Coupling to other cells is a builder-side balance problem, not an exemption.
+- **apple/spoiled: FAIL as written, weakly.** All 250 are Kaggle screenshot images in 4 timestamp sessions (26 / 125 / 1 / 98; gaps 444 s and 655 s, then one 23 h gap), all in train. A 98- or 125-image session can go to held-out with no 300 s leakage. If the orchestrator judges that 444/655 s gaps inside one scrape are one session, call it "single session" instead. Your call.
+- **eggplant/spoiled: effectively single-session; accept as "not measurable on held-out".** 368 images are the `Defected_begun_N` numbered series (train), 1 more train image, and 3 val images (a second timestamped session). A held-out slice of 3 images would measure nothing. If the rule is applied literally (3 sessions) it is a FAIL; I recommend ruling sessions under 10 images do not count.
+- The 6 single-session cells (banana f+s, onion f+s, orange f+s): legitimate exception under #28 (each is one 250-image Kaggle burst or a single VegQual stem series). **Effect:** spoiled recall is N/A for apple, banana, onion, orange (and eggplant, bell_pepper unless fixed). Held-out spoiled boxes on v2 exist for **only two classes: potato (VegQual, 160 boxes) and tomato (Kaggle, 57)**. The YOLO "spoiled recall >= 0.85" and per-class spoiled-precision gates can therefore only be stated for potato and tomato; per-class precision for the rest is N/A. This meets #28 as ruled but **does not meet the original QA.md wording** ("every cell >= 10 images appears in held-out") for these cells; they have to be listed "not measurable" in every report.
+
+## ML-16 confound (class x source, v2 verified against my own counts from labels)
+Spoiled examples: apple (Kaggle only), banana (Kaggle), orange (Kaggle), potato (VegQual), eggplant (VegQual), onion (VegQual): **6 classes have spoiled from exactly one source**. bell_pepper and tomato have spoiled from two (VegQual + Kaggle). **No spoiled data at all** for lemon, egg, yogurt, bacon, milk, avocado, butter, cheese, soda (9 classes, fridge sets are fresh-assumed). Consequences: spoiled vs fresh is confounded with source for 6 classes (e.g. onion spoiled is VegQual-only and fridge/Kaggle supply the rest of the "fresh" look), and the held-out spoiled signal itself is source-pure (potato=VegQual, tomato=Kaggle). Recommend reporting spoiled recall per source.
+
+## Class mapping spot-check
+20 random label files from each of VegQual, fridge_objects, hien_fridge (compared to the raw Roboflow label file through my own class tables built from each data.yaml; null/dropped classes removed; freshness from the class name) and 20 Kaggle files (folder name = class and fresh/stale): **80/80 correct on both fwr_data and fwr_data_v2**, 0 mismatches. `class_names.json` has 17 contiguous ids matching data.yaml.
+
+## Suites (.venv-ml, rerun after builder's final change)
+ml/serve 12, ml/ocr 89, ml/yolo 11, ml/eval/tests 74 (root): all pass. New scripts have no unit tests yet.
+
+## Notebook (train_colab.ipynb, 7 cells)
+Valid JSON (nbformat 4). Secrets only via `google.colab.userdata` (ROBOFLOW_API_KEY, KAGGLE_API_TOKEN, never printed): PASS. **ML-26: fetch cell is now real** (VegQual figshare download, Roboflow `version(...).download("yolov8")` with pinned versions, Kaggle REST download behind the secret); I did not execute it (no network run), and the figshare file id is unverified. Gate cell asserts `rep["split_grouping"]=="session"` and `lk["within_300s"] == 0` from `leakage_check.py` (works with my new flat keys). Gaps: (1) **`imagehash` is not in the notebook's pip line**, so on Colab my script prints a warning and skips pHash; the gate then checks timestamps only. Add `imagehash` to cell 1 and assert per-source `phash_near_dup_pct <= 1`. (2) `REPO_URL` is still `<OWNER>/<REPO>`: a fresh run fails at clone until the owner sets it. (3) The gate does not assert the stratification rules (no held-out-only cell, required cells present).
+
+## Secret scan
+No real secret found (only placeholders/test fixtures).
+
+## Bug status
+| ID | Status |
+|---|---|
+| ML-21 | **fixed on fwr_data_v2** (all 4 sources pass 60/300 s and pHash). fwr_data first rework was FAIL (Kaggle 26%, builder's 0 was a parsing miss). |
+| ML-23 | **open**: bell_pepper/spoiled (required, missing), apple/spoiled (judgement), eggplant/spoiled (accept as not measurable); 6 single-session cells accepted under #28 |
+| ML-24 | fixed (report == manifest == disk, per source and per lighting) |
+| ML-26 | fixed (real fetch cell); two new notebook gaps above (imagehash, REPO_URL) |
+| ML-16 | open, quantified (6 classes spoiled from one source; 9 classes no spoiled; held-out spoiled = potato/VegQual + tomato/Kaggle only) |
+| ML-15, ML-17, ML-18, ML-19, ML-22, ML-25 | open / unchanged (smoke export not regenerated for v2, skipped by instruction) |
+| NEW ML-27 (medium) | hien_fridge single fixed camera/fridge: pHash 0 but 42% dHash neighbours of same-scene frames; metrics optimistic for a new fridge, report separately |
+
+## Verdict
+- **ML-21 PASS on fwr_data_v2, per source (vegqual, fridge_objects, hien_fridge, fresh_stale_fruits_veg).** The Colab leakage gate can open mechanically.
+- **Stratification/coverage (ML-23) FAIL on v2** per #28: bell_pepper/spoiled must be in held-out (and apple/spoiled unless ruled single-session). Fix is cheap (move a session). Until then, QA recommends **not starting the full Colab run**; the orchestrator decides. After the fix the ML gates remain statable only for potato and tomato spoiled recall.

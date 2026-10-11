@@ -65,7 +65,7 @@ def base_stem(path: Path) -> str:
     st = st.split(".rf.")[0]
     st = re.sub(r"_rf_[0-9a-f]{32}(?:_[0-9a-f]{6})?$", "", st)          # already-sanitised staged names
     st = st.split("__")[-1]
-    st = re.sub(r"^Copy of ", "", st)
+    st = _AUG_PREFIX.sub("", re.sub(r"^Copy of ", "", st))
     st = _AUG_TAIL.sub("", st)
     return st
 
@@ -86,7 +86,9 @@ def group_key(src: str, path: Path) -> str:
 # '<cls>__IMG_20250101_123456.rf.<sha>' work. Different 'kinds' are different clocks.
 _RX_COMPACT = re.compile(r"(?<!\d)((?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))_?([01]\d|2[0-3])([0-5]\d)([0-5]\d)(?!\d)")
 _RX_EPOCH_MS = re.compile(r"(?<!\d)(1[4-9]\d{11}|20\d{11})(?!\d)")      # 2014..2033 in ms
-_RX_SCREENSHOT = re.compile(r"Screen ?Shot (\d{4})-(\d{2})-(\d{2}) at (\d{1,2})[.:](\d{2})[.:](\d{2})\s*([AP]M)", re.I)
+# 'Screen Shot 2018-06-08 at 4.59.36 PM', 'WhatsApp Image 2020-11-07 at 11.35.36 PM' (also sanitised with '_')
+_RX_SCREENSHOT = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})[ _]at[ _](\d{1,2})[._:](\d{2})[._:](\d{2})(?:[ _]*([AP]M))?", re.I)
+_AUG_PREFIX = re.compile(r"^(?:rotated_by_-?\d+|saltandpepper|translation|(?:vertical|horizontal)_flip|gaussian_noise|blur)_")
 
 
 def parse_capture_time(path: Path) -> tuple[str, float] | None:
@@ -96,7 +98,7 @@ def parse_capture_time(path: Path) -> tuple[str, float] | None:
         m = _RX_SCREENSHOT.search(name)
         if m:
             y, mo, d, h, mi, se, ap = m.groups()
-            h = int(h) % 12 + (12 if ap.upper() == "PM" else 0)
+            h = int(h) % 12 + (12 if ap and ap.upper() == "PM" else 0) if ap else int(h)
             return "screenshot", float(calendar.timegm(datetime(int(y), int(mo), int(d), h, int(mi), int(se)).timetuple()))
         m = _RX_COMPACT.search(name)
         if m:
@@ -138,10 +140,12 @@ def assign_sessions(recs: list[dict], gap: float) -> dict:
 
 
 def merge_near_duplicates(recs: list[dict], thresh: int, max_unit: int) -> tuple[dict, set]:
-    """Union capture-groups whose images are pHash-64 near-duplicates (Hamming <= thresh, any source) so that no
-    near-duplicate pair can straddle splits. Look-alike clusters can chain into huge components (white-background
-    fruit photos), so a component of more than `max_unit` images is not stratified: it is forced into train
-    (reported, not silent). Returns (report, forced_train_groups). Needs r['phash']."""
+    """Union capture-groups whose images are pHash-64 near-duplicates (Hamming <= thresh, any source) so that
+    near-duplicates cannot straddle splits. Look-alike clusters can chain into huge components (white-background
+    fruit photos), which would make whole classes unmeasurable; a component of more than `max_unit` images is NOT
+    merged: its capture groups stay separate, and after the split the few images that have a near-duplicate in
+    another split are dropped from the held-out/val side (drop_cross_split_near_duplicates). Needs r['phash'].
+    Returns (report, forced_train_groups) (forced set is empty; kept for API compatibility)."""
     from dedup import near_pairs
     parent: dict = {}
 
@@ -151,21 +155,45 @@ def merge_near_duplicates(recs: list[dict], thresh: int, max_unit: int) -> tuple
             x = parent[x]
         return x
     pairs = 0
+    for r in recs:
+        r["group0"] = r["group"]
     for i, j in near_pairs([r["phash"] for r in recs], thresh):
         pairs += 1
         ra, rb = find(recs[i]["group"]), find(recs[j]["group"])
         if ra != rb:
             parent[ra] = rb
     before = len({r["group"] for r in recs})
+    comp = Counter(find(r["group"]) for r in recs)
+    over = {c for c, n in comp.items() if n > max_unit}
+    by_src_over = Counter()
     for r in recs:
-        r["group"] = find(r["group"])
+        c = find(r["group"])
+        if c in over:
+            by_src_over[r["src"]] += 1          # keep the capture group as its own unit
+        else:
+            r["group"] = c
     sizes = Counter(r["group"] for r in recs)
-    forced = {g for g, n in sizes.items() if n > max_unit}
-    by_src_forced = Counter(r["src"] for r in recs if r["group"] in forced)
     return ({"phash_threshold": thresh, "near_pairs": pairs, "groups_before": before, "groups_after": len(sizes),
              "max_unit_images": max_unit, "largest_group_images": max(sizes.values(), default=0),
-             "oversized_groups_forced_to_train": len(forced),
-             "images_forced_to_train_by_source": dict(by_src_forced)}, forced)
+             "oversized_components_not_merged": len(over),
+             "images_in_oversized_components_by_source": dict(by_src_over)}, set())
+
+
+def drop_cross_split_near_duplicates(recs: list[dict], thresh: int) -> dict:
+    """After the split: an image in held-out/val that has a pHash near-duplicate (Hamming <= thresh) in a DIFFERENT
+    split is dropped from the dataset (held-out vs val: the val image goes; vs train: the held-out/val image goes).
+    Dropped, not moved to train, so that capture-session neighbours cannot leak either. Sets r['dropped']."""
+    from dedup import near_pairs
+    dropped: Counter = Counter()
+    for i, j in near_pairs([r["phash"] for r in recs], thresh):
+        si, sj = recs[i]["split"], recs[j]["split"]
+        if si == sj:
+            continue
+        k = i if si != "train" and (sj == "train" or si == "val") else j
+        if not recs[k].get("dropped"):
+            recs[k]["dropped"] = True
+            dropped[f"{recs[k]['src']}:{recs[k]['split']}"] += 1
+    return {"phash_threshold": thresh, "dropped_images": dict(dropped), "dropped_total": sum(dropped.values())}
 
 
 def purge_near_duplicates(recs: list[dict], thresh: int = 6) -> dict:
@@ -293,7 +321,7 @@ def _cells(r: dict) -> Counter:
 
 
 def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
-                  forced_train: set = frozenset()) -> tuple[dict, dict]:
+                  forced_train: set = frozenset(), min_session_images: int = 10) -> tuple[dict, dict]:
     """group -> split, stratified on class x freshness (+ source + image count) by greedy balancing.
     Groups (sessions / series / near-duplicate clusters) are indivisible. Largest weighted groups are placed first,
     each into the split that minimises the squared relative deficit of the cells it contains; then a repair pass
@@ -305,6 +333,24 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
     total = Counter()
     for c in gcells.values():
         total.update(c)
+    def n_units(k):
+        """independent units of a cell: sessions with >= min_session_images images of it, plus the pool of smaller
+        groups (counted as 2 units when it holds >= 2 groups and >= min_session_images images altogether, since
+        independent single photos can be spread over splits; one small stray session does not count)."""
+        sz = [gcells[g][k] for g in gcells if gcells[g][k] > 0]
+        big = [n for n in sz if n >= min_session_images]
+        small = [n for n in sz if n < min_session_images]
+        return len(big) + (2 if len(small) >= 2 and sum(small) >= min_session_images else 0)
+
+    # cells that are NOT measurable on held-out (>= MIN_CELL_IMAGES images but < 2 sessions with >= min_session_images
+    # images of the cell) go ENTIRELY to train: every group holding them is forced into train.
+    _ci = Counter()
+    for r in recs:
+        for k in {f"{b['name']}/{b['freshness']}" for b in r["boxes"]}:
+            _ci[k] += 1
+    not_meas = {k for k, n in _ci.items() if n >= MIN_CELL_IMAGES
+                and n_units(k) < 2}
+    forced_train = set(forced_train) | {g for g in gcells for k in not_meas if gcells[g][k] > 0}
     assigned = {s: Counter() for s in frac}
     out: dict = {}
 
@@ -321,26 +367,151 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
     order = sorted((g for g in gcells if g not in forced_train), key=lambda g: (-sum(n / total[k] for k, n in gcells[g].items()), group_hash(g, seed)))
     for g in order:
         put(g, min(frac, key=lambda s: (delta(s, gcells[g]), group_hash(f"{s}:{g}", seed))))
-    # repair: every cell with >= MIN_CELL_IMAGES images should be present in held-out and val
     cell_imgs = Counter()
     for r in recs:
         for k in {f"{b['name']}/{b['freshness']}" for b in r["boxes"]}:
             cell_imgs[k] += 1
-    moved = 0
+    pinned: set = set()
+    moves: list = []
     single: set = set()
-    for target in ("heldout", "val"):
-        for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
-            if cell_imgs[k] < MIN_CELL_IMAGES or assigned[target][k] > 0:
+    n_total = max(total["__images__"], 1)
+
+    def qualifying(k):
+        return [g for g in gcells if gcells[g][k] > 0] if n_units(k) >= 2 else []
+
+    # REQUIRED cells (>= MIN_CELL_IMAGES images and >= 2 qualifying sessions, i.e. sessions with >= min_session_images
+    # images of the cell) must get ONE WHOLE session in held-out while train keeps at least one session. Among the
+    # candidates, least collateral first (cells losing their last train image, then val coverage), then the LARGEST
+    # session that still leaves train with at least as many images of the cell as were moved (apple/spoiled: 98 of
+    # 26/125/98 goes to held-out, train keeps 125 + 26). Moves and their collateral are reported.
+    impossible = []
+    for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
+        q = qualifying(k)
+        if cell_imgs[k] < MIN_CELL_IMAGES or n_units(k) < 2 or assigned["heldout"][k] >= min_session_images:
+            continue
+        best = None
+        for g in q:
+            if g in forced_train or out[g] == "heldout":
                 continue
-            holders = [g for g in gcells if gcells[g][k] > 0]
-            cands = [g for g in holders if out[g] == "train" and g not in forced_train]
-            if len(holders) < 2:                  # one capture session holds the whole cell: it cannot be
-                single.add(k); continue           # split without leakage, so it stays in train and is reported
-            if not cands:
+            src = out[g]
+            tr_after = assigned["train"][k] - (gcells[g][k] if src == "train" else 0)
+            if tr_after <= 0:
                 continue
-            g = min(cands, key=lambda g: (gcells[g]["__images__"], group_hash(g, seed)))
-            assigned["train"].subtract(gcells[g]); assigned[target].update(gcells[g]); out[g] = target; moved += 1
-    info = {"repair_moves": moved,
+            broken = [c for c in gcells[g] if c in cell_imgs and src == "train" and c != k
+                      and assigned["train"][c] > 0 and assigned["train"][c] - gcells[g][c] <= 0]
+            lostval = [c for c in gcells[g] if c in cell_imgs and src == "val"
+                       and assigned["val"][c] > 0 and assigned["val"][c] - gcells[g][c] <= 0]
+            ok_major = tr_after >= gcells[g][k]
+            cost = (len(broken), len(lostval), 0 if ok_major else 1,
+                    -gcells[g][k] if ok_major else gcells[g][k], group_hash(g, seed))
+            if best is None or cost < best[0]:
+                best = (cost, g, src, broken, lostval)
+        if best is None:
+            impossible.append(k); continue
+        _, g, src, broken, lostval = best
+        assigned[src].subtract(gcells[g]); assigned["heldout"].update(gcells[g]); out[g] = "heldout"; pinned.add(g)
+        moves.append({"cell": k, "group": g, "from": src, "session_cell_images": gcells[g][k],
+                      "group_images": gcells[g]["__images__"],
+                      "cells_in_group": {c: n for c, n in gcells[g].items() if "/" in c and not c.startswith("src:")},
+                      "cells_losing_last_train_image": broken, "cells_losing_val": lostval})
+    # UPGRADE: if the greedy balancer satisfied a required cell only with a small session, but a clearly larger whole
+    # session fits the rule (train keeps at least as many images of the cell as are moved), swap to the larger one
+    # (apple/spoiled: the 98-image session instead of the 26-image one) provided no other cell loses its held-out or
+    # last train presence by the swap.
+    swaps = []
+    for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
+        grp_k = [g for g in gcells if gcells[g][k] > 0]
+        if cell_imgs[k] < MIN_CELL_IMAGES or n_units(k) < 2 or assigned["heldout"][k] == 0 or len(grp_k) > 5:
+            continue                                     # only scarce cells (<= 5 sessions) where the choice matters
+        cur = [g for g in grp_k if out[g] == "heldout"]
+        if any(g in pinned for g in cur):
+            continue
+        cur_n = sum(gcells[g][k] for g in cur)
+        cands = [g for g in grp_k if out[g] != "heldout" and g not in forced_train
+                 and gcells[g][k] >= max(2 * cur_n, min_session_images)
+                 and (assigned["train"][k] - (gcells[g][k] if out[g] == "train" else 0) + cur_n) >= gcells[g][k]]
+        if not cands:
+            continue
+        g = max(cands, key=lambda g: (gcells[g][k], group_hash(g, seed)))
+        src = out[g]
+        snap = ({x: Counter(c) for x, c in assigned.items()}, dict(out))
+        for h in cur:
+            assigned["heldout"].subtract(gcells[h]); assigned["train"].update(gcells[h]); out[h] = "train"
+        assigned[src].subtract(gcells[g]); assigned["heldout"].update(gcells[g]); out[g] = "heldout"
+        bad = [c for c in cell_imgs if (snap[0]["heldout"][c] > 0 and assigned["heldout"][c] <= 0)
+               or (snap[0]["val"][c] > 0 and assigned["val"][c] <= 0)
+               or (snap[0]["train"][c] > 0 and assigned["train"][c] <= 0)]
+        if bad:                                           # the swap would cost another cell its coverage: undo
+            assigned.clear(); assigned.update(snap[0]); out.clear(); out.update(snap[1])
+            continue
+        pinned.add(g)
+        swaps.append({"cell": k, "from": src, "session_cell_images": gcells[g][k], "replaced_heldout_sessions": cur_n})
+    # TRAIN MAJORITY: a scarce cell (<= 5 sessions) whose train share is smaller than its val or held-out share is
+    # rotated: largest session -> train, next -> held-out, the rest -> val. Reverted if another cell would lose
+    # coverage in any split (e.g. potato/spoiled 160/77/6 must not be trained on the 6-image session).
+    for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
+        hs = sorted((g for g in gcells if gcells[g][k] > 0), key=lambda g: -gcells[g][k])
+        if (cell_imgs[k] < MIN_CELL_IMAGES or n_units(k) < 2 or len(hs) > 5 or len(hs) < 3
+                or assigned["train"][k] >= max(assigned["val"][k], assigned["heldout"][k])
+                or any(g in forced_train or g in pinned for g in hs)):
+            continue
+        snap = ({x: Counter(c) for x, c in assigned.items()}, dict(out))
+        for i, g in enumerate(hs):
+            new_sp = "train" if i == 0 else "heldout" if i == 1 else "val"
+            if out[g] != new_sp:
+                assigned[out[g]].subtract(gcells[g]); assigned[new_sp].update(gcells[g]); out[g] = new_sp
+        if any((snap[0][sp][c] > 0 and assigned[sp][c] <= 0) for sp in ("train", "val", "heldout") for c in cell_imgs):
+            assigned.clear(); assigned.update(snap[0]); out.clear(); out.update(snap[1])
+    # val coverage for cells >= MIN_CELL_IMAGES images (best effort, from train groups only)
+    moved = 0
+    for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
+        if cell_imgs[k] < MIN_CELL_IMAGES or assigned["val"][k] > 0:
+            continue
+        holders = [g for g in gcells if gcells[g][k] > 0]
+        cands = [g for g in holders if out[g] == "train" and g not in forced_train and g not in pinned
+                 and assigned["train"][k] - gcells[g][k] > 0]
+        if len(holders) < 2 or not cands:
+            continue
+        g = min(cands, key=lambda g: (gcells[g]["__images__"], group_hash(g, seed)))
+        assigned["train"].subtract(gcells[g]); assigned["val"].update(gcells[g]); out[g] = "val"; moved += 1
+    for k in cell_imgs:
+        if len([g for g in gcells if gcells[g][k] > 0]) < 2:
+            single.add(k)
+    # no cell may exist only outside train (e.g. only in held-out): move the largest held-out/val holder groups back
+    # to train until train has the cell, and (held-out) until train holds at least as many images as held-out.
+    keys = set(cell_imgs)
+    gmoves = 0
+    for _ in range(3):
+        changed = False
+        for k in sorted(keys):
+            for sp in ("heldout", "val"):
+                while assigned[sp][k] > 0 and (assigned["train"][k] == 0
+                                              or (sp == "heldout" and assigned["train"][k] < assigned["heldout"][k]
+                                                  and sum(1 for g in gcells if out[g] == "heldout" and gcells[g][k]) > 1)):
+                    hold = [g for g in gcells if out[g] == sp and gcells[g][k] > 0]
+                    hold = [g for g in hold if g not in pinned] or hold      # keep required-cell sessions if possible
+                    g = max(hold, key=lambda g: (gcells[g][k], group_hash(g, seed)))
+                    assigned[sp].subtract(gcells[g]); assigned["train"].update(gcells[g]); out[g] = "train"
+                    gmoves += 1; changed = True
+        if not changed:
+            break
+    bad = [k for k in keys for sp in ("heldout", "val") if assigned[sp][k] > 0 and assigned["train"][k] == 0]
+    assert not bad, f"cells present outside train only: {bad}"
+    decisions = {}
+    for k in sorted(cell_imgs):
+        q = sorted((gcells[g][k] for g in gcells if gcells[g][k] >= min_session_images), reverse=True)
+        allsess = sorted((gcells[g][k] for g in gcells if gcells[g][k] > 0), reverse=True)
+        req = cell_imgs[k] >= MIN_CELL_IMAGES and n_units(k) >= 2
+        reason = ("" if req else "fewer than %d images" % MIN_CELL_IMAGES if cell_imgs[k] < MIN_CELL_IMAGES else
+                  "fewer than 2 independent units (sessions with >= %d images of the cell, or a pool of >= 2 smaller groups); whole cell goes to train" % min_session_images)
+        decisions[k] = {"images": cell_imgs[k], "sessions": len(allsess), "session_sizes": allsess,
+                        "decision": "required_in_heldout" if req else "not_measurable_on_heldout", "reason": reason,
+                        "boxes_train_val_heldout": [assigned["train"][k], assigned["val"][k], assigned["heldout"][k]]}
+    info = {"cell_decisions": decisions, "required_cell_moves": moves, "heldout_session_upgrades": swaps, "required_cells_impossible": impossible,
+            "required_cells_missing_from_heldout": sorted(k for k, d in decisions.items()
+                if d["decision"] == "required_in_heldout" and assigned["heldout"][k] == 0),
+            "min_session_images": min_session_images,
+            "repair_moves": moved, "train_restore_moves": gmoves,
             "cells_not_in_heldout": sorted(k for k in cell_imgs if cell_imgs[k] >= MIN_CELL_IMAGES and assigned["heldout"][k] == 0),
             "cells_not_in_val": sorted(k for k in cell_imgs if cell_imgs[k] >= MIN_CELL_IMAGES and assigned["val"][k] == 0),
             "single_group_cells_kept_in_train_not_measurable": sorted(single),
@@ -490,6 +661,9 @@ def main(argv=None):
                          "apart, identical <=6 decisions on 44,850 pairs); -1 disables")
     ap.add_argument("--max-unit-images", type=int, default=600,
                     help="a merged near-duplicate/session group larger than this is forced into train (not stratified)")
+    ap.add_argument("--min-session-images", type=int, default=10,
+                    help="a session (merged group) with fewer than this many images of a cell does not count toward "
+                         "the '>= 2 sessions' rule that makes a cell required in held-out")
     ap.add_argument("--max-per-class", type=int, default=None,
                     help="cap images per class x freshness for 'folders' sources (overrides sources.json max_per_class)")
     ap.add_argument("--no-synth-lighting", action="store_true", help="skip synthetic low/warm heldout copies")
@@ -524,10 +698,12 @@ def main(argv=None):
     if a.lighting_overrides:
         overrides = {r["image"]: r["lighting"] for r in csv.DictReader(open(a.lighting_overrides))}
 
-    split_of, strat = assign_splits(recs, a.heldout, a.val, a.seed, forced)
+    split_of, strat = assign_splits(recs, a.heldout, a.val, a.seed, forced, a.min_session_images)
     for r in recs:
         r["split"] = split_of[r["group"]]
     grouping["near_duplicates"] = near
+    grouping["near_duplicate_drops"] = drop_cross_split_near_duplicates(recs, a.phash_threshold) if near else None
+    recs = [r for r in recs if not r.get("dropped")]
     # safety net: with merged groups this must move nothing
     grouping["near_duplicate_purge_safety_net"] = purge_near_duplicates(recs, a.phash_threshold) if near else None
     strat["cells_after_purge"] = cell_summary(recs)
