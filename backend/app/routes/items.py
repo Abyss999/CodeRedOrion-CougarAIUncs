@@ -403,7 +403,7 @@ def from_receipt():
     except ml.MLUnavailable as e:
         raise upstream_unavailable(f"Receipt OCR unavailable: {e}")
     lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()
-             and not candidates.is_receipt_total(l.get("name"))]
+             and not candidates.is_receipt_noise(l.get("name"), l.get("price"))]
     enriched = None
     if lines and gemini.is_configured():
         try:

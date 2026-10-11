@@ -162,7 +162,10 @@ post it straight back.
   `%`/currency/punctuation, masked card digits (`****1234`, `x1234`, `XXXX1234`) or the words `due, amount,
   amt, paid, tendered, tend, back, purchase, sale, savings, saved, auth, approved, chip, contactless` (or a
   card network). So `TOTAL 4.21`, `CHANGE DUE`, `VISA CREDIT ****1234` are dropped; `Total Cereal`,
-  `Cash & Carry Crackers`, `Cashews` are kept.
+  `Cash & Carry Crackers`, `Cashews` are kept. Coupon/discount lines follow the same rule with the keywords
+  `coupon`, `discount`, `savings`, `instant savings`, `mfr` (`MFR COUPON`, `COUPON $1.00 OFF`; `off` is an
+  allowed tail word), and any line with a **negative price** is dropped too (`candidates.is_receipt_noise`),
+  since `POST /items` rejects negative prices.
 - **Gemini category guide.** Every Gemini prompt that assigns a category (text parse, vision, receipt
   lines) carries the same definitions as `ml/yolo/taxonomy.py`: `produce_leafy` = short-life produce
   (greens, herbs, berries, tomatoes, cucumbers, peppers, bananas, avocados, papaya, pineapple...),

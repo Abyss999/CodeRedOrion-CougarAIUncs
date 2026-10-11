@@ -109,12 +109,14 @@ def category_from_name(name: str) -> str:
 # Receipt total/payment lines (TOTAL, SUBTOTAL, SALES TAX, CHANGE DUE, VISA CREDIT ****1234...): optional
 # prefixes + a keyword (or a card network) at the start, followed ONLY by amounts, punctuation, masked card
 # digits or words from _RECEIPT_TAIL. "Total Cereal", "Cashews" or "Cash & Carry Crackers" are food.
+# Coupon/discount lines (COUPON, MFR COUPON, INSTANT SAVINGS 1.00 OFF) follow the same rule.
 _PAYMENT = "visa|debit|credit|mastercard|mc|amex|discover"
 _RECEIPT_HEAD = re.compile(
-    rf"^\s*(?:(?:sales|grand|{_PAYMENT})\s+)*(?:sub\s*-?\s*total|total|tax|change|cash|card|balance|tender|{_PAYMENT})\b",
+    rf"^\s*(?:(?:sales|grand|instant|mfr|{_PAYMENT})\s+)*"
+    rf"(?:sub\s*-?\s*total|total|tax|change|cash|card|balance|tender|coupon|discount|savings|mfr|{_PAYMENT})\b",
     re.IGNORECASE)
 _RECEIPT_TAIL = {"due", "amount", "amt", "paid", "tendered", "tend", "back", "purchase", "sale", "savings", "saved",
-                 "auth", "approved", "chip", "contactless", *_PAYMENT.split("|")}
+                 "auth", "approved", "chip", "contactless", "off", *_PAYMENT.split("|")}
 
 
 def _receipt_tail_ok(tok: str) -> bool:
@@ -128,6 +130,11 @@ def is_receipt_total(name) -> bool:
     return bool(m) and all(_receipt_tail_ok(t) for t in name[m.end():].split())
 
 
+def is_receipt_noise(name, price=None) -> bool:
+    """Total/payment/coupon line, or a negative price (discount) that POST /items would reject."""
+    return is_receipt_total(name) or (_money(price) or 0) < 0
+
+
 def from_receipt_lines(lines: list[dict], enriched: list[dict] | None = None) -> list[dict]:
     """OCR receipt lines {name, quantity, price} -> full candidates (category, food_group, storage,
     predicted_expiry, ...). `enriched` (same length, from gemini.categorize_receipt_lines) supplies
@@ -136,7 +143,7 @@ def from_receipt_lines(lines: list[dict], enriched: list[dict] | None = None) ->
     for i, line in enumerate(lines):
         line = line if isinstance(line, dict) else {}
         name = str(line.get("name") or "").strip()
-        if not name or is_receipt_total(name):
+        if not name or is_receipt_noise(name, line.get("price")):
             continue
         extra = enriched[i] if enriched and i < len(enriched) and isinstance(enriched[i], dict) else {}
         category = extra.get("category") if extra.get("category") in CATEGORIES else category_from_name(name)

@@ -284,9 +284,9 @@ def gemini_structure(text: str, api_key: str | None = None, model: str | None = 
     if not key:
         return None
     import urllib.request
-    # GEMINI_MODEL is shared with the backend (.env; decided in docs/DECISIONS.md). The fallback is
-    # Google's moving alias, so an unset variable never points at a retired id.
-    model = model or os.environ.get("GEMINI_MODEL") or "gemini-flash-latest"
+    # GEMINI_MODEL is shared with the backend (.env); the fallback is the model
+    # chosen in docs/DECISIONS.md.
+    model = model or os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
     prompt = ("Extract grocery line items from this receipt text. Keep item names exactly as printed "
               "(abbreviations unchanged). Exclude coupons/discounts/tax/subtotal. Reply JSON only: "
               '{"lines":[{"name":str,"quantity":number|null,"price":number|null}],"total":number|null}\n\n' + text)
@@ -316,13 +316,6 @@ def _to_num(v):
         m = re.search(r"-?\d+(?:[.,]\d+)?", s)
         if m:
             return float(m.group(0).replace(",", "."))   # 1,29 -> comma decimal
-    return None
-    if isinstance(v, (int, float)):
-        return float(v)
-    if isinstance(v, str):
-        m = re.search(r"-?\d+(?:[.,]\d+)?", v.replace("$", ""))
-        if m:
-            return float(m.group(0).replace(",", "."))
     return None
 
 
