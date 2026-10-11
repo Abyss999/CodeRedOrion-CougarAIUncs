@@ -44,6 +44,8 @@ def test_valid_values_pass_silently(value, caplog):
     ("  semi_fresh  ", "semi_fresh"), ("Semi-fresh", "semi_fresh"), ("use soon", "semi_fresh"),
     ("Use-Soon", "semi_fresh"),
     ("Rotten", "spoiled"), ("stale", "spoiled"), ("SPOILT", "spoiled"), ("bad", "spoiled"),
+    ("moldy", "spoiled"), ("Mouldy", "spoiled"), ("overripe", "spoiled"), ("decayed", "spoiled"),
+    ("rotting", "spoiled"), ("damaged", "spoiled"), ("DEFECTIVE", "spoiled"), ("half-fresh", "semi_fresh"),
     ("FRESH", "fresh"), (" Spoiled ", "spoiled"),
 ])
 def test_variants_map_without_warning(value, expected, caplog):
@@ -52,7 +54,7 @@ def test_variants_map_without_warning(value, expected, caplog):
     assert not fallbacks(caplog)
 
 
-@pytest.mark.parametrize("value", ["??", "", "   ", "mouldy", "overripe", None, 3, 1.5, True, ["spoiled"], {"a": 1}])
+@pytest.mark.parametrize("value", ["??", "", "   ", "ripe", "Ripe", "unripe", "Over-Ripe", "good", None, 3, 1.5, True, ["spoiled"], {"a": 1}])
 def test_unknown_or_missing_becomes_fresh_with_one_warning(value, caplog):
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
         assert candidates.normalize_freshness(value, "gemini") == "fresh"
@@ -176,3 +178,36 @@ def test_freshness_not_stored_on_item(client, user):
 def test_unauthenticated_photo_401(client):
     r = client.post("/items/from-photo", data=img(), content_type="multipart/form-data")
     assert r.status_code == 401
+
+
+def test_ripe_is_fresh_with_warning_not_semi(caplog):
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        assert candidates.normalize_freshness("ripe", "gemini") == "fresh"
+    assert len(fallbacks(caplog)) == 1
+
+
+def test_photo_gemini_spoiled_direction_variants(client, user, monkeypatch, caplog):
+    _stub_generate(monkeypatch, [raw("moldy"), raw("overripe", "Pear"), raw("decayed", "Egg"), raw("ripe", "Fig")])
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        b = photo(client, user)
+    assert [c["freshness"] for c in b["candidates"]] == ["spoiled", "spoiled", "spoiled", "fresh"]
+    assert len(fallbacks(caplog)) == 1  # only "ripe"
+
+
+def test_backend_word_lists_equal_taxonomy():
+    """The backend variant table must mirror ml/yolo/taxonomy.py SEMI_WORDS / SPOILED_WORDS."""
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[2] / "ml" / "yolo" / "taxonomy.py"
+    if not path.exists():
+        pytest.skip("ml/yolo/taxonomy.py not present")
+    spec = importlib.util.spec_from_file_location("_tax_for_test", path)
+    T = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(T)
+    norm = lambda ws: {" ".join(w.replace("_", " ").split()) for w in ws}  # noqa: E731
+    semi = {k for k, v in candidates._FRESHNESS_ALIASES.items() if v == "semi_fresh"}
+    spoiled = {k for k, v in candidates._FRESHNESS_ALIASES.items() if v == "spoiled"}
+    assert semi == norm(T.SEMI_WORDS) | {"use soon"}
+    assert spoiled | {"spoiled"} == norm(T.SPOILED_WORDS) | {"spoiled"} and spoiled == norm(T.SPOILED_WORDS) - {"spoiled"}
+    assert not (norm(T.FRESH_WORDS) & set(candidates._FRESHNESS_ALIASES))  # fresh words never aliased to non-fresh
+    assert T.FRESHNESS == candidates.FRESHNESS

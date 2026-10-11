@@ -167,3 +167,43 @@ New tests: `test_semi_fresh_eval.py` (folding, fresh/semi swap costs nothing, sp
 | ML-29 | info | Stale two-class wording left in files outside the PR's edits: `docs/ARCHITECTURE.md:24`, `docs/DECISIONS.md:16`, `docs/IDEA.md:33`, `ml/yolo/train.py:12` and `ml/yolo/prepare_dataset.py:3` comments, and `ml/yolo/tests/test_prepare.py:61` asserts freshness `in ("fresh","spoiled")` (passes only because its fixture has no semi folder). |
 
 Not tested: real 3-class weights, and any real `semi_fresh` metric. All `semi_fresh` data is AgriFreshNET (ML-16).
+
+### 2026-10-10 - re-verification after fixes (commit 5e15b00, rebased on main with pipeline/ from #26)
+
+**Verdict: FAIL (2 findings to fix before merge): ML-30 and ML-31.** The ML-27 and ML-28 fixes are verified.
+
+| Suite | Result |
+|---|---|
+| `ml/eval/tests` (.venv-ml, from root) | **131 passed**, 0 xfail (+12 from flipping the 3 ML-27 xfails and adding every taxonomy spoiled/semi word) |
+| `ml/ocr/tests` | 89 passed |
+| `ml/yolo/tests` | 24 passed |
+| `ml/serve/tests` | 13 passed, **1 failed** (ML-31) |
+| `pipeline/tests` (pipe-ci venv, CI command) | 144 passed, **2 failed** (ML-30), 2 skipped (both `needs_2class`, correct: the taxonomy now has semi_fresh) |
+
+- **ML-27 verified fixed.** `SPOILED`, `Rotten`, `moldy`, ` spoiled ` -> spoiled; `semi-fresh`, `Semi Fresh`, `SEMI_FRESH`, `use soon` -> semi_fresh; every `taxonomy.SPOILED_WORDS` entry (upper-cased) -> spoiled and every `SEMI_WORDS` entry -> semi_fresh; `ripe` and `Over-Ripe` -> fresh with a warning.
+- **ML-28 verified fixed** (backend dropped the `ripe` alias, see BE-6).
+- **Pipeline tests that were skipped before and now run:**
+  - `test_agrifreshnet_folder_names[Semi fresh Pineapple (15-25)-pineapple-semi-15-25]` PASS
+  - `test_agrifreshnet_folder_names[Semi_Fresh eggplant(4-8)-eggplant-semi-4-8]` PASS
+  - `test_agrifreshnet_folder_names[Semi Fresh Bittermelon ( 3-5)-bitter_melon-semi-3-5]` PASS
+  - `test_semi_fresh_mapped_to_fresh_is_flagged_not_silent` PASS (asserts `semi_mapped_to_fresh is False` on this taxonomy)
+  - `test_prepare_semi_fresh_class` **FAIL** (ML-30)
+  - `test_prepare_outputs` **FAIL** (ML-30; its sidecar-code assertion became `{"0","1","2"}` now that HAS_SEMI is true)
+  - The two `qa_pipeline.py::test_two_class_*` tests are skipped as intended.
+
+### New bugs
+| ID | Severity | Summary |
+|---|---|---|
+| ML-30 | **medium** | `ml/yolo/prepare_dataset.py` line ~145 still writes the freshness sidecar as `1 if spoiled else 0`, so every semi_fresh box gets code 0 (same as fresh). `taxonomy.FRESHNESS_CODE` (semi_fresh = 2) is defined but used nowhere, and `dataset_report.json` has no `boxes_by_freshness` (Jose's 7843e06 had both; the rebase lost them or they were never ported). Staging and the `cls/<split>/semi_fresh` crop folders are correct (162 semi images staged, `splits` counts them), so a classifier trained from crops is fine, but the sidecar can no longer tell fresh from semi_fresh. Repro: `pipeline/tests/test_prepare_augment.py::test_prepare_outputs` and `::test_prepare_semi_fresh_class`. Fix: write `T.FRESHNESS_CODE[b['freshness']]`, update the comment, add `boxes_by_freshness`. |
+| ML-31 | low | `ml/serve/tests/test_app.py::test_detect_freshness_normalisation` expects `"rotten"` -> `fresh`, which the ML-27 fix deliberately changed (now `spoiled`). Stale builder test; change the expectation to spoiled. |
+
+### ML-29 split (stale two-class wording)
+- **Owned by A1** (ml/yolo, ml/serve, backend, API.md, ML.md): `ml/yolo/train.py:12` (comment "fresh/spoiled crop classifier"); `ml/yolo/prepare_dataset.py:3` (docstring) and `:145` (comment "0/1 (1 = spoiled)", the real bug in ML-30); `ml/yolo/tests/test_prepare.py:61` (asserts `in ("fresh", "spoiled")`; passes only because its fixture has no semi folder). docs/ML.md:50 and :76 describe the data sources and read fine.
+- **Orchestrator-owned docs:** `docs/ARCHITECTURE.md:24` (fresh/spoiled crop classifier), `docs/DECISIONS.md:16` ("labels each crop fresh or spoiled"), `docs/IDEA.md:33` (YOLO, fresh vs spoiled; product wording, fine to leave). `docs/QA.md:26` and `:40` say "fresh, spoiled" per class; correct under the binary-gate note once "fresh" is read as not-spoiled, but worth the one-line wording fix.
+
+### 2026-10-10 - final verdict (PR A1) after ML-30 / ML-31 / ML-29 fixes
+
+**PASS.** Independent re-run: `ml/serve` 14, `ml/ocr` 89, `ml/yolo` 24, `ml/eval` 131, `pipeline/tests` (CI command) 146 passed / 2 skipped (the two `needs_2class` tests, correct now that the taxonomy has semi_fresh). All six previously skipped semi_fresh / pineapple / bitter_melon pipeline tests pass, including `test_prepare_outputs` and `test_prepare_semi_fresh_class`.
+- ML-30 verified fixed: on a synthetic AgriFreshNET drop with semi sources the sidecar now has codes {0, 1, 2} (62 / 54 / 182 lines, the last including augmented copies) and `boxes_by_freshness` = fresh 54, semi_fresh 162, spoiled 54.
+- ML-31, ML-27, ML-28 and the A1-owned part of ML-29 are fixed. Still open: orchestrator-owned wording in `docs/ARCHITECTURE.md:24`, `docs/DECISIONS.md:16` and `docs/QA.md:26,40` (info only).
+- Backend: no source or test file under `backend/` changed since the 394-passed / 1 skipped / 96% run, so it was not re-run.

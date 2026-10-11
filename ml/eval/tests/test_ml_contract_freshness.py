@@ -142,9 +142,19 @@ def test_serve_passes_three_values():
     assert _detect(["fresh", "semi_fresh", "spoiled"]) == ["fresh", "semi_fresh", "spoiled"]
 
 
-@pytest.mark.parametrize("junk,expected", [("??", "fresh"), ("", "fresh"), (None, "fresh"), (3, "fresh"),
-                                           pytest.param("semi-fresh", "semi_fresh", marks=pytest.mark.xfail(reason="ML-27: serve is exact-match, no case/variant folding", strict=True)),
-                                           pytest.param("Semi Fresh", "semi_fresh", marks=pytest.mark.xfail(reason="ML-27", strict=True)),
-                                           pytest.param("SPOILED", "spoiled", marks=pytest.mark.xfail(reason="ML-27: wrong-direction fallback (spoiled shown as fresh)", strict=True))])
+@pytest.mark.parametrize("junk,expected", [
+    ("??", "fresh"), ("", "fresh"), (None, "fresh"), (3, "fresh"), ("ripe", "fresh"),
+    ("semi-fresh", "semi_fresh"), ("Semi Fresh", "semi_fresh"), ("SEMI_FRESH", "semi_fresh"), ("use soon", "semi_fresh"),
+    ("SPOILED", "spoiled"), ("Rotten", "spoiled"), ("moldy", "spoiled"), ("Over-Ripe", "fresh"), ("overripe", "spoiled"),
+    (" spoiled ", "spoiled"),
+])
 def test_serve_normalises(junk, expected):
+    # ML-27 fixed: case/space/hyphen-insensitive; "Over-Ripe" is not a taxonomy word (overripe is) -> fresh + warning
     assert _detect([junk]) == [expected]
+
+
+def test_serve_spoiled_words_never_fall_to_fresh():
+    for w in T.SPOILED_WORDS:
+        assert _detect([w.upper()]) == ["spoiled"], w
+    for w in T.SEMI_WORDS:
+        assert _detect([w]) == ["semi_fresh"], w

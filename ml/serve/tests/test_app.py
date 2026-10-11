@@ -105,12 +105,13 @@ def test_detect_freshness_normalisation(caplog):
     dets = [{"name": "papaya", "confidence": 0.9, "freshness": "semi_fresh", "bbox": None},
             {"name": "apple", "confidence": 0.8, "freshness": "spoiled", "bbox": None},
             {"name": "milk", "confidence": 0.7, "freshness": "rotten", "bbox": None},
+            {"name": "kale", "confidence": 0.65, "freshness": "glowing", "bbox": None},
             {"name": "egg", "confidence": 0.6, "bbox": None}]
     with caplog.at_level("WARNING", logger="fwr.serve"):
         r = post(create_app(FakeDetector(dets), FakeOCR()).test_client(), "/detect", png(), mode="fridge")
     got = {c["name"]: c["freshness"] for c in r.json["candidates"]}
-    assert got == {"papaya": "semi_fresh", "apple": "spoiled", "milk": "fresh", "egg": "fresh"}
-    assert "rotten" in caplog.text
+    assert got == {"papaya": "semi_fresh", "apple": "spoiled", "milk": "spoiled", "kale": "fresh", "egg": "fresh"}
+    assert "glowing" in caplog.text  # unknown -> fresh + warning; "rotten" is a spoiled variant (ML-27)
 
 
 def test_detect_new_classes_food_group():
