@@ -10,6 +10,8 @@ struct ExpiryBadgeModel: Equatable {
     enum Kind: Equatable {
         /// Photo check found it spoiled.
         case looksOff
+        /// Detector confidence under 0.5 (Add photo review only).
+        case notSure
         case expired
         case today
         case tomorrow
@@ -25,6 +27,7 @@ struct ExpiryBadgeModel: Equatable {
     var text: String {
         switch kind {
         case .looksOff: "Looks off"
+        case .notSure: "Not sure"
         case .expired: "Expired"
         case .today: "Today"
         case .tomorrow: "Tomorrow"
@@ -38,7 +41,7 @@ struct ExpiryBadgeModel: Equatable {
         switch kind {
         case .looksOff, .expired, .today, .tomorrow: .urgent
         case .useSoon: .useSoon
-        case .exactDays, .estimated: .later
+        case .exactDays, .estimated, .notSure: .later
         }
     }
 
@@ -86,6 +89,7 @@ struct ExpiryBadgeModel: Equatable {
     var accessibilityText: String {
         switch kind {
         case .looksOff: "Looks off, may be spoiled"
+        case .notSure: "Not sure about this one"
         case .useSoon: "Use soon"
         case .expired: "Expired"
         case .today: "Expires today"
@@ -99,6 +103,7 @@ struct ExpiryBadgeModel: Equatable {
     var phrase: String {
         switch kind {
         case .looksOff: "looks off"
+        case .notSure: "not sure"
         case .useSoon: "use soon"
         case .expired: "expired"
         case .today: "expires today"

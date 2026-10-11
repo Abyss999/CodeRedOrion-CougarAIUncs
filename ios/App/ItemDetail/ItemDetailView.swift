@@ -101,7 +101,7 @@ struct ItemDetailView: View {
                     onRemove(item, choice)
                 } else if let api = model.api {
                     Task { _ = try? await api.removeItem(id: item.id, outcome: choice.outcome, wasteReason: choice.wasteReason,
-                                                          recipientId: choice.recipientId) }
+                                                          recipient: choice.recipient) }
                 }
             } close: {
                 removing = nil
