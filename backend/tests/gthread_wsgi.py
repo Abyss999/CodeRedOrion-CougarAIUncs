@@ -21,7 +21,8 @@ from app.services import gemini  # noqa: E402
 SLOW_S = float(os.environ.get("FWR_GTHREAD_SLOW_S", "3"))
 
 
-def _slow_generate(contents, schema_hint, response_schema=None, purpose="generate", list_key=None):
+def _slow_generate(contents, schema_hint, response_schema=None, purpose="generate", list_key=None,
+                   timeout_s=None, retry=True):
     """Stands in for the Gemini round trip: blocks this request's thread, never touches the network."""
     time.sleep(SLOW_S)
     return [{"name": "Apples", "category": "produce_hardy", "quantity": 2, "unit": "piece"}]
