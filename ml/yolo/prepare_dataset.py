@@ -84,7 +84,7 @@ def group_key(src: str, path: Path, series: bool = False) -> str:
     the class prefix of staged names is kept). Capture sessions (timestamps) and pHash merging apply on top."""
     if series:
         return f"{src}/{series_stem(path)}"
-    return f"{src}/{_AUG_PREFIX.sub('', path.stem.split('.rf.')[0])}"
+    return f"{src}/{parent_stem(path.stem)}"
 
 
 # Capture-time patterns found in filenames. SEARCHED (not anchored) so staged names such as
@@ -92,8 +92,20 @@ def group_key(src: str, path: Path, series: bool = False) -> str:
 _RX_COMPACT = re.compile(r"(?<!\d)((?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))[_-]?([01]\d|2[0-3])([0-5]\d)([0-5]\d)(?:\d{3})?(?!\d)")   # optional ms: IMG_20251102_075610660
 _RX_EPOCH_MS = re.compile(r"(?<!\d)(1[4-9]\d{11}|20\d{11})(?!\d)")      # 2014..2033 in ms
 # 'Screen Shot 2018-06-08 at 4.59.36 PM', 'WhatsApp Image 2020-11-07 at 11.35.36 PM' (also sanitised with '_')
-_RX_SCREENSHOT = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})[ _]at[ _](\d{1,2})[._:](\d{2})[._:](\d{2})(?:[ _]*([AP]M))?", re.I)
+# Roboflow also writes them hyphenated: 'Screen-Shot-2018-06-08-at-5-06-47-PM', 'WhatsApp-Image-2020-11-07-at-11-35-36-PM' (ML-50)
+_RX_SCREENSHOT = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})[ _-]at[ _-](\d{1,2})[._:-](\d{2})[._:-](\d{2})(?:[ _-]*([AP]M))?", re.I)
 _AUG_PREFIX = re.compile(r"^(?:rotated_by_-?\d+|saltandpepper|translation|(?:vertical|horizontal)_flip|gaussian_noise|blur)_")
+# Tile / crop copies of one source photo: 'X-jpg_0_749_jpg', 'X.jpg_0_1039' (Augmentor / Roboflow), then a trailing '_jpg'
+_CROP_SUFFIX = re.compile(r"[-.](?:png|jpe?g)_\d+_\d+(?:_(?:png|jpe?g))?$", re.I)
+_EXT_SUFFIX = re.compile(r"_(?:png|jpe?g)$", re.I)
+
+
+def parent_stem(stem: str) -> str:
+    """The source photo a file was derived from: stem before '.rf.', minus augmentation prefixes, crop/tile suffixes and
+    a trailing '_jpg'. Every rotation, flip and crop of one photo shares it, so they stay in one split (ML-50)."""
+    s = _AUG_PREFIX.sub("", stem.split(".rf.")[0])
+    s = _CROP_SUFFIX.sub("", s)
+    return _EXT_SUFFIX.sub("", s) or s
 
 
 def parse_capture_time(path: Path) -> tuple[str, float] | None:
@@ -229,9 +241,31 @@ def purge_near_duplicates(recs: list[dict], thresh: int = 6) -> dict:
             "moved_total": sum(moved.values())}
 
 
+def yolo_line_to_box(p: list[str]) -> tuple[int, float, float, float, float] | None:
+    """One YOLO label line -> (class, xc, yc, w, h). Detection lines are `cls xc yc w h`; instance-segmentation
+    exports (e.g. Roboflow yolov8 for a segmentation project) are `cls x1 y1 x2 y2 ... xn yn`, a polygon of at least
+    3 points, which becomes its enclosing box."""
+    if len(p) < 5:
+        return None
+    cls = int(p[0])
+    v = [float(x) for x in p[1:]]
+    if len(v) == 4:
+        return (cls, *v)
+    if len(v) >= 6 and len(v) % 2 == 0:
+        xs, ys = v[0::2], v[1::2]
+        x1, x2, y1, y2 = max(0.0, min(xs)), min(1.0, max(xs)), max(0.0, min(ys)), min(1.0, max(ys))
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return (cls, (x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1)
+    return None
+
+
 def iter_yolo(src: dict):
     root = Path(src["root"])
-    names = load_names(next(root.rglob("data.yaml")))
+    yaml_path = next(root.rglob("data.yaml"), None)
+    if yaml_path is None:
+        raise SystemExit(f"source {src.get('name')!r}: no data.yaml under {root} (download it, fix 'root', or mark it pending)")
+    names = load_names(yaml_path)
     for sd in SPLIT_DIRS:
         idir, ldir = root / sd / "images", root / sd / "labels"
         if not idir.is_dir():
@@ -243,9 +277,9 @@ def iter_yolo(src: dict):
             boxes = []
             if lp.exists():
                 for ln in lp.read_text().splitlines():
-                    p = ln.split()
-                    if len(p) >= 5 and int(p[0]) < len(names):
-                        boxes.append((names[int(p[0])], *map(float, p[1:5])))
+                    box = yolo_line_to_box(ln.split())
+                    if box and box[0] < len(names):
+                        boxes.append((names[box[0]], *box[1:]))
             yield ip, boxes
 
 
@@ -521,9 +555,17 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
                                              "after_train_val_heldout": (assigned["train"][k], assigned["val"][k], assigned["heldout"][k]),
                                              "violations_left_in_coupled_cells": best[0][0]})
                     continue
-            for g in [g for g in gcells if gcells[g][k] > 0 and g not in pinned]:       # no cut works: whole cell to train
-                if out[g] != "train":
-                    assigned[out[g]].subtract(gcells[g]); assigned["train"].update(gcells[g]); out[g] = "train"
+            for g in [g for g in gcells if gcells[g][k] > 0]:       # no cut works: whole cell to train
+                if out[g] == "train" or g in forced_train:
+                    continue
+                if g in pinned:  # ML-53: a group pinned earlier (often for k itself) must not stay behind in held-out,
+                    # unless another still-required cell would lose its last held-out unit by the move
+                    needed = [c for c in gcells[g] if c in cell_imgs and c != k and _required(c)
+                              and out[g] == "heldout" and assigned["heldout"][c] - gcells[g][c] <= 0]
+                    if needed:
+                        continue
+                    pinned.discard(g)
+                assigned[out[g]].subtract(gcells[g]); assigned["train"].update(gcells[g]); out[g] = "train"
             not_meas_late.add(k)
             majority_actions.append({"cell": k, "action": "all_to_train_not_measurable", "before_train_val_heldout": before})
 
@@ -542,7 +584,8 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
         holders = [g for g in gcells if gcells[g][k] > 0]
         tot_k = assigned["train"][k] + assigned["val"][k] + assigned["heldout"][k]
         cands = [g for g in holders if out[g] == "train" and g not in forced_train and g not in pinned
-                 and (assigned["train"][k] - gcells[g][k]) * 2 >= tot_k and k not in not_meas_late]
+                 and (assigned["train"][k] - gcells[g][k]) * 2 >= tot_k and k not in not_meas_late
+                 and not any(c in not_meas_late for c in gcells[g] if c in cell_imgs)]   # never drag a demoted cell out of train
         if len(holders) < 2 or not cands:
             continue
         g = min(cands, key=lambda g: (gcells[g]["__images__"], group_hash(g, seed)))

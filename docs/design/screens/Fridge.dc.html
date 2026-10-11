@@ -88,7 +88,6 @@ fruit: { stroke: '#A8366E', tileStyle: tile('#F8E1EC') },
 dairy: { stroke: '#3A5BA0', tileStyle: tile('#E2E9F7') }
 };
 const meta = 'font-size: 13px; color: #45584A';
-const warn = 'font-size: 13px; color: #8A3B0E; font-weight: 500';
 const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap';
 const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #EEF5D6; color: #1F4D2B; white-space: nowrap';
 const row = 'flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #FFFFFF';
@@ -97,20 +96,20 @@ const it = (name, m, when, opts) => Object.assign({ name, meta: m, when, metaSty
 return {
 groups: [
 { name: 'Protein', icon: ICON.protein, stroke: COLOR.protein.stroke, tileStyle: COLOR.protein.tileStyle, count: 2, items: [
-it('Chicken thighs', '1.4 lb · added Oct 7', 'Today', { badgeStyle: urgent }),
-it('Eggs', '8 of 12 left', '12 days')
+it('Chicken thighs', '1.4 lb', 'Today', { badgeStyle: urgent }),
+it('Eggs', '8 left', '1–2 weeks')
 ]},
 { name: 'Veggies', icon: ICON.veggies, stroke: COLOR.veggies.stroke, tileStyle: COLOR.veggies.tileStyle, count: 2, items: [
-it('Baby spinach', '5 oz bag · added Oct 4', '1 day', { badgeStyle: urgent, rowStyle: swipedRow, swiped: true }),
-it('Carrots', '2 lb bag', '18 days')
+it('Baby spinach', '5 oz bag', 'Tomorrow', { badgeStyle: urgent, rowStyle: swipedRow, swiped: true }),
+it('Carrots', '2 lb bag', '2–3 weeks')
 ]},
 { name: 'Fruit', icon: ICON.fruit, stroke: COLOR.fruit.stroke, tileStyle: COLOR.fruit.tileStyle, count: 2, items: [
-it('Strawberries', 'Photo check: looks spoiled', 'Check', { metaStyle: warn, badgeStyle: urgent }),
-it('Bananas', '5 · photo check: ripe', 'Use soon', { badgeStyle: 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FFF1B8; color: #6B5000; white-space: nowrap' })
+it('Strawberries', '1 lb box', 'Looks off', { badgeStyle: urgent }),
+it('Bananas', '5 left', 'Use soon', { badgeStyle: 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FFF1B8; color: #6B5000; white-space: nowrap' })
 ]},
 { name: 'Dairy', icon: ICON.dairy, stroke: COLOR.dairy.stroke, tileStyle: COLOR.dairy.tileStyle, count: 2, items: [
-it('Greek yogurt', '32 oz tub', '3 days'),
-it('Oat milk', '64 oz · opened', '6 days')
+it('Greek yogurt', '32 oz tub', '2–3 days'),
+it('Oat milk', '64 oz', '6–7 days')
 ]}
 ]
 };

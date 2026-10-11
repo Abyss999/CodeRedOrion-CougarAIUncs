@@ -33,11 +33,14 @@ a{color:#1F4D2B}a:hover{color:#13261A}
     <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
       <legend style="font-size: 14px; font-weight: 600; color: #2B3D30; margin-bottom: 8px">Who can see it</legend>
       <sc-for list="{{audiences}}" as="a" hint-placeholder-count="3">
-        <label style="{{a.rowStyle}}">
-          <input type="radio" name="aud" checked="{{a.checked}}" style="width: 22px; height: 22px; accent-color: #1F4D2B; margin: 0">
-          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">{{a.name}}</span><span style="font-size: 13px; color: #45584A">{{a.meta}}</span></span>
-        </label>
+        <button type="button" aria-pressed="{{a.pressed}}" style="{{a.rowStyle}}">
+          <span style="{{a.circleStyle}}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F4F8E8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="{{a.checkStyle}}"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600; color: #13261A">{{a.name}}</span><span style="font-size: 13px; color: #45584A">{{a.meta}}</span></span>
+        </button>
       </sc-for>
+      <p style="margin: 0; font-size: 13px; color: #45584A">Pick at least one</p>
     </fieldset>
   </section>
 </div>
@@ -45,12 +48,15 @@ a{color:#1F4D2B}a:hover{color:#13261A}
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
 renderVals() {
-const row = 'display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-radius: 14px; background: #FFFFFF; ';
+const row = 'width: 100%; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-radius: 14px; background: #FFFFFF; text-align: left; font: inherit; color: #13261A; ';
+const circle = 'width: 24px; height: 24px; box-sizing: border-box; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; ';
+const on = { pressed: 'true', rowStyle: row + 'box-shadow: inset 0 0 0 2px #1F4D2B', circleStyle: circle + 'background: #1F4D2B', checkStyle: 'display: block' };
+const off = { pressed: 'false', rowStyle: row + 'box-shadow: inset 0 0 0 1px #D3E0BF', circleStyle: circle + 'background: #FFFFFF; border: 2px solid #45584A', checkStyle: 'display: none' };
 return {
 audiences: [
-{ name: 'Friends', meta: '12 friends', checked: false, rowStyle: row + 'box-shadow: inset 0 0 0 1px #D3E0BF' },
-{ name: 'Moody Hall 4F', meta: 'Group · 18 members', checked: true, rowStyle: row + 'box-shadow: inset 0 0 0 2px #1F4D2B' },
-{ name: 'CougarCS Kitchen', meta: 'Group · 41 members', checked: false, rowStyle: row + 'box-shadow: inset 0 0 0 1px #D3E0BF' }
+Object.assign({ name: 'Friends', meta: '12 friends' }, on),
+Object.assign({ name: 'Moody Hall 4F', meta: 'Group · 18 members' }, on),
+Object.assign({ name: 'CougarCS Kitchen', meta: 'Group · 41 members' }, off)
 ]
 };
 }

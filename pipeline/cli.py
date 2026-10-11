@@ -1,6 +1,8 @@
 """python -m pipeline <command> [...]   (run from the repo root with the project venv)
 
-  ingest-dataset    --zip FILE | --dir DIR  --name NAME  [--adapter agrifreshnet|folders]
+  fetch-dafif       --out DIR [--fresh-days 1,2,3] [--spoiled-days 9,10,11] [--max-per-cell 300] [--max-side 1280]
+  fetch-meatscan    --out DIR [--per-class 450] [--max-side 1280] [--workers 8]   (range reads; needs pip unrar-cffi)
+  ingest-dataset    --zip FILE | --dir DIR  --name NAME  [--adapter agrifreshnet|folders|meatscan|dafif]
   prepare           [--extra-sources ml/yolo/sources.json] [--replace] [-- prepare_dataset args]
   augment-lighting  [--per-image 2] [--presets cool,bright,...|all] [--seed 0] [--max-side 1280] [--replace]
   ingest-receipts   [--engine fake|glm|service] [--timeout S] [--service-url URL] [--watch SECONDS]
@@ -60,9 +62,21 @@ def main(argv=None):
     ap.add_argument("--data-root", help="default pipeline/data or $PIPELINE_DATA")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    s = sub.add_parser("fetch-dafif", help="download the DaFiF fish images for the kept days (Mendeley, CC BY 4.0)")
+    s.add_argument("--out", required=True)
+    s.add_argument("--fresh-days", default="1,2,3"); s.add_argument("--spoiled-days", default="9,10,11")
+    s.add_argument("--max-per-cell", type=int, default=300); s.add_argument("--max-side", type=int, default=1280)
+    s.add_argument("--workers", type=int, default=6)
+
+    s = sub.add_parser("fetch-meatscan", help="fetch MeatScan originals by HTTP range reads (Zenodo, CC BY 4.0; never the 25 GB RAR)")
+    s.add_argument("--out", required=True)
+    s.add_argument("--per-class", type=int, default=450, help="originals fetched per class (ingest then caps per cell)")
+    s.add_argument("--max-side", type=int, default=1280)
+    s.add_argument("--workers", type=int, default=8)
+
     s = sub.add_parser("ingest-dataset", help="extract + stage a dataset drop")
     s.add_argument("--zip"); s.add_argument("--dir"); s.add_argument("--name", required=True)
-    s.add_argument("--adapter", default="folders", choices=["agrifreshnet", "folders"])
+    s.add_argument("--adapter", default="folders", choices=["agrifreshnet", "folders", "meatscan", "dafif"])
     s.add_argument("--drop-raw", action="store_true", help="delete the extracted copy after staging")
     s.add_argument("--specimen-groups", action="store_true",
                    help="group by specimen (cross-stage pHash) / capture session in the staged names (agrifreshnet); same as PIPELINE_SPECIMEN_GROUPS=1")
@@ -94,7 +108,7 @@ def main(argv=None):
 
     s = sub.add_parser("run-all", help="ingest-dataset + prepare + augment-lighting")
     s.add_argument("--zip", required=True); s.add_argument("--name", required=True)
-    s.add_argument("--adapter", default="folders", choices=["agrifreshnet", "folders"])
+    s.add_argument("--adapter", default="folders", choices=["agrifreshnet", "folders", "meatscan", "dafif"])
     s.add_argument("--per-image", type=int, default=2); s.add_argument("--replace", action="store_true")
 
     a = ap.parse_args(argv)
@@ -102,6 +116,15 @@ def main(argv=None):
     if getattr(a, "prepare_args", None) and a.prepare_args[0] == "--":
         a.prepare_args = a.prepare_args[1:]
 
+    if a.cmd == "fetch-dafif":
+        from .ingestion.fetch import fetch_dafif
+        days = lambda v: tuple(int(x) for x in v.split(",") if x)  # noqa: E731
+        _p(fetch_dafif(Path(a.out), days(a.fresh_days), days(a.spoiled_days), a.max_per_cell, a.max_side, a.workers))
+        return
+    if a.cmd == "fetch-meatscan":
+        from .ingestion.fetch import fetch_meatscan
+        _p(fetch_meatscan(Path(a.out), a.per_class, a.max_side, a.workers))
+        return
     if a.cmd == "ingest-dataset":
         _p(_ingest(a, dirs))
     elif a.cmd == "prepare":

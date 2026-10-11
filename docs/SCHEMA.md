@@ -5,7 +5,8 @@ PostgreSQL + TimescaleDB, one database. Relational tables for state; the `food_e
 Status: **implemented** in migration `0001_initial` (users, items, share_listings, food_events).
 Migration `0004_items_wave2` adds `items.freshness`, `freshness_checked_at`, `confidence` and makes
 `groups.created_by` nullable. Migration `0005_user_identities` adds `user_identities` and makes
-`users.password_hash` nullable (OAuth-only accounts). Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
+`users.password_hash` nullable (OAuth-only accounts). Migration `0006_request_audiences` adds `request_audiences` and drops
+`requests.group_id`. Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
 and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in migration `0002_social`.
 
 ## Relational tables
@@ -85,10 +86,33 @@ Index: `(owner_id, removed_at, predicted_expiry)`.
   friends. Index `(status, group_id)`.
 - `items.group_id → groups` (FK added in 0002; index `(group_id, removed_at)`).
   `food_events.group_id` stays a plain uuid (hypertable, no FK).
-- `requests(id, author_id → users, group_id → groups null, text 1-280 chars, status
-  open|fulfilled|cancelled, fulfilled_by → users null, created_at)`. CHECKs: text length, and
-  `(status='fulfilled') = (fulfilled_by IS NOT NULL)`. Indexes `(status, created_at DESC)`,
-  `author_id`, `group_id`.
+- `requests(id, author_id → users, text 1-280 chars, status open|fulfilled|cancelled, fulfilled_by →
+  users null, created_at)`. CHECKs: text length, and `(status='fulfilled') = (fulfilled_by IS NOT
+  NULL)`. Indexes `(status, created_at DESC)`, `author_id`. (`group_id` was dropped in 0006: who
+  sees a request lives in `request_audiences`.)
+
+### request_audiences (migration `0006_request_audiences`)
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid pk | `gen_random_uuid()` |
+| request_id | uuid → requests, `ON DELETE CASCADE` | |
+| kind | text | `friends` \| `group` (`ck_request_audiences_kind`) |
+| group_id | uuid → groups, null, `ON DELETE CASCADE` | set iff `kind = 'group'` (`ck_request_audiences_group_iff_kind`); indexed |
+| created_at | timestamptz | `now()` |
+
+Unique partial indexes: `uq_request_audiences_friends (request_id) WHERE kind='friends'` (one friends
+audience per request) and `uq_request_audiences_group (request_id, group_id) WHERE kind='group'` (each
+group once). Every request has at least one audience (app-enforced: create requires one, and leaving a
+group cancels a request instead of removing its last audience). `DELETE /auth/me` deletes the
+author's audience rows with their requests.
+- **Upgrade backfill:** one row per existing request: `friends` when `requests.group_id` was null,
+  else `group` with that id (`created_at` copied). Then `requests.group_id` (its FK and index) is
+  **dropped**, not kept: a nullable unused column would silently go stale on the first multi-audience
+  request and invite code to read the wrong scope; the deprecated API `group_id` is derived from
+  audiences instead.
+- **Downgrade** (lossy only for multi-audience requests): re-adds `requests.group_id` (FK + index)
+  and sets it to the request's oldest group audience when it has **no** friends audience, else
+  null (friends); then drops the table. Single-audience requests round-trip exactly.
 
 ## Event model (TimescaleDB)
 ```sql

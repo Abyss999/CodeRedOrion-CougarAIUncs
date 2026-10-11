@@ -2,9 +2,50 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Multi-audience requests and tips (#66)
+- **A request targets `audiences {friends, group_ids}`** (at least one, ≤ 50 groups) through the `request_audiences` join table. One note shows on every chosen board. `requests.group_id` is dropped after the backfill in migration 0006. The legacy `group_id` body field is accepted for one release (deprecated, keeping its old 403); sending both → 400; an audiences group you're not in → 404.
+- **You only see the audiences you belong to.** The others are counted (`hidden_count`), never named, so group names can't leak.
+- **Leaving a group removes that audience only.** A request whose only audience was that group is cancelled.
+- **Tips cover a rolling 30 days** (matching "this month" and `/impact?range=month`). Each is one factual line of at most 100 characters, with no advice. A UX note for the Home screen: long item names trimmed in tips can look identical, so the tip text should name items in full.
+
+## 2026-10-11 — New training sources and data rulings (#62; data owner LemurTech22, owner rulings)
+- **Three sources added, all CC BY 4.0:** MeatScan (Zenodo 16764338, cow meat), DaFiF (Mendeley vx4ptwk3pb, fish) and Food Spoilage Status (Roboflow v1, produce). food_hvk7g stays `pending` (no downloadable version, no freshness labels). Attribution is in `docs/ML.md` and the README.
+- **DaFiF freshness labels come from days on ice:** 1–3 fresh, 9–11 spoiled, 4–8 dropped. The paper's per-species cut-offs are paywalled. This is a data-owner ruling.
+- **The new sources are kept, with their risks named** (data owner; ML QA had suggested capping beef):
+  - beef is train-only, and its spoiled class is scene-confounded (ML-52);
+  - fish tray colour tracks the label (ML-55);
+  - fish held-out is one unseen batch (ML-51).
+  Spoiled recall is reported per source with Wilson CIs.
+- **MeatScan is never downloaded whole:** range reads from the 25 GB RAR, excluding the authors' augmentations. Roboflow copies of one photo share a split group (ML-50). A demoted cell moves wholly to train (ML-53). The Colab dataset cache is keyed by a `sources.json` hash.
+- **Owner: cross-split pHash pairs are a warning in `stratification_check`.** `leakage_check`'s identity pHash ≤ 1% per source stays the gate. The pHash session merge is used only for measurability (with the 600 cap), never to loosen the span rule.
+- **Owner: PL-5 won't be fixed.** MeatScan's two markets shoot in the same minute, so no timestamp-sound key gives more than 3 units. Beef stays train-only.
+- **Owner: #62 merged on the go-ahead** after independent QA on the full 8-source dataset (food-main-mac): leakage PASS on every source, stratification PASS, parent_sibling 0. Held-out spoiled is 495 images, 68% AgriFreshNET.
+- **The pre-#62 dataset (a2b) had a real leak** (fridge_objects held-out vs train 13 s apart), caught by the fixed ML-59 rule and absent from the #62 build. No model was trained on a2b, so no quoted metric is affected.
+- **The ML / data track belongs to teammate LemurTech22.** Other sessions build there only when the owner asks, as for #62's QA fixes. Work lands through PRs with independent QA.
+
+## 2026-10-11 — Dark-mode artboards (owner)
+- **The canvas has a Dark page with a dark artboard for every screen**, no longer deferred. They're generated from the light artboards with the adaptive tokens (`docs/design/tools/mkdark.py`), so the light artboards stay the single source and dark can't drift. iOS QA compares dark screenshots against them.
+
+## 2026-10-11 — Design feedback round (owner + teammate, 21 canvas comments)
+A UI/UX QA pass checked every comment. The owner made the product calls, and the rest follow the review.
+- **Spoiled items in Photo review are decided inline** (Toss it / Keep it in a "Looks spoiled" section), not a chain of popups. **Toss counts as waste:** the item is created and then removed as `thrown_out` / `expired` (two calls in v1).
+- **No extra swipe confirmation.** A swipe only opens the outcome sheet (with Cancel), and a 5 s Undo follows.
+- **Freshness shows only when a photo assessed it**, in the badge ("Looks off"). No guessed ripeness for unphotographed food, and no "Photo check" text. Estimated expiry shows as a range.
+- **Weights follow the Units setting** (US default: lb/oz). The API stays metric.
+- **Kept against the comments:**
+  - the Profile entry on Home (as an icon), because it's the only route to Settings and Delete account;
+  - the Impact pill in the header, because it's the demo path's last step;
+  - "Used it" rather than "Used in a recipe / ate it";
+  - **"Shared it"** rather than "Gave to a friend", because `donated` also covers groups and the Food Pantry;
+  - no "someone not on BiteDown" option, because the API stores recipients as users only, and no recipient is recorded when nobody claimed the item.
+- **Tagline:** "Use what you have. Share what you spare." (from #49), replacing "Eat what you buy." on the sign-in screen.
+- **Owner: requests can target several audiences at once** (friends and/or groups). One note shows on every chosen board, via a join table. Backend change queued.
+- **Deferred:** per-item photo history (needs image storage and a privacy review) and a free-text waste note.
+- The principles are in `docs/design/DESIGN_SYSTEM.md` → Principles.
+
 ## 2026-10-10 — Google Sign-In and removal rulings (#60, Fridge screen)
 - **`POST /auth/oauth/google` returns `created: true|false` in the body** as well as 201/200, so the app doesn't depend on status codes.
-- **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim is present. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
+- **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim equals the email domain. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
 - **One Google identity per user.** A different Google subject for the same user → 409 `identity_conflict`, checked before the domain rule.
 - **JWKS:** cached per `max-age`, an unknown `kid` is refetched at most every 30 s, 60 s leeway on `exp` / `iat`. Migration 0005's downgrade sets null password hashes to `'!'`, which can never match a password.
 - **Gave it away on a claimed item always goes to the claimer** (no "Someone else" for v1, no API change). When the listing is open with no claimer, the recipient chooser is hidden and nothing is recorded as recipient.
@@ -66,7 +107,7 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **Account deletion** (`DELETE /auth/me`) is in scope, since the App Store requires it once sign-up exists. Undo-remove uses `POST /items/:id/restore` within 10 min.
 - **Screen states:** empty and error use native `ContentUnavailableView`, loading uses skeleton rows, and an expired item's badge reads **"Expired"**.
 - **The inactive tab colour** follows the system under Liquid Glass (IOS-3 closed as won't-fix).
-- **Deferred:** dark artboards (the tokens cover dark mode), onboarding, notifications, localisation, widgets.
+- **Deferred:** onboarding, notifications, localisation, widgets. (Dark artboards were added on 2026-10-11.)
 
 ## 2026-10-10 — Gemini model, training venue
 - **`GEMINI_MODEL=gemini-3.8-flash`.** This is the newest non-preview Flash model in the key's model list, as listed on the Mac on 2026-10-10. `gemini-3.8-flash-lite` is the fallback if cost or latency becomes a problem. Re-check the list before the demo, because preview and retired ids change.

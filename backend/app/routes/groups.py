@@ -4,7 +4,7 @@ from sqlalchemy import func
 from ..auth import require_auth
 from ..errors import ApiError, not_found, validation_error
 from ..extensions import db
-from ..models import (Group, GroupMember, HelpRequest, Item, ShareListing, User)
+from ..models import (Group, GroupMember, HelpRequest, Item, RequestAudience, ShareListing, User)
 from ..services import social
 from ._util import iso, json_body, path_uuid, serialize_item
 
@@ -88,8 +88,24 @@ def leave(group_id):
     # Anything the leaver offered into this group would otherwise stay visible to it.
     ShareListing.query.filter_by(owner_id=g.user.id, group_id=gid, status="open"
                                  ).update({"status": "cancelled"})
-    HelpRequest.query.filter_by(author_id=g.user.id, group_id=gid, status="open"
-                                ).update({"status": "cancelled"})
+    # The leaver's open requests lose only this group's audience; one with no other audience is
+    # cancelled instead (its last audience row is kept as history). Closed requests are untouched.
+    ra = RequestAudience
+    here = db.session.execute(
+        db.select(ra.id, ra.request_id).join(HelpRequest, HelpRequest.id == ra.request_id)
+        .where(HelpRequest.author_id == g.user.id, HelpRequest.status == "open",
+               ra.kind == "group", ra.group_id == gid).with_for_update(of=HelpRequest)).all()
+    if here:
+        counts = dict(db.session.execute(
+            db.select(ra.request_id, func.count()).where(ra.request_id.in_([rid for _, rid in here]))
+            .group_by(ra.request_id)).all())
+        sole = [rid for _, rid in here if counts[rid] == 1]
+        drop = [aid for aid, rid in here if counts[rid] > 1]
+        if sole:
+            HelpRequest.query.filter(HelpRequest.id.in_(sole)).update({"status": "cancelled"},
+                                                                      synchronize_session=False)
+        if drop:
+            ra.query.filter(ra.id.in_(drop)).delete(synchronize_session=False)
     if was_owner:
         heir = (GroupMember.query.filter_by(group_id=gid).order_by(GroupMember.joined_at).first())
         if heir:

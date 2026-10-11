@@ -2,7 +2,7 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-10 (checkpoint 5b). **`food-main` (VPS) only orchestrates**: it plans, rules,
+_Last updated: 2026-10-10 (checkpoint 6b). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
 building** (owner decision): builder + QA sub-agents, Xcode and simulators, Docker and every test run,
 backend included, plus any `.github/workflows` push (the VPS token can't). It starts from the "In flight on
@@ -11,7 +11,7 @@ the Mac" table below and reports to `food-main`. Nothing is built or tested on t
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
-all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). #47 (iOS foundation) and #54 (receipt candidates) merged. Backend PR 3 (Google OAuth) merged (#60). In flight: the Fridge + removal screen on the Mac. iOS Wave 2 is underway on the Mac (foundation
+all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). #47 (iOS foundation) and #54 (receipt candidates) merged. Backend PR 3 (Google OAuth) merged (#60). gthread merged (#63). The Fridge + removal screen (#64) is fixing CI (Undo-toast UI tests on the slow runner). **Design feedback round and dark-mode artboards are on the canvas** (2026-10-11): see DECISIONS. iOS Wave 2 is underway on the Mac (foundation
 first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Photo add runs on the Gemini fallback until their model lands.**
 
 | Area | State | Evidence |
@@ -22,7 +22,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **merged (#60)**; 1411 passed / 98% | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **merged (#47)** | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
-| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **paused: a teammate owns the models** (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
+| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22 owns the data + model track.** The 8-source dataset passed independent QA (#62), so Colab can run (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
 | Receipts → full candidates (#54, Jose / LemurTech22) | **merged (#54)**; BE-11–14 fixed | ML check PASS (independent) |
 | Design | 22 screens approved; canvas is the source (renamed BiteDown) | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
 | Demo connectivity | merged | `scripts/demo_tunnel.sh` (Cloudflare quick tunnel, HTTP/2) |
@@ -45,7 +45,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    7. Social (pantry, composer, connect, group)
    8. Auth (email + Google)
    9. Settings
-3. **Owner:** the Google OAuth client (steps in `docs/SETUP.md`). **Mac:** the gthread one-liner (one process, threads, lock-guarded recipe cache) before integration QA. **Owner:** the Google OAuth client.
+3. **Owner:** the Google OAuth client (steps in `docs/SETUP.md`). gthread is merged (#63). **Owner:** the Google OAuth client.
 4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
@@ -53,7 +53,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Fridge + removal screen | not started | - | Unblocked (#47 merged): the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
+| Fridge + removal screen | #64, CI fix | `wt/ios-fridge` | Then the Fridge polish PR per the 2026-10-11 feedback: the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
 
 **Mac notes:**
 - **Worktrees** are in `../wt/<name>` next to the main checkout. Remove merged ones with `git worktree remove`, and only the ones this project created.

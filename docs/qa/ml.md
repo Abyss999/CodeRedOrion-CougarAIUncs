@@ -674,3 +674,264 @@ Changes checked on #54:
 - **(c) model fallback.** `gemini_structure` falls back to `gemini-3.8-flash` (`receipt_pipeline.py:289`) when neither an argument nor `GEMINI_MODEL` is set. I updated three assertions in `ml/eval/tests/test_gemini_structuring.py` from `gemini-flash-latest` to `gemini-3.8-flash`: `test_model_default_alias` (line 126), `test_model_empty_env_falls_back` (line 139) and `test_ocr_request_uses_env_model_and_default` (line 249). That file has 63 passed.
 
 **Note:** `clean_structured` still passes negative prices (coupon lines) through. The backend now drops them (BE-14, `docs/qa/backend.md`), so this is not an ML bug.
+
+# 2026-10-10: ML QA of the three new sources (meatscan, dafif, food_spoilage_status), dataset `fwr_data_new3`
+
+Dataset is the prepared three-source set only (`ml/yolo/prepare_dataset.py --sources .../sources.new3.json`), read-only. Evidence under `ml/eval/results/` (gitignored): `leak_new3.json|txt`, `strat_new3.json|txt`, `ms_pairs_0|1.jpg`, `ms_fresh40|spoiled40.jpg`, `df_cross.jpg`, `df_fresh|spoiled.jpg`, `fss_boxes.jpg`, `fss_neighbors.jpg`, `fss_siblings.jpg`. I installed `imagehash` into `.venv-ml` only (`uv pip install -p .venv-ml/bin/python imagehash`).
+
+## Verdict: **FAIL for food_spoilage_status (leakage); meatscan and dafif are leak-free but carry named risks**
+The Colab run is safe with `meatscan` and `dafif` (train-only / documented). `food_spoilage_status` must **not** be included until it is regrouped by parent image (ML-50). Metrics from a split that contains it fail the gate and must not be quoted.
+
+## 0. The gates were blind to these sources (ML-48, ML-49)
+First run of `leakage_check.py` printed **PASS with 0 held-out originals**: `SOURCES` was hard-coded to the five old sources, so none of the new ones was checked (and `stratification_check.py` crashed with `KeyError: 'dafif'`). Fixed in `ml/eval/leakage_check.py:28` (new sources added). Second blind spot: `stamp()` only knew `Screen_Shot_..._at_8_31_22_PM` with underscores, but Roboflow sanitises to `Screen-Shot-2018-06-08-at-5-09-10-PM` / `WhatsApp-Image-2020-11-07-at-11-35-36-PM`; added the hyphen form (`_HYPHEN`). After both fixes the gate is meaningful. `ml/eval` suite: 152 passed. The builder's own parser has the same blind spot (ML-50).
+
+## 1. Gate results per source (after the fixes)
+| Source | held-out originals | timestamped | within 60 s | within 300 s | min gap | pHash <= 6 (held-out -> train+val) | dHash (info) | complete-session assertion |
+|---|---|---|---|---|---|---|---|---|
+| meatscan | 0 (all 600 in train) | n/a | n/a | n/a | n/a | n/a (nothing held out) | n/a | ok |
+| dafif | 88 (tuna_s2) | 0 (no capture time in names) | n/a | n/a | n/a | **0 / 88 = 0.0%** | 2 (2.3%, see 3) | ok |
+| food_spoilage_status | 46 | 27 | **18 (66.7%)** | **21 (77.8%)** | **0 s** | 0 / 46 = 0.0% | 1 (2.2%) | **FAIL** (7 fragments) |
+
+`ML-21 timestamp+pHash criterion: FAIL` (food_spoilage_status only). Identity pHash is 0% for it because the near-duplicates are rotated, flipped or cropped copies, which the identity hash cannot see.
+
+`stratification_check.py`: 3 failures, none is a leak. (a) beef x2: "report says not measurable but I count 5 sessions >= 10 images" is the timestamp-session count against the builder's pHash-merged unit; ruled below, the merged unit is right. (b) `potato/fresh` is declared not measurable (whole cell to train, `dataset_report` boxes 51/0/49) yet 5 held-out images / 49 boxes sit in held-out (ML-53). The 18 "report vs manifest" failures of the first run were my harness comparing `None` with `0` on a subset dataset (ML-54, fixed at `stratification_check.py:117`).
+
+| Cell (new sources) | images / sessions | decision | train / val / held-out images |
+|---|---|---|---|
+| beef fresh, beef spoiled | 300 / 1 unit each | not measurable on held-out | 300 / 0 / 0 each |
+| fish fresh | 300 | required in held-out (pooled) | 200 / 60 / 40 |
+| fish spoiled | 300 | required in held-out (pooled) | 204 / 48 / 48 |
+| bitter_melon spoiled | 33 / 3 | not measurable | 33 / 0 / 0 |
+| other produce cells (food_spoilage_status) | 11-39 each | required, pooled | see `strat_new3.txt` |
+
+## 2. Beef (MeatScan): the one-unit merge is correct, beef stays train-only
+pHash <= 6 on the 600 originals: **1,168 pairs, 501 of 600 images have at least one partner, 100% same class (0 cross-class)**; 372 pairs same day, 784 different day, 12 within 300 s. I looked at 12 pairs (6 fresh, 6 spoiled; 4 different-day, 4 same-day more than 300 s apart, 4 within 300 s; `ms_pairs_0.jpg`, `ms_pairs_1.jpg`):
+- **12 of 12 are "same shot / same cut".** Fresh pairs across 14, 15 and 16 Feb show the identical cut, the same incision and the same bone fragment, re-framed by a few degrees (d = 4); same-day fresh pairs 1.5 h apart are the same tray of meat. All six spoiled pairs show the same single object (below).
+- Ruling recommendation: **grouping is right (true leak, not domain similarity)**. Whole source to train, beef "not measurable on held-out" with N/A metrics and counts stated (600 images, 1 unit). Do not split it by capture time: the specimen reappears across days. No evidence this fails the gate; the gate is satisfied precisely because nothing is held out.
+- **Label-sanity (ML-52):** I viewed 10+40 images per class. **Every spoiled image is one pale pink, glossy piece of meat lying in a black plastic bag on dried leaves** (a single specimen, different crops and distances). Fresh is a small set of red cuts on a butcher's table. So the class is perfectly confounded with the scene: the model can learn "black bag = spoiled". The piece does look off compared with the red fresh cuts (pale, wet, grey-green at the edge), so the label is plausible, but it is one object. Recommend the data owner either caps beef (for example <= 30 per class), or keeps it train-only and records "beef spoiled = 1 specimen, scene-confounded" as a named risk in `docs/ML.md`. This is not a leakage bug.
+
+## 3. Fish (DaFiF)
+- **No species+session batch straddles splits.** Train = mackerel s1, s2 and tilapia s1, s2 (404). Val = tuna s1 (108). Held-out = tuna s2 (88). Each batch holds both fresh and spoiled (days 1-3 or 2-3 vs 9-11), so day-grouping across freshness is intact.
+- **Correction to the expected framing (ML-51):** held-out fish metrics are **not** "same species, different batch". Train has **no tuna at all**; held-out is a species the model never trained on (and tuna s1 sits alone in val, so val and held-out share the species). Label it "unseen species (tuna), same tray and camera setup", a harder and more honest test, but one species and one batch (88 images, CIs wide).
+- **Flagged pairs by eye:** pHash <= 6 finds 15 pairs, all within one batch (same fish photographed across days, same grouping unit), and 2 cross-batch pairs, both train/train (mackerel s2 vs tilapia s2, tilapia s2 vs s1; different species, same green tray; not leakage). dHash flags 2 held-out/val pairs (tuna s2 vs s1, d = 6; `df_cross.jpg`): same species, same tray, **different individual fish** (body outline, fin and mark positions differ). Class: "same scene, different contents" = domain similarity, not a shared shot. The gate passes (pHash 0%). Report fish separately and label it "single tray, single camera".
+- **Label sanity (ML-55):** 10 per class across days. Fresh (days 1-3) looks like silvery intact fish; spoiled (days 9-11) looks dull, greyish, sunken eyes, plausibly spoiled; no visibly wrong label in the 20. Day-based borderline: day 9 spoiled fish are not obviously worse than day 3 fresh in several frames. **Confound:** tray colour. By border colour, **296 of 300 spoiled fish are on a green tray; 105 fresh fish are on pink or red trays (35% of fresh), and no spoiled fish is**. The model can learn "pink or red tray = fresh".
+
+## 4. food_spoilage_status
+- **Polygon -> box conversion is correct** (6 images drawn with the raw polygon in red and the produced box in green: `fss_boxes.jpg`; boxes tightly enclose bananas, orange, bitter gourd, capsicum). 428 raw polygon labels -> 428 prepared boxes; the one empty-label image is dropped (`empty_label_file`).
+- **Class and freshness mapping matches `data.yaml`** (programmatic, not only the sample): fresh 260 / spoiled 168 in both; per class apple 39/19, banana 23/32, capsicum 28/22, orange 37/24, potato 100/38, bitter gourd 33/33.
+- **Session grouping is wrong (ML-50, high).** Of the 276 files, many are Roboflow's own augmentations of one web photo: `rotated_by_15_`, `translation_`, `vertical_flip_`, `saltandpepper_`, and crops `X-jpg_0_<n>`. (a) `group_key` (`ml/yolo/prepare_dataset.py:80-88`) groups by the file's own stem, so each crop of one parent is its own group; **6 parents straddle splits and 12 of 46 held-out originals (26%) have a train or val sibling** (`parent_sibling_check.py`). Eyeballed (`fss_siblings.jpg`): the bitter gourd and the capsicum are the **same specimen, same shot, rotated or cropped differently**, in held-out, val and train: a true leak. (b) `_RX_SCREENSHOT` (`prepare_dataset.py:96`) needs `at` flanked by space or underscore and `.` or `:` time separators, so the Roboflow names `Screen-Shot-2018-06-08-at-5-09-10-PM` and `WhatsApp-Image-...-at-11-30-47-PM` are not parsed: **21 of 27 stamped held-out images are within 300 s of a train or val image (18 within 60 s, min gap 0 s)**. For the screenshots, `fss_neighbors.jpg` shows different web images from the same search session (mouldy orange next to mouldy orange, apple next to apple): "same scene, different contents", but the 300 s rule is explicit for timestamped images. The only correct timestamps (`20190809_165458`, 6 held-out) are 264,430 s from train, fine.
+- **Domain note:** the images are white-background web product shots with baked-in augmentation, not fridge photos; label the source separately.
+- **Fix (builder):** accept `-` as the separator in `_RX_SCREENSHOT`; strip `_AUG_PREFIX` and the `-(jpg|png)_<n>_<n>` crop suffix to a **parent key** for `group_key`; better still, honour the rule "exclude a release's own augmented copies" and keep only the unaugmented originals. Re-run `ml/eval/parent_sibling_check.py` (must print 0) and `leakage_check.py`.
+
+## Bugs
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-48 | high | `leakage_check.py` / `stratification_check.py` `SOURCES` hard-coded: new sources invisible, first gate run was a vacuous PASS (0 held-out originals), strat check crashed | fixed in `ml/eval/leakage_check.py:28` |
+| ML-49 | high | `stamp()` misses hyphenated Roboflow screenshot / WhatsApp names | fixed in `ml/eval/leakage_check.py` (`_HYPHEN`) |
+| ML-50 | high (blocks inclusion) | food_spoilage_status: own augmentations and crops of one photo straddle splits (12/46 held-out), and hyphenated screenshot times unparsed (21/27 within 300 s); `prepare_dataset.py:80-88` and `:96` | **open (builder)**; new check `ml/eval/parent_sibling_check.py` |
+| ML-51 | medium | DaFiF held-out is an unseen species (tuna), not "same species, different batch"; one batch of 88 images | open: label it so in the metrics; optionally put one tuna batch in train |
+| ML-52 | medium | MeatScan spoiled is one specimen in a black bag; class equals scene | open: cap or label as named risk (data-owner ruling) |
+| ML-53 | low | `potato/fresh` "not measurable, whole cell to train" but 5 images / 49 boxes are in held-out (boxes 51/0/49) | open (builder) |
+| ML-54 | low | `stratification_check.py:117` compared `None` with 0 on subset datasets | fixed |
+| ML-55 | medium | DaFiF tray colour leaks the label (pink or red tray only for fresh; 296/300 spoiled on green) | open: named risk, consider tray-colour augmentation or hue jitter |
+
+## What I could not check
+Capture times for DaFiF (names have none, so only the pHash and batch rules apply); whether MeatScan's three days include more than a handful of physical specimens (judged from images only); dihedral and rotation duplicates for MeatScan and DaFiF beyond the identity pHash (the rotated Roboflow copies show the gap is real); no model was trained.
+
+## Re-verification after the ML-50 fix (same day, `fwr_data_new3` re-prepared: train 1216 / val 119 / held-out 140)
+Run independently with my own gates, not the builder's output.
+- **ML-50: fixed.** `leakage_check.py`: **ML-21 PASS**. food_spoilage_status: 52 held-out, 15 timestamped, **0 within 60 s, 0 within 300 s, min gap 7,612 s**, identity pHash 0 / 52, dHash 0, complete-session assertion ok, 0 fragments. dafif unchanged (pHash 0 / 88, dHash 2, see above). meatscan: nothing held out. `parent_sibling_check.py`: 0 parents straddle, **0 of 52** held-out with a train/val sibling; the six former offenders (bitter-gourd-1, capsicum3_0/1/2, both WhatsApp parents) now sit in one split each. `variant_dup_check.py` (report only, rotation-aware): food_spoilage_status 0.0% same-class, 0 pairs straddling splits. `ml/eval` suite 152 passed.
+- **Stratification check still FAILS, 5 items, none a leak** (`strat_new3b.txt`):
+  1. `beef/*` "I count 5 sessions": check counts capture-time sessions, builder uses the pHash-merged unit. Ruled right in section 2; this is a check-vs-ruling mismatch, ignore.
+  2. **ML-53 reproduces, and widens to `apple/spoiled`** (13/0/6 images) and `potato/fresh` (11/0/5 images, 51/0/49 boxes): the report says "not measurable, whole cell goes to train" while held-out images of that cell exist. **It is a `prepare_dataset.py` bug, not the check.** The "whole cell to train" pass at `ml/yolo/prepare_dataset.py:555` skips `pinned` groups (`g not in pinned`, set at `:462` when a group is moved to held-out to satisfy a required cell), so groups pinned earlier stay in held-out after the cell is demoted at `:558` / `:617`. I checked the held-out apple/spoiled images: they are pure single-cell images, so this is not co-occurrence with another cell. Effect: not leakage; the report says N/A but images are there, so the metrics for these cells would be quoted on 6 and 5 images against the rule. Fix: when a cell is demoted, also unpin and move its groups (or pin-aware: do not demote, keep the cell required).
+  3. **ML-56 (medium): `potato/spoiled` train share 46.2% (< 50%)** (6 / 3 / 4 images): violates "Train keeps >= 50% of every measurable cell" (QA.md ML-23). Same root cause family (coupled potato cells; `enforce_majority` ends with the cell still in violation).
+  4. Informational: required cells with no val image: `bell_pepper/fresh`, `bitter_melon/fresh` (ML-28 family, last.pt rule covers it).
+- **How to call the sibling check as a gate** (item 2; exit code 1 on any sibling): `python ml/eval/parent_sibling_check.py /path/to/fwr_data all` after `leakage_check.py` and `stratification_check.py`. It now loops every source in `leakage_check.SOURCES` (new3 sources included). Per source: `... <data> food_spoilage_status`.
+
+## Recommendations on the named risks (for the orchestrator)
+| Risk | Recommendation |
+|---|---|
+| ML-51 fish held-out = one unseen species, one batch (88 images) | **Include dafif in the Colab run, labelled.** Report fish as "unseen species (tuna), single tray and camera", with Wilson CIs, never pooled silently. Optional improvement, not a blocker: move one tuna batch (s1 from val) into train so held-out is "same species, new batch" and let val hold another species. |
+| ML-52 beef spoiled = one specimen in a black bag, class = scene, train-only | **Include with a cap, labelled.** Cap beef to about 30 per class (or 30 spoiled, 60 fresh) so a single scene does not dominate train (600 of 1,216 train images now, 49%), and record "beef spoiled = 1 specimen, scene-confounded, not measurable" in `docs/ML.md`. If the owner does not want a cap, the fallback is to drop beef spoiled rather than ship an uncapped shortcut. Beef contributes no held-out metric either way. |
+| ML-55 DaFiF tray colour tracks the label (296/300 spoiled on green; pink or red only fresh) | **Include, with a mitigation or label.** Cheapest: hue jitter or a green-tray tint on pink or red fresh images in train (record as synthetic), and list "tray colour shortcut" as a named risk; the held-out tuna set is mostly green for both classes (so the held-out number does not expose the shortcut). Not a reason to drop the source. |
+
+## Verdict: safe to include in the Colab run?
+- **meatscan: yes** (train-only, capped per above, risk labelled). **dafif: yes** (leak-free, risks labelled).
+- **food_spoilage_status: yes for leakage** (ML-21 gate PASS, 0 siblings, rotation-aware report 0.0%), **but the stratification check still FAILS on ML-53 / ML-56** (a cell declared N/A with held-out images, and potato/spoiled train share 46.2%). Those break the ML-23 coverage rules, not the leakage rule, so no metric is contaminated; the Colab run can proceed if the orchestrator accepts that apple/spoiled, potato/fresh and potato/spoiled held-out numbers are reported N/A (not quoted) until the builder fixes `prepare_dataset.py:555`. Strict reading of "stratification check must pass": **CONDITIONAL PASS**, not clean PASS.
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-50 | high | food_spoilage_status parent/crop siblings and unparsed hyphenated times | **fixed, verified** |
+| ML-53 | medium | cells demoted to "not measurable" keep pinned groups in held-out (apple/spoiled, potato/fresh); `prepare_dataset.py:555` | open (builder) |
+| ML-56 | medium | `potato/spoiled` train share 46.2% < 50% | open (builder) |
+
+## Final re-verification after the ML-53 fix and the data-owner ruling (same day, `fwr_data_new3` re-prepared: train 1,236 / val 119 / held-out 120)
+Data-owner ruling (from the builder): MeatScan, DaFiF and food_spoilage_status all go into the Colab run with the risks labelled, beef uncapped (recorded in `docs/PIPELINE.md` "Named risks"). I do not rule on that; it supersedes my cap recommendation for ML-52, and the risk stays named.
+
+**Check fix (`ml/eval/stratification_check.py`, new `_merge_by_phash`):** independence units are now capture sessions/series merged across **pHash <= 6 neighbours within a source**, computed from the images themselves (not read from `dataset_report.json`), the same rule the builder uses. Beef now counts 1 unit (matches my eyeball ruling). `--no-phash-merge` restores the old timestamp-only count. This is what notebook cell 4 asserts on (`not st["failures"]`).
+
+**All gates on `fwr_data_new3`, run by me:**
+| Gate | Result |
+|---|---|
+| `leakage_check.py` | **ML-21 PASS**. meatscan: 0 held-out (train-only). dafif: 88 held-out, pHash 0 / 88, no timestamps. food_spoilage_status: 32 held-out, 10 timestamped, 0 within 60 s and 300 s, min gap 2,501,674 s, pHash 0 / 32; complete-session assertion ok for all |
+| `stratification_check.py` | **PASS, FAILURES: none** |
+| `parent_sibling_check.py <DATA> all` | exit 0; 0 straddling parents; 0 / 88 dafif and 0 / 32 food_spoilage_status held-out with a sibling |
+| `ml/eval` pytest | 152 passed |
+
+- **ML-53 verified fixed:** every not-measurable cell is train-only (apple/spoiled 19/0/0, potato/fresh 16/0/0, banana, orange/spoiled, bell_pepper/spoiled, bitter_melon/spoiled all N/A in train).
+- **ML-56 verified fixed:** `potato/spoiled` train share 61.5% (images), 8 / 3 / 2.
+- ML-50, ML-48, ML-49, ML-54 remain fixed and verified. ML-51, ML-52, ML-55 stay open as named risks (labelled, not fixed).
+
+**Consequence to quote correctly (not a failure):** with the demotions, held-out spoiled is measurable only for **fish (48 images, one unseen-species batch) and potato (2 images)**. Produce spoiled cells apple, banana, bell_pepper, orange and bitter_melon are N/A. So the pooled spoiled-recall gate (>= 0.85) is carried almost entirely by tuna, and per-source recall must be reported with Wilson CIs (a potato figure on 2 images is not usable). Held-out produce fresh cells with images: apple 10, bell_pepper 2, bitter_melon 13, orange 5.
+
+## Final verdict: safe to include in the Colab run? **YES (PASS), with named risks labelled**
+No leakage on any of the three sources; every gate passes. The risks that must be labelled in any quoted metric: ML-51 (fish held-out = unseen species tuna, one batch, one tray), ML-52 (beef spoiled = one specimen in a black bag, scene-confounded, uncapped, 49% of train before the new sources are counted against the rest, no held-out metric), ML-55 (DaFiF tray colour tracks the label), plus: food_spoilage_status is white-background web product shots with baked-in augmentation (separate domain), and spoiled-recall evidence is thin outside fish (above).
+
+## 2026-10-11: notebook cell 4 fresh-build fix + agrifreshnet pHash re-check (PR #62)
+Trigger: a Colab run reused a leftover `/content/fwr_data`; `!python prepare_dataset.py` refused the non-empty `--out`, `!` swallowed the exit code, and the gates ran on the stale dataset built by main's older code (agrifreshnet pHash 1.12% > 1%).
+
+**Cell 4 change (read from the uncommitted diff):** the only hunk in the notebook. The `else:` branch is now `shutil.rmtree(DATA, ignore_errors=True)` then `subprocess.run([sys.executable, "prepare_dataset.py", "--sources", "/content/sources.colab.json", "--out", DATA], check=True)`. `shutil`, `subprocess`, `sys`, `DATA` are all defined in cell 1; cwd is `/content/repo/ml/yolo` (cell 1 `%cd`, no later `%cd`; cell 3 only passes `cwd=` to subprocess). The `DATA_ON_DRIVE` restore branch is byte-identical. Executed the new branch against a stale dir and a bad sources file: the stale report is deleted and `CalledProcessError` is raised (the gates are never reached). Confirmed `prepare_dataset.py` exits non-zero with "refusing to overwrite" on a non-empty `--out` (the original failure mode).
+
+**Regression test added:** `ml/eval/tests/test_notebook_prepare_fresh.py` (4 tests): no `!python` in cells 3/4, rmtree before a `check=True` prepare, Drive branch still `check=True` + stamp, and a functional run of the else-branch.
+
+**Gates re-run by me on the builder's agrifreshnet-only repro** (`mldata/repro_agri/fwr_data`, built 00:25 after the branch's `prepare_dataset.py` 00:23; only agrifreshnet non-pending; dataset untouched, sha256 of report/manifest unchanged; my outputs in `mldata/repro_agri/qa_leak`, `qa_strat`):
+| Gate | Result |
+|---|---|
+| `leakage_check.py` | **ML-21 PASS**, exit 0. agrifreshnet: 567 held-out / 4,109 train+val originals; 412 timestamped, 0 within 60 s and 300 s, min gap 356 s; **pHash 2 / 567 = 0.35%** (both pairs at distance 6). Matches the builder's 567 / 2 / 0.35%. dHash 52 (9.17%) is reported only, not a gate |
+| `stratification_check.py` | **PASS, FAILURES: none**, exit 0; never-trained cells none; report vs manifest all ok; required cells missing from held-out none; not measurable: eggplant/spoiled. Info: bitter_melon/spoiled and papaya/semi_fresh have no val image |
+| `parent_sibling_check.py all` | exit 0 |
+| cls train/val dirs | fresh, semi_fresh, spoiled in both |
+
+Splits: train 3,761 / val 348 / held-out 567 images. This is a single-source dataset: it shows the branch code's agrifreshnet split passes, not the multi-source Colab dataset (no full prepare run here, as instructed).
+
+**Tests:** `ml/yolo/tests/test_notebook_dry_run.py` 7 passed; `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped (real MeatScan CSV not downloaded); `ml/eval/tests` 219 passed (215 + 4 new).
+
+**Other `!` calls whose failure is swallowed:** none left in cells 3/4 before the gates (cell 1's `!pip`/`!python -c "import ultralytics"` are followed by a hard `import imagehash`; the cell 3 `!curl` failure surfaces as a zip / `StopIteration` error). After the gates, one:
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-57 | low | Cell 5 runs `!python train.py ...` (both branches): a crash is ignored, and `train.py` never clears `<RUN_DIR>/export`, so cell 6 can report "DRY RUN OK" (or load/download `detector.pt`) from an earlier run's export with the same RUN_ID. Fix: `subprocess.run([...], check=True)` as in cell 4 | **fixed** (verified 2026-10-11, below) |
+
+**Verdict: PASS** for the cell-4 fix and the agrifreshnet leakage re-check. The 1.12% was the stale dataset; the branch code gives 0.35%. ML-57 does not block this PR.
+
+## 2026-10-11: ML-57 fix (cell 5) + full eight-source rebuild gates (PR #62)
+
+**ML-57: verified fixed** (uncommitted diff, cell 5 only, plus `ml/yolo/tests/test_notebook_dry_run.py`).
+- `shutil.rmtree(f"{RUN_DIR}/export", ignore_errors=True)` then `run_train(...)` = `subprocess.run([sys.executable, "train.py", ...], check=True)`. Argument list is token-for-token the old `!python train.py` line: `--data`, `--epochs`/`--cls-epochs` 1/1 (dry, `/content/fwr_data_dry`) and 80/30 (real, `/content/fwr_data`), `--device auto --weights last --resume --semi-fresh-threshold SEMI_FRESH_THRESHOLD --project RUN_DIR`. `shutil`, `subprocess`, `sys`, `RUN_DIR`, `DRY_RUN` are defined in cell 1; cwd is `ml/yolo` (cell 1 `%cd`).
+- Deleting the export is safe: `train.py` always rebuilds `<project>/export` (mkdir, copy detector.pt / freshness.pt, run `export_predictions`, copy heldout_gt / manifest / class_names / report), also when `--resume` returns "skipped" for both stages; nothing reads the old export. Checkpoints live in `<project>/det` and `<project>/cls` and are not touched; the Drive dataset cache (`CACHE_DIR/fwr_data*`) is a sibling, not under `export`.
+- Executed the real cell-5 source against a stub `train.py` in a temp dir: dry and real argv match the old command exactly, stale `export/` is gone, det/cls `last.pt` kept; a stub exiting 3 raises `CalledProcessError` (Run all stops before cell 6; cell 6 run by hand then fails "export is missing"). Regression test added: `ml/eval/tests/test_notebook_train_cell.py`.
+- Note (not a bug): `subprocess.run` without capture relies on Colab forwarding child stdout to the cell (cell 3 already does the same for the pipeline commands). Confirm on the dry run that epoch progress is visible.
+
+**Full rebuild gates** on the builder's `mldata/repro_full/fwr_data` (all eight active sources, food_hvk7g pending; built with the branch's `prepare_dataset.py`). Re-run by me into `mldata/repro_full/qa_leak`, `qa_strat`, `qa_sib`; dataset not modified (sha256 of report / manifest / heldout_gt unchanged, 67,250 files, no `.cache`).
+
+| Gate | Result |
+|---|---|
+| `leakage_check.py` | **ML-21 PASS**, exit 0, session audit `_all_ok` true. 0 within 60 s / 300 s for every source. pHash: **agrifreshnet 2 / 754 = 0.27%** (both pairs distance 6, different capture dates), fresh_stale 0/229, fridge_objects 0/114, hien_fridge 0/183, vegqual 0/137, dafif 0/88, food_spoilage_status 0/27, meatscan 0 held-out. Identical to the builder's leakage.json |
+| `stratification_check.py` | **PASS, FAILURES: none**, exit 0; never-trained none; report_vs_manifest all ok; required cells missing from held-out: none unexpected (not measurable: beef/fresh, beef/spoiled, onion/fresh, onion/spoiled). Info: bitter_melon/spoiled and papaya/semi_fresh have no val image |
+| `parent_sibling_check.py all` | exit 0; 0 straddling parents and 0 held-out siblings in all 8 sources |
+| cls dirs | train and val both exactly fresh, semi_fresh, spoiled |
+
+Splits: train 11,777 / val 1,241 / held-out 1,532 images, 23 active classes, `split_grouping` session.
+
+**Why main's Colab dataset had 1.12% and this one 0.27% (likely, not proven):** the branch's `prepare_dataset.py` diff does not touch pHash or near-duplicate logic; it changes grouping (`parent_stem`, ML-50) and the ML-53 demotion moves. Those, plus a different source mix (5 vs 8), reshuffle which groups land in held-out. The residual pairs are borderline (distance 6 in `imagehash`) and prepare uses its own pHash (up to 2 bits from `imagehash`), so a few can survive its near-dup drop. The margin under 1% is assignment-dependent, not guaranteed by construction; the gate remains the protection.
+
+**New bug (blocks the Colab run):**
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-58 | high | Cell 4 prints `{x: v[x] for x in (..., "phash_near_dup", "phash_near_dup_pct")}` for every source in leakage.json, but `leakage_check.py` writes no pHash keys for a source with 0 held-out originals. meatscan is train-only, so on this branch's data the cell raises `KeyError: 'phash_near_dup'` right after the leakage check passes; training never starts. Reproduced on my `qa_leak/leakage.json`. Fix in the notebook: `v.get(x)` in the print (the asserts use `criterion`, which is present). Pinned by `test_ml58_cell4_leakage_loop_handles_train_only_source` | **fixed** (verified 2026-10-11, below) |
+
+**Tests:** `ml/yolo/tests` 64 passed; `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped; `ml/eval/tests` 223 passed, 1 failed (the ML-58 test, expected).
+
+**Verdict:** ML-57 **fixed, PASS**. Full eight-source dataset **PASS** on every gate. PR #62 **FAIL until ML-58 is fixed**: the notebook would stop in cell 4 on any build that includes meatscan.
+
+**ML-58 re-check (2026-10-11): fixed.** The only new notebook hunk is cell 4's print, now `v.get(x)`; both asserts are unchanged. Replaying the loop on `mldata/repro_full/qa_leak/leakage.json` runs through all 8 sources (meatscan prints `phash_near_dup: None`, and every `criterion` assert passes). Tests: `ml/yolo/tests` 64 passed; `ml/eval/tests` 224 passed (including the ML-58 test); `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped. **Final verdict for PR #62: PASS** (ML-57 and ML-58 fixed, every gate on the eight-source build passes; ML-51, ML-52 and ML-55 remain labelled risks).
+
+# 2026-10-11: Independent QA (food-main-mac) for #62
+
+**This section supersedes the author's self-signed ML QA sign-off above for the merge gate.** The sections above are kept as his record. I'm an independent QA agent: no git, no training, no feature code edited. I wrote only `ml/eval/tests/qa_pr62_*.py` and this section. The dataset `mldata/full62` was built by the orchestrator with the branch's own `prepare_dataset.py` (sources.json, all 8 active sources, food_hvk7g pending). The gates were run on it with my commands. Outputs are in `mldata/full62_qa/` (`exits.txt`, `leakage.*`, `strat_merge*.txt`, `strat_nomerge*.txt`, `sibling.txt`, `merge_evidence.*`).
+
+## Verdict: **PASS** on the CPU suites, the fixes, and the full 8-source gates (owner ruling: pHash pairs are warning-only)
+The named risks stay labelled: ML-51, ML-52, ML-55, and ML-62 (below).
+
+## CPU suites (worktree head, after the ML-59/60/61 fixes)
+| Suite | Venv | Result |
+|---|---|---|
+| `ml/serve` | `.venv-ml` | 14 passed |
+| `ml/ocr` | `.venv-ml` | 89 passed |
+| `ml/yolo` | `.venv-ml` | 64 passed |
+| `ml/eval` (default collection) | `.venv-ml` | 215 passed, 1 skipped. Skipped: `test_variant_dup_check.py` needs `imagehash`, which `.venv-ml` lacks. It passes in `mldata/.venv-train` |
+| `qa_pr62_strat_merge.py` | `.venv-train` (imagehash) | 11 passed |
+| `qa_pr62_ml57.py` | `.venv-ml` | 7 passed |
+
+Nothing needed weights, a GPU or the network.
+
+## Full 8-source gates (`mldata/full62`: train 11,762 / val 1,263 / held-out 1,526; 23 classes; `split_grouping` session)
+| Gate | Exit | Result |
+|---|---|---|
+| `leakage_check.py` | 0 | **ML-21 PASS**. 0 within 60 s and 300 s for every source. Identity pHash: agrifreshnet **3 / 751 = 0.40%**, every other source 0 (fresh_stale 0/228, fridge_objects 0/114, hien_fridge 0/183, vegqual 0/137, dafif 0/88, food_spoilage_status 0/25). meatscan has 0 held-out (train-only) |
+| `stratification_check.py` (pHash merge, default) | 0 (`strat_merge_v2`) | **PASS**. 0 timestamped sessions span splits. 1 cross-split pHash pair inside a merged unit, now a warning. 3 oversized components left unmerged |
+| `stratification_check.py --no-phash-merge` | 1 (`strat_nomerge_v2`) | FAIL, only `beef/fresh` and `beef/spoiled`: "not measurable but I count 5 sessions". 0 spans |
+| `parent_sibling_check.py all` | 0 | 0 parents straddle splits, 0 held-out siblings, all 8 sources |
+
+### Held-out spoiled per source (images with at least one spoiled box; from `merge_evidence.json`)
+| Source | held-out spoiled | classes | train / val spoiled |
+|---|---|---|---|
+| agrifreshnet | **338 (68%)** | tomato 66, banana 64, bitter_melon 63, papaya 57, orange 39, pineapple 21, cucumber 16, eggplant 12 | 1,001 / 220 |
+| fresh_stale_fruits_veg | 101 (20%) | bell_pepper 44, tomato 32, apple 25 | 963 / 175 |
+| dafif | 48 (10%) | fish 48 (one unseen tuna batch, ML-51) | 204 / 48 |
+| food_spoilage_status | 8 (2%) | potato 8 | 90 / 22 |
+| **vegqual** | **0** | none | 1,232 / 3 |
+| meatscan | 0 (train-only, ML-52) | none | 300 / 0 |
+
+- **The pooled spoiled-recall gate does not rest on a single source** (495 held-out spoiled images, 4 sources). This differs from the author's new3-only subset, where only tuna had held-out spoiled examples. It is, however, **dominated by AgriFreshNET (68%)**.
+- **Single-source spoiled classes** (the check's `spoiled_single_source`): pineapple, papaya, cucumber (agrifreshnet only); fish (dafif); beef (meatscan, train-only); onion (vegqual, not measurable).
+- **Held-out spoiled comes from one source only, for these classes:**
+  - potato: only food_spoilage_status, 8 images. VegQual's 210 potato/spoiled images are all in train.
+  - eggplant: only agrifreshnet, 12 images.
+- **ML-62 (medium, named risk, new):** VegQual has **0 held-out spoiled images** (1,232 train, 3 val). Its "defected" vegetables are the only real-defect source for potato and onion, and they cannot be evaluated. In #27, VegQual gave potato 77 held-out spoiled. The cause is that VegQual has only 12 split units (largest 588 images), and the new source mix changes the split assignment. This is not a leak, and every coverage rule passes, because other sources fill the cells. VegQual spoiled recall must be reported as **N/A**. Spoiled recall on potato is 8 web product shots. Owner/builder: consider pinning one VegQual defect series to held-out, or accept and label.
+
+## pHash session-merge ruling (`stratification_check.py`, default merge vs `--no-phash-merge`)
+**Ruling: keep the merge as the default for the measurability count, as fixed in a2d88f5 plus the owner's warning-only change.** It does **not** hide a leak on this data, and `--no-phash-merge` fails only where the merge is known to be right.
+
+### Evidence
+| Source | units, no merge → merge | timestamped sessions spanning splits (both modes) | cross-split identity pHash pairs, all splits |
+|---|---|---|---|
+| meatscan | 5 → **1** | 0 | 0 |
+| agrifreshnet | 961 → 908 | 0 | heldout–train 3, train–val 5 |
+| hien_fridge | 155 → 127 | 0 | 0 |
+| dafif | 600 → 584 | 0 | 0 |
+| food_spoilage_status | 65 → 56 | 0 | 0 |
+| fridge_objects | 787 → 770 | 0 | 0 |
+| fresh_stale_fruits_veg | 27 → 26 | 0 | train–val 1 |
+| vegqual | 12 → 11 | 0 | 0 |
+
+**`--no-phash-merge`.** Its only failure is beef: 5 timestamp sessions, against prepare's single pHash unit. That single unit was eyeballed as one cut, re-shot across 3 days (ML-52, earlier in this log), so this failure is a false alarm. The merge also shifts other cells' unit counts by a few (for example apple/fresh 37 → 35, milk/fresh 65 → 56), but no decision changes.
+
+**Could the merge hide a real leak? Not on this data.** Every cross-split near-duplicate is still counted by the independent leakage gate, which is unaffected by the merge.
+- Of the 9 cross-split pHash pairs, the strat check sees only 1 inside a merged unit. The other 8 sit in components over the 600-image cap, which stay unmerged.
+- I eyeballed 6 agrifreshnet pairs (`scratchpad/qa62/agri_pairs.jpg`):
+  - **Same specimen, same cloth:** the orange `IMG-20251115-WA0004` (train) vs `WA0006` (held-out), d = 6. This is the pair the strat check reports. A banana train/val pair is also likely the same specimen.
+  - **Different objects (pHash false positives):** a bitter-melon pair, cucumber vs banana, and a gourd vs bitter melon.
+- So a small residual cross-stage specimen overlap exists in AgriFreshNET, at 0.40% of held-out. That is within the ≤ 1% gate and is the already-labelled "cross-stage specimen overlap possible".
+
+**Before the fixes (a168253), the merge could hide a span structurally:**
+- **ML-59:** the span rule never fired.
+- **ML-60:** the union relabelled a timestamped session as a stem group, merged cross-split near-duplicates into one info-only unit, and had no cap.
+
+Both are now pinned by tests.
+
+## ML-57, ML-61
+- **ML-57 fixed (verified independently).**
+  - Notebook cell 5 was run against the **real** `train.py`, made to crash before any training (an interpreter without ultralytics, with the exact cell-5 argv). It raises `CalledProcessError` rc 1, in both dry and real mode.
+  - The stale `export/` is removed, and `det/cls` checkpoints are kept.
+  - No `!` call in any cell runs train, prepare, the pipeline or a gate.
+- **ML-61 fixed (4973397).** Cell 1's three `!pip install` lines became `pip()` = `subprocess.run([sys.executable, "-m", "pip", "install", "-q", ...], check=True)`. There is no `!pip`/`%pip` left. Executing the real helper with a failing run raises with the expected argv.
+
+## Bugs (this review)
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-59 | medium | `ml/eval/stratification_check.py:229` (a168253) | The "timestamped session spans splits" rule was dead code: it searched for `"/t"` in `"t<n>"`, so it never fired, on any dataset | **fixed** (a2d88f5: explicit per-session timestamp flag, rule on unmerged sessions); `qa_pr62_strat_merge.py` |
+| ML-60 | medium | `stratification_check.py` `_merge_by_phash` (a168253) | The merge relabelled timestamped sessions as `/s:` stem groups, hid cross-split near-duplicates as info, and chained with no cap (prepare caps at 600) | **fixed** (a2d88f5). Owner ruling: a cross-split pair is a warning (`info.phash_cross_split_pair_examples`); leakage_check's ≤ 1% stays the gate; `qa_pr62_strat_merge.py` (cap read from `dataset_report`, default 600) |
+| ML-61 | low | `train_colab.ipynb` cell 1 | `!pip install` swallowed failures | **fixed** (4973397); `qa_pr62_ml57.py` |
+| ML-62 | medium | data / split assignment | VegQual has 0 held-out spoiled images (above) | **open: named risk**, report VegQual spoiled N/A |
