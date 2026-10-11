@@ -1,0 +1,8 @@
+// Copy to ios/Local.xcconfig (gitignored), then run `xcodegen generate`.
+// Free Personal Team signing for running on your own iPhone. Find your team id in
+// Xcode > Settings > Accounts, or developer.apple.com > Membership.
+DEVELOPMENT_TEAM = <YOUR_TEAM_ID>
+// Must be unique to you; a free team can't reuse someone else's id.
+APP_BUNDLE_ID = com.<owner>.foodwastereducer
+// Optional: point a Release/demo build at a fixed API.
+// API_BASE_URL = https:/$()/your-host.example

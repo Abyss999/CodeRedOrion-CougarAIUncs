@@ -8,9 +8,18 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-15
+    # macos-26 image: Xcode 26.x with the iOS 26 SDK and iPhone 17 simulators
+    # (verified in actions/runner-images images/macos/macos-26-arm64-Readme.md).
+    runs-on: macos-26
+    env:
+      XCODE_APP: /Applications/Xcode_26.6.app
+      SIM_NAME: iPhone 17 Pro
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -19,6 +28,5 @@ jobs:
       - name: Build and test
         working-directory: ios
         run: |
-          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['name'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
           xcodebuild test -project FoodWasteReducer.xcodeproj -scheme FoodWasteReducer \
-            -destination "platform=iOS Simulator,name=$SIM" CODE_SIGNING_ALLOWED=NO
+            -destination "platform=iOS Simulator,name=$SIM_NAME" CODE_SIGNING_ALLOWED=NO

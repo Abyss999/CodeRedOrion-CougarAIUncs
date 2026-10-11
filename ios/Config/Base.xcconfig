@@ -1,0 +1,5 @@
+// Shared build settings. Per-developer overrides live in the gitignored ../Local.xcconfig
+// (copy ../Local.xcconfig.example). The `#include?` is optional, so CI and Simulator builds
+// work without it.
+APP_BUNDLE_ID = com.coderedorion.FoodWasteReducer
+#include? "../Local.xcconfig"

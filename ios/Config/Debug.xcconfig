@@ -1,0 +1,4 @@
+#include "Base.xcconfig"
+// `$()` stops xcconfig treating `//` as a comment. A runtime override (Debug settings sheet,
+// UserDefaults) takes precedence over this. Simulator reaches the host's 127.0.0.1 directly.
+API_BASE_URL = http:/$()/127.0.0.1:5055

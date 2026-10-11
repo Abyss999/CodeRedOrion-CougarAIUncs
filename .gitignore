@@ -40,3 +40,6 @@ ios/App/Info.plist
 # Pipeline data (datasets, receipts, outputs; large / private) - see docs/PIPELINE.md
 pipeline/data/*
 !pipeline/data/.gitkeep
+
+# Per-developer signing config
+ios/Local.xcconfig
