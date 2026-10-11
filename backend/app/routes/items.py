@@ -517,16 +517,19 @@ def from_receipt():
         body = ml.ocr(data, filename, mime)
     except ml.MLUnavailable as e:
         raise upstream_unavailable(f"Receipt OCR unavailable: {e}")
-    out = []
-    for line in body["lines"]:
-        name = str((line or {}).get("name") or "").strip()
-        if not name:
-            continue
-        q, p = line.get("quantity"), line.get("price")
-        out.append({"name": name, "food_group": food_group.derive_from_name(name), "quantity": float(q) if q is not None else 1.0,
-                    "price": float(p) if p is not None else None})
-    total = body.get("total")
-    return jsonify(candidates=out, total=float(total) if total is not None else None)
+    lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()
+             and not candidates.is_receipt_noise(l.get("name"), l.get("price"))]
+    enriched = None
+    if lines and gemini.is_configured():
+        try:
+            enriched = gemini.categorize_receipt_lines([str(l["name"]).strip() for l in lines])
+        except gemini.UpstreamError:
+            enriched = None  # name-only heuristic below
+    out = candidates.from_receipt_lines(lines, enriched)
+    total = candidates._money(body.get("total"))
+    applied = any(isinstance(e, dict) and e.get(k) for e in enriched or []
+                  for k in ("display_name", "category", "food_group", "storage"))
+    return jsonify(candidates=out, total=total, categorized_by="gemini" if applied else "heuristic")
 
 
 @bp.get("/barcode/<code>")

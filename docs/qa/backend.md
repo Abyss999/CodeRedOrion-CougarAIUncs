@@ -315,3 +315,133 @@ Both are strict xfails (they flip loudly once fixed):
     - Gemini `days` given as a list or as `{"days": [...]}` → `expiry_source=gemini`;
     - a 502 from recipes is not cached.
   - **Service level:** each of the four helpers raises `UpstreamError` (never `TypeError` / `AttributeError`) for every scalar and for invalid JSON, with exactly one error line.
+
+
+## 2026-10-10 - receipt candidates + Gemini category guide + retry (branch feat/receipt-gemini-link, rebased onto main with PR #50)
+
+**Result: PASS.** `pytest -q --cov=app` from `backend/` = **757 passed, 1 skipped, 3 xfailed, coverage 97%** (`fwr_test`; the 3 xfails are the existing BE-9 `test_huge_est_price_is_400_not_500` cases). New files: `tests/test_receipt_candidates.py` (57 tests), `tests/test_gemini_retry.py` (~30). Gemini and the ML service are stubbed; no network.
+
+| Checked | Result |
+|---|---|
+| `from-receipt` shape `{candidates,total,categorized_by}`; full item fields + `price == est_price` + `receipt_text`; candidate (as returned, with extras) posts to `POST /items {items:[...]}` -> 201 (also under PR #50 validation) | ok |
+| Gemini stub: `display_name` as name, category/food_group/storage used, invalid enums fall back, fewer entries than lines -> one candidate per line, non-dict entries, name capped at 120, `categorized_by: gemini` | ok |
+| `UpstreamError` -> heuristic + 200; not configured / no lines -> no Gemini call | ok |
+| Heuristic categories (milk, chicken, salmon, eggs, bananas, frozen peas, bread, `XQZT 99`) all in CATEGORIES | ok |
+| `_money`/`_qty`: `$3.48`, `1,29`, `1,299.50` -> 1299.5, garbage -> null, NaN/inf -> null (qty 1.0), valid JSON emitted; total variants | ok |
+| Odd ML lines (non-dict, nameless, bad types) skipped, no 500; ML down -> 502 | ok |
+| `CATEGORY_GUIDE` in parse_text, detect_from_image and categorize_receipt_lines prompts; schema enums equal CATEGORIES / FOOD_GROUPS / fridge,pantry,freezer and is passed | ok |
+| Retry: 503/429/504 codes and UNAVAILABLE/RESOURCE_EXHAUSTED/DEADLINE_EXCEEDED text retried once (sleep patched); second failure -> UpstreamError; 400/500/ValueError not retried; exactly one `gemini_usage` line per call (ok after retry, error otherwise, incl. bad JSON after retry) | ok |
+
+### Findings
+No new bugs (BE-10 unused). Observation: a receipt price above numeric(10,2) (e.g. `"999999999"`) is passed through as `est_price`, so posting it back hits the open BE-9 500 path.
+
+## 2026-10-10 - PR #54 receipt-gemini-link (backend QA)
+
+_Independent backend QA (food-main-mac). Supersedes the PASS in the section above: it found BE-11..BE-13, which the author-side run did not cover. Tests live in `tests/test_receipt_candidates_qa.py`, alongside the author's `tests/test_receipt_candidates.py`._
+
+**Result: PASS (final).** Full suite at d4ced95: 1215 passed, 1 skipped, coverage 98%. No open bugs; see "Final verdict" at the end of this section. History follows. BE-13 is fixed via #57 (main) and verified on #54 after the merge (8a1f961); see the last subsection. BE-11 and BE-12 are fixed on #54 (ported fix, commit 7044932) and re-verified; see the re-verification below. First run (before the fix): `pytest -q tests/test_receipt_candidates_qa.py` = 85 passed, 14 xfailed (strict: BE-11 x6, BE-12 x4, BE-13 x4). The full suite has not been run yet (shared DB, possible xcodebuild). Gemini is never called: stubbed at `google.genai.Client` (so the real `_generate` retry/logging and the SDK's `GenerateContentConfig` validation of the receipt enum schema run) or at `gemini.categorize_receipt_lines`; OCR stubbed at `ml.ocr`; `requests.get/post` raise.
+
+New file: `backend/tests/test_receipt_candidates_qa.py`.
+
+| Area | Checked | Result |
+|---|---|---|
+| Gemini categorises | one call per receipt with the stripped line names; candidates take Gemini's `display_name`/category/food_group/storage, keep `receipt_text`; `categorized_by: "gemini"`; price `"$7.99"` -> 7.99; null quantity -> 1; candidates post straight back to `POST /items` (201); invalid category/food_group/storage fall back per line; empty `display_name` keeps the printed name; short answer padded; `display_name` capped at 120; no lines -> no Gemini call | ok |
+| Gemini fails | 400, 403, 500, generic exception, non-JSON, 503 twice, `UpstreamError` at the service boundary: 200, `categorized_by: "heuristic"`, heuristic categories (dairy/meat/produce_leafy), total intact; no key -> never called | ok; empty answer reported as gemini (BE-12, fixed); scalar JSON -> 500 (BE-13, open) |
+| Numbers | `_money`: `$3.48`, `" $ 3.48 "`, `1,29`, `$1,299.50`, `3.48 F` parse; `abc`, `""`, `$`, list, dict, inf, NaN, 400-digit string -> null; route never 500s on any of these for price or total and emits strict JSON (no NaN/Infinity); quantity `abc`/0/negative/inf -> 1 | ok (notes below) |
+| Total | number, numeric string, `$4.21`, `TOTAL $4.21`, `1,29`, `0`, null, junk, missing key; `raw_text` not echoed | ok |
+| Total/tax lines | OCR lines named TOTAL / SUBTOTAL / TAX / Sales Tax / GRAND TOTAL / BALANCE DUE | BE-11, fixed |
+| Retry (`_generate`) | 503 UNAVAILABLE, 429 RESOURCE_EXHAUSTED, 504 DEADLINE_EXCEEDED and an untyped exception whose text contains `UNAVAILABLE`: retried exactly once after `RETRY_DELAYS_S = (1.5,)`, then success, or `UpstreamError` on a second failure; 400/401/403/404/500, `TimeoutError`, `ConnectionError`, `ValueError`, bad JSON: one attempt, no sleep; retry applies to every helper (checked `parse_text`) | ok |
+| Usage logging | exactly **one** `gemini_usage` line per logical call (not per attempt), `status=ok` after a successful retry, `status=error` after an exhausted retry or fast failure, `purpose=receipt_categorize`; key not in the error text. This matches the code comment and API.md ("still one `gemini_usage` log line"), so it is intended, not ambiguous. | ok |
+| Auth / validation | no token and a bad token -> 401 with `{error:{code,message}}`; no body, JSON body, empty multipart, empty file, wrong field name -> 400 `validation_error` and OCR never called; OCR down -> 502 with the error shape | ok |
+
+### Findings
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| BE-11 | low | `POST /items/from-receipt` passes every OCR line through, so a line named `TOTAL`, `SUBTOTAL`, `TAX`... becomes a candidate whose price is the receipt total (`backend/app/routes/items.py:405`). ml/serve's deterministic parser drops these lines, but its Gemini-structuring path (`ml/ocr/receipt_pipeline.py:291`, `gemini_structure` -> `clean_structured`) excludes them only by prompt wording, and that path overrides the deterministic parse whenever it returns lines. Repro: stub `ml.ocr` -> `{"lines":[{"name":"MILK","price":3.48},{"name":"TOTAL","price":4.21}],"total":4.21}`; the response has 2 candidates. Fix in either layer (a total/tax/subtotal/balance/change/coupon name guard in `candidates.from_receipt_lines` or `clean_structured`); needs an owner ruling. Test: `test_total_and_tax_lines_do_not_become_items` (now passing). | **fixed on #54** (ported fix, 7044932) |
+| BE-12 | low | `categorized_by` says `"gemini"` when Gemini categorised nothing. `categorize_receipt_lines` pads its answer to `len(names)` with `{}` (`backend/app/services/gemini.py:153`), so `[]`, `{}`, `{"items":[]}` or `[1,2,3]` produce a truthy list of empty dicts and the route reports gemini (`backend/app/routes/items.py:414`) while every line used the heuristic and kept the printed name. Fix: report gemini only if at least one entry contributed a valid field. Test: `test_empty_gemini_answer_is_not_reported_as_gemini` (now passing). | **fixed on #54** (ported fix, 7044932) |
+| BE-13 | low | Valid JSON that is neither a list nor a dict (`null`, `"a string"`, `42`, `true`) reaches `data.get("items", [])` at `backend/app/services/gemini.py:151` -> `AttributeError`, which is outside `_generate`'s `try` and is not an `UpstreamError`, so the route's fallback (`items.py:410`) does not catch it and `/items/from-receipt` returns 500. The response schema makes this unlikely, but the documented contract is "if that call fails, heuristic". The same pre-existing pattern is in `parse_text` (`gemini.py:112`), `detect_from_image` and `suggest_recipes`. Fix: treat a non-list/non-dict answer as `[]` or raise `UpstreamError`. Test: `test_non_container_gemini_answer_is_not_500` (now passing, 6 cases). | **fixed via #57 (main)**, verified on #54 after merge 8a1f961 |
+| BE-14 | low/medium | Coupon/discount lines (`COUPON -0.50`, `MFR COUPON`, `INSTANT SAVINGS`) passed through `from-receipt` as candidates with a negative `est_price`. `POST /items` rejects a negative price, so posting the Add batch back failed with 400 for every item. Repro: OCR `[MILK 3.48, COUPON -0.50]` -> 2 candidates, and posting them back -> 400. Fix: `candidates.is_receipt_noise(name, price)` drops any negative price and coupon/discount/savings/mfr names under the same tail rule, with `off` added as a tail word. It runs in `from_receipt_lines` and in the route before Gemini. Tests: `test_be14_*`, `test_route_negative_price_dropped_not_500`. | **found and fixed on #54** (ported fix) |
+
+Notes (not bugs, for the builder):
+- `_is_transient` also retries 504 / `DEADLINE_EXCEEDED`, and any exception whose first 300 chars contain `UNAVAILABLE`, `RESOURCE_EXHAUSTED` or `DEADLINE_EXCEEDED`. A client-side `TimeoutError` is not retried. A daily-quota 429 is retried once too (harmless, adds 1.5 s).
+- The failed first attempt gets no usage line of its own, and the logged latency includes the 1.5 s sleep. That's fine for cost, because a 429 or 503 isn't billed.
+- `_money("1e400")` returns 1.0 (the regex drops the exponent), and `_money(True)` returns 1.0 (`bool` is not excluded, unlike `ml/ocr._to_num`). Negative prices (coupon lines such as `-1.00`) pass through as a negative `est_price`. A finite huge price (`1e308`) comes back on the candidate and would hit BE-9 (500) if posted back to `POST /items`.
+
+### Re-verification after commit 7044932 (BE-11, BE-12 fixed)
+Targeted runs only, from `backend/` on `fwr_test`: `tests/test_receipt_candidates_qa.py` = **130 passed, 4 xfailed** (BE-13 x4, strict); the author's `tests/test_receipt_candidates.py` = 57 passed; `tests/test_gemini_retry.py` = 20 passed. Combined: 207 passed, 4 xfailed. Full suite still pending.
+
+- **BE-11 fixed.** `candidates.is_receipt_total` (now the tail rule, see below; it replaced the first prefix-only regex) runs in the route before Gemini and in `from_receipt_lines`. The 6 former xfails now pass. New tests:
+  - 16 total-like names match (`Sub Total`, `SUB-TOTAL`, `VISA TENDER`, `DEBIT CARD`, `CHANGE`, `CASH`, `TOTAL 4.21`...).
+  - 14 food names are kept: Cashews, Cardamom pods, Tortilla, Taxi bread, Totino pizza, Balanced oats and Changua, in mixed and upper case. Kept end to end with SUBTOTAL, TAX and TOTAL dropped.
+  - **Totals are never sent to Gemini.** In the stubbed `generate_content` request, the contents are exactly `["GV 2% MLK GAL", "Cashews"]` for a receipt that also had SUBTOTAL, Sales Tax, GRAND TOTAL, VISA TENDER and CHANGE.
+  - A receipt with only total lines makes no Gemini call.
+- **BE-12 fixed.** `categorized_by` is `"gemini"` only when some entry has a non-empty `display_name`, `category`, `food_group` or `storage`. The 4 former xfails pass. A boundary test confirms that a single usable entry (`[{}, {"category":"meat"}]`) still counts as gemini.
+- **BE-13 open** (4 strict xfails kept as they were); resolves with the rebase onto PR 2.
+
+**Total guard: tail rule (orchestrator ruling, implemented in `candidates.is_receipt_total`, documented in `docs/API.md` under from-receipt).** The guard replaces the earlier prefix-only regex, whose "Total Cereal is dropped" limitation is resolved. A line is dropped only if it is:
+- optional prefixes (`sales`, `grand`, or a card network: `visa|debit|credit|mastercard|mc|amex|discover`),
+- then a keyword (`subtotal`/`sub total`/`sub-total`, `total`, `tax`, `change`, `cash`, `card`, `balance`, `tender`, or a card network),
+- followed by nothing except numbers, `%`, currency, punctuation, masked card digits (`x1234`, `****1234`), or the closed word set `due, amount, amt, paid, tendered, tend, back, purchase, sale, savings, saved, auth, approved, chip, contactless` plus the card networks.
+
+Verified on top of the earlier cases (targeted: `test_receipt_candidates_qa.py` 143 passed, 4 xfailed for BE-13; `test_receipt_candidates.py` 57 passed; `test_gemini_retry.py` 20 passed):
+- **Kept:** "Total Cereal" (`test_total_cereal_is_kept`, formerly the limitation test), "Cash & Carry Crackers", "Change Coffee Co Beans" and "Discover granola".
+- **Dropped:** "TOTAL DUE", "TAX 1 8.25%", "CHANGE DUE", "CASH TENDERED", "VISA CREDIT ****1234", "BALANCE DUE", "TOTAL $4.21", "VISA x1234" and "CARD XXXX1234".
+- Both lists are also checked end to end through `/items/from-receipt`.
+- The earlier 16 drop cases and 14 food-name keeps still hold.
+
+**Note for the orchestrator:** a bare card-network line is treated as a payment line and dropped. This covers "MC", "DISCOVER" and "Discover", and also "MC 1234". It is intended under the ruling, because a product named only "Discover" or "MC" is not expected on a grocery receipt. Any brand that is exactly a keyword plus tail words (e.g. a product printed as "TOTAL SAVINGS") would also be dropped.
+
+### BE-14 (coupon/discount lines) found and fixed on #54
+Found in the orchestrator's review and fixed by the builder (ported fix). `candidates.is_receipt_noise` drops a line if its price is negative, or if its name is a coupon/discount line under the tail rule. That means an optional `instant`/`mfr` prefix, then `coupon|discount|savings|mfr`, then only amounts, `%`, punctuation or tail words (now including `off`).
+
+Targeted runs, from `backend/` on `fwr_test`:
+
+| File | Result |
+|---|---|
+| `test_receipt_candidates_qa.py` | 166 passed, 4 xfailed (BE-13, strict) |
+| `test_receipt_candidates.py` | 57 passed |
+| `test_gemini_retry.py` | 20 passed |
+
+- **Repro:** OCR `[MILK 3.48, COUPON -0.50]` now gives 1 candidate, and posting the candidates back to `POST /items` gives 201.
+- **Dropped:** MFR COUPON (with a positive and a negative price), INSTANT SAVINGS, `INSTANT SAVINGS 1.00 OFF`, `COUPON $1.00 OFF`, `DISCOUNT 10%`, SAVINGS, and MILK at -0.5, `"-1.00"` and -0.01.
+- **Kept:** Savings Bread, Discount Ham, Coupon Cookies and `Coupon Cookies 2.00`. MILK at price 0, None or junk is also kept.
+- **End to end:** the keeps come back, the drops don't, and posting back gives 201.
+- **Never sent to Gemini:** in the stubbed request, the contents are exactly `["GV 2% MLK GAL", "Coupon Cookies"]`.
+- **Changed test:** `test_route_price_never_500[-1.00--1.0]` is removed from that parametrisation. A negative price is now dropped, not returned, and `test_route_negative_price_dropped_not_500` checks this for `"-1.00"`, -0.5, `"$-1.00"` and `"-$1.00"`.
+
+**Interim verdict for #54 backend (superseded by the final verdict below): PASS pending the full suite.** BE-11, BE-12 and BE-14 are fixed. BE-13 is tracked (strict xfail) until the rebase onto PR 2.
+
+### BE-13 fixed via #57, verified on #54 after merge 8a1f961
+Main (#57) was merged into #54 at 8a1f961. `_generate` now runs the retry loop, then `json.loads`, then the `_as_list` shape check. Any scalar or unusable shape raises `UpstreamError` there, with one usage line. `categorize_receipt_lines` passes `list_key="items"`.
+
+Checks on the real merged code, with Gemini stubbed at `google.genai.Client`:
+- **BE-13 fixed.** The 4 strict XPASSes are now plain tests: `null`, `"a string"`, `42` and `true`. I added two unusable wrapped shapes, `{"items":"nope"}` and `{"items":5}`. For each:
+  - `/items/from-receipt` returns 200 with `categorized_by: "heuristic"`, heuristic categories and the total intact.
+  - There is exactly one Gemini attempt and no retry sleep, because a shape error is not transient.
+  - There is exactly one `gemini_usage` line, with `status=error` and `purpose=receipt_categorize`.
+- **Wrapped answer still categorises.** New test `test_wrapped_items_answer_still_categorises`: a `{"items":[...]}` answer gives `categorized_by: "gemini"` and Gemini's names and categories, with one `status=ok` usage line.
+
+Targeted runs, from `backend/` on `fwr_test`:
+
+| File | Result |
+|---|---|
+| `test_receipt_candidates_qa.py` | 173 passed |
+| `test_receipt_candidates.py` | 57 passed |
+| `test_gemini_retry.py` | 20 passed |
+| `test_insights_wave2_gemini_shapes.py` | 106 passed |
+| `test_ai_endpoints.py` | 28 passed |
+| **Total** | **384 passed, 0 xfail/xpass** |
+
+**Interim verdict for #54 backend (superseded by the final verdict below): PASS pending the full suite, no open bugs** (BE-11, BE-12 and BE-14 fixed on #54; BE-13 fixed via #57).
+
+### Final verdict for #54 (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `feat/receipt-gemini-link` at HEAD d4ced95 (the merge of main plus the BE-13 test flip, clean tree), from `backend/` on `fwr_test`: `pytest -q --cov=app` = **1215 passed, 1 skipped in 122 s, total coverage 98%**. No xfails or xpasses remain.
+
+| ID | Severity | Fixed in | Status |
+|---|---|---|---|
+| BE-11 | low | #54 (ported fix): total/tax/payment lines dropped by the tail rule, never sent to Gemini | fixed, verified |
+| BE-12 | low | #54 (ported fix): `categorized_by` is `"gemini"` only when an entry contributed a field | fixed, verified |
+| BE-13 | low | #57 (main), merged into #54: scalar/unusable Gemini JSON is an `UpstreamError` -> heuristic + 200, one `status=error` usage line | fixed, verified on #54 |
+| BE-14 | low/medium | #54 (ported fix): coupon/discount lines and negative prices dropped, posting the Add batch back gives 201 | fixed, verified |
+
+**No open bugs.** This independent verdict supersedes the author's self-signed PASS in the "receipt candidates + Gemini category guide + retry" section above for the merge gate; that section is kept as the author's record. The known-behaviour notes above (tail rule; a bare card-network line such as "MC" or "DISCOVER" is dropped as payment) still apply and are for the orchestrator's record, not open bugs.

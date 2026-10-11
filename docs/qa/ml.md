@@ -631,3 +631,46 @@ Scope: the notebook changes (AgriFreshNET download + ingest, `DRY_RUN`, `make_su
 - Items 1, 2, 4, 5, 6 **PASS**; Part 2 (ML-40 reporting, semi_fresh CIs) **done and tested**.
 - Item 3 **FAIL: ML-42.** The dry run cannot start from a clean Colab VM until the download sends a User-Agent. Everything downstream of the download (ingest flags, subset, 3-class training, threshold plumbing, export) works on real data locally.
 - **Overall: NOT READY TO MERGE; PASS conditional on ML-42** (a few-line fix; re-run item 3 after it: the notebook cell can be tested for the API + Range request without downloading the full file). ML-43 and ML-44 are low and can ride along.
+
+---
+
+## 2026-10-10 - Gemini receipt structuring (`feat/receipt-gemini-link`)
+
+**Tests:** `ml/eval/tests/test_gemini_structuring.py` (62 cases; `urlopen` always monkeypatched, no real API call). Covers `_to_num` (numbers, `"3.48"`, `"$3.48"`, `"1,29"`, bools/garbage -> None), `clean_structured` (floats, nameless/non-dict lines dropped, quantity <= 0 -> None, non-dict / non-list `lines` -> None), `gemini_structure` (no key = no network; model = argument > `GEMINI_MODEL` > `gemini-flash-latest`, empty env falls back, never `gemini-2.5-flash`; key only in header; garbage bodies, HTTP/network errors -> None), and `/ocr` with `structure_with_gemini=True` (string answers become floats, fallback to deterministic parser on garbage / empty / error, request URL uses env model and the alias).
+
+**Results:** `ml/eval/tests` 202 passed, 1 skipped, 3 xfailed (the bugs below, strict xfail so they flip when fixed). Builder suites: serve 14, ocr 89, yolo 63, all passed.
+
+**Bugs**
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-45 | low | `_to_num("1,299.50")` returns 1.299 (comma treated as decimal; thousands separator not handled). Real receipts over $999 are rare, but the price silently shrinks 1000x. | open (builder) |
+| ML-46 | low | `_to_num(float("nan"))` / `"nan"` / `"inf"` return non-finite floats; Flask `jsonify` would emit invalid JSON (`NaN`) to the backend. Reject with `math.isfinite`. | open (builder) |
+| ML-47 | medium | `/ocr` and `receipt_from_image` use `g.get("total", parsed["total"])`; `clean_structured` always sets `total`, so when Gemini returns `total: null` the deterministic parser's total (7.77 in the test) is discarded and the response total is null. Use `g.get("total") if g.get("total") is not None else parsed["total"]`. | open (builder) |
+
+**Verdict: PASS with caveats.** The change under test (model env/alias, numeric coercion, garbage fallback) behaves as specified; ML-47 is a real, small regression-in-waiting in the merge logic (outside the changed functions) and should be fixed before relying on totals; ML-45/46 are low.
+
+### 2026-10-10 re-verification: ML-45, ML-46, ML-47 **fixed / verified**
+xfail markers removed (now plain assertions) plus one added test for `"1,29"` and `"-1,299.50"`. `ml/eval/tests` 206 passed, 1 skipped; serve 14, ocr 89, yolo 63 passed. ML-45 (thousands separator), ML-46 (non-finite -> None) and ML-47 (Gemini null total keeps parser total) all closed. Note: `receipt_from_image` total merge was not separately tested (it needs a real OCR engine); the `/ocr` route is. **Verdict: PASS.**
+
+## 2026-10-10 - PR #54 receipt-gemini-link (independent ML QA)
+
+_Independent QA (food-main-mac, backend QA acting for ML on #54). This supersedes the self-signed author section above for the merge gate; that section is kept as the author's record._
+
+**Result: PASS.** CPU only (`CUDA_VISIBLE_DEVICES=""`, `HF_HUB_OFFLINE=1`, `GEMINI_API_KEY` unset), no downloads and no training. Run from `ml/` with `.venv-ml/bin/python -m pytest -q`:
+
+| Suite | Result |
+|---|---|
+| `serve/tests` | 14 passed |
+| `ocr/tests` | 89 passed |
+| `eval/tests` | 206 passed, 1 skipped |
+| All three in one invocation | 309 passed, 1 skipped (no conftest collisions) |
+
+- **Skipped:** `eval/tests/test_variant_dup_check.py` is skipped because `imagehash` is not installed in `.venv-ml` (`importorskip`).
+- **Not run:** the `ml/yolo` tests, because they were out of scope for this check (they need weights or training tooling).
+- **No network:** none of these suites touch the network. In `test_gemini_structuring.py`, `urlopen` is monkeypatched in every case.
+
+Changes checked on #54:
+- **(b) dead code removed.** `_to_num` in `ml/ocr/receipt_pipeline.py:306` now has a single body: `bool` -> None, non-finite -> None, `$`/space stripping, thousands vs comma-decimal handling. The unreachable second block is gone. ML-45 and ML-46 behaviour still passes.
+- **(c) model fallback.** `gemini_structure` falls back to `gemini-3.8-flash` (`receipt_pipeline.py:289`) when neither an argument nor `GEMINI_MODEL` is set. I updated three assertions in `ml/eval/tests/test_gemini_structuring.py` from `gemini-flash-latest` to `gemini-3.8-flash`: `test_model_default_alias` (line 126), `test_model_empty_env_falls_back` (line 139) and `test_ocr_request_uses_env_model_and_default` (line 249). That file has 63 passed.
+
+**Note:** `clean_structured` still passes negative prices (coupon lines) through. The backend now drops them (BE-14, `docs/qa/backend.md`), so this is not an ML bug.

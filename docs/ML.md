@@ -309,7 +309,11 @@ gunicorn -w 1 --threads 4 -t 120 -b 127.0.0.1:8000 serve.wsgi:app
 Backend env: `ML_SERVICE_URL=http://<gpu-host>:8000` (tunnel/VPN; the service has **no auth** - never expose publicly).
 Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm`
 (default fake), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
-(optional; enables Gemini structuring of OCR text, else the deterministic parser alone), `GEMINI_MODEL`, `MAX_UPLOAD_MB` (12).
+(optional; enables Gemini structuring of OCR text, else the deterministic parser alone), `GEMINI_MODEL` (the same
+value as the backend's, see `docs/DECISIONS.md`; unset falls back to Google's `gemini-flash-latest` alias, never a
+pinned old id), `MAX_UPLOAD_MB` (12). Gemini's structured answer is validated by `clean_structured()` before it is
+returned: numbers given as strings (`"$3.48"`, `"1,29"`) are parsed, nameless lines dropped, a non-positive quantity
+becomes `null`, so `/ocr` always returns real numbers to the backend.
 Without `FRESHNESS_WEIGHTS` every item reports `freshness: "fresh"` - set it for real use.
 Models load on first request (first call is slow); a failed load returns 500 `inference_failed`, which the backend
 should treat as "fall back to Gemini vision" (docs/ARCHITECTURE.md).

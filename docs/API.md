@@ -133,7 +133,7 @@ known fruit else `veggies`).
 `category` is sent in the same request; (2) `category` without `food_group` re-derives `food_group`
 from the new category + current name (this overwrites a previous manual choice); (3) a `name`-only
 change does **not** re-derive (the user's grouping is left alone); `name` + `category` re-derives. Sending `"food_group": null` returns `400` (to clear a manual group, send `category` again so it re-derives).
-Receipt lines (`from-receipt`) have no category, so `food_group` comes from a deterministic keyword
+Receipt lines (`from-receipt`) without a Gemini category get their `food_group` from a deterministic keyword
 match on whole, case-insensitive name tokens (with receipt abbreviations such as `CHKN`, `GRND BF`,
 `YGRT`, `BRD`, `FROZ`, `MLK`, `OJ`, `TOM`, `SLMN` expanded): frozen, then pantry modifiers (juice, sauce, broth, soup, peanut
 butter...), dairy, protein, grains, fruit, common vegetables, other pantry staples; no match -> `other`.
@@ -163,8 +163,35 @@ post it straight back.
   missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). It is
   informational on the candidate and does not change `predicted_expiry`; post it back with
   `POST /items` to store it on the item (`freshness`, `freshness_checked_at`).
-- ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [{name, quantity, price}], total}`
-  via `ML_SERVICE_URL`/ocr; `502` when unset or failing. `quantity` defaults to 1.
+- ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [item…], total, categorized_by:
+  "gemini"|"heuristic"}` via `ML_SERVICE_URL`/ocr; `502` when unset or failing. Each candidate is a full
+  item like the other add paths (`name, category, food_group, storage, quantity, unit, est_price,
+  predicted_expiry, expiry_source`) plus `price` (= `est_price`, kept for older clients) and
+  `receipt_text` (the line as printed), so it can be posted straight back to `POST /items`.
+  With Gemini configured, **one call per receipt** (`gemini.categorize_receipt_lines`, JSON schema with the
+  category / food_group / storage enums) turns abbreviated lines into readable names (`GV WHL MILK GAL` →
+  `Whole milk`) with category, food group and storage. Without Gemini, or if that call fails, `name` stays
+  as printed and the category comes from the food-group heuristic below (`categorized_by: "heuristic"`):
+  dairy→dairy, grains→bakery, pantry→pantry_dry, fruit/veggies→produce_leafy (short-life on purpose),
+  protein→seafood/eggs/meat by keyword, else `other`. Numbers may arrive as strings (`"$3.48"`, `"1,29"`)
+  and are parsed; unusable → `price: null` / `total: null`; `quantity` defaults to 1 (and to 1 if not positive).
+  Receipt total/payment lines are dropped before Gemini and before building candidates
+  (`candidates.is_receipt_total`): the name must start with optional `sales`/`grand`/card-network prefixes
+  plus a keyword (`total`, `subtotal`/`sub total`/`sub-total`, `tax`, `change`, `cash`, `card`, `balance`,
+  `tender`, or a card network `visa|debit|credit|mastercard|mc|amex|discover`), followed only by amounts,
+  `%`/currency/punctuation, masked card digits (`****1234`, `x1234`, `XXXX1234`) or the words `due, amount,
+  amt, paid, tendered, tend, back, purchase, sale, savings, saved, auth, approved, chip, contactless` (or a
+  card network). So `TOTAL 4.21`, `CHANGE DUE`, `VISA CREDIT ****1234` are dropped; `Total Cereal`,
+  `Cash & Carry Crackers`, `Cashews` are kept. Coupon/discount lines follow the same rule with the keywords
+  `coupon`, `discount`, `savings`, `instant savings`, `mfr` (`MFR COUPON`, `COUPON $1.00 OFF`; `off` is an
+  allowed tail word), and any line with a **negative price** is dropped too (`candidates.is_receipt_noise`),
+  since `POST /items` rejects negative prices.
+- **Gemini category guide.** Every Gemini prompt that assigns a category (text parse, vision, receipt
+  lines) carries the same definitions as `ml/yolo/taxonomy.py`: `produce_leafy` = short-life produce
+  (greens, herbs, berries, tomatoes, cucumbers, peppers, bananas, avocados, papaya, pineapple...),
+  `produce_hardy` = long-life produce (apples, citrus, pears, roots, onions, eggplant...), so Gemini and YOLO
+  give the same shelf life for the same food. Transient Gemini errors (503 `UNAVAILABLE` "high demand",
+  429, 504) are retried once after 1.5 s inside the same call (still one `gemini_usage` log line).
 - ✅ `GET /items/barcode/:code` (6-14 digits, else 400) → `200 {candidate}` (Open Food Facts, adds
   `barcode`, `brand`, `quantity_text`); `404 not_found` unknown product; `502` OFF unreachable.
 
