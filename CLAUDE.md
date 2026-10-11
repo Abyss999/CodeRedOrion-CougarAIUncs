@@ -91,8 +91,9 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
   presents a sheet), sheets, swipe actions, `ContentUnavailableView`, data scanner, document
   camera, and the official Google button.
 - Every data screen has empty, loading (skeleton) and error states.
+- Motion follows [`docs/design/MOTION.md`](docs/design/MOTION.md): `Theme.Motion` tokens, haptics paired with motion, and **Reduce Motion respected** (fades replace movement). Never delay an action for an animation.
 - Accessibility is required: VoiceOver labels, Dynamic Type to AX5, 44 pt targets, AA contrast,
-  and colour never the only cue.
+  Reduce Motion, and colour never the only cue.
 - An iOS PR that deviates from an artboard includes a **Design delta** section with a Simulator
   screenshot. The orchestrator updates the canvas on merge.
 - Never run Impeccable while generating UI. UI review (Impeccable critique and polish, then

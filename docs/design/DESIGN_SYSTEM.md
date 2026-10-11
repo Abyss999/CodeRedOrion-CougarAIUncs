@@ -110,6 +110,9 @@ chart values are always labeled.
   68 pt.
 - **Tab bar:** the system glass `TabView`. Add is a tab, so there's no custom size.
 
+## Motion
+Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped at 8 items, and shimmer for skeletons. Per-screen behaviour, haptics and the Reduce Motion fallbacks are in [`MOTION.md`](MOTION.md).
+
 ## Components
 | Component | Seen in | Notes |
 |---|---|---|
