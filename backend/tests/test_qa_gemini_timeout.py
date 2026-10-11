@@ -135,7 +135,7 @@ def test_every_generate_call_site_passes_timeout():
     import re
     src = pathlib.Path(gemini.__file__).read_text()
     sites = [m.start() for m in re.finditer(r"_generate\(", src) if not src[:m.start()].endswith("def ")]
-    assert len(sites) == 6
+    assert len(sites) == 7  # + receipt_from_image (#95)
     for i in sites:
         call = src[i:i + 400].split("), \"")[0]  # up to the end of the _unwrap(...) key argument
         assert "timeout_s=" in call, call[:100]

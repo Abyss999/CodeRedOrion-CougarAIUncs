@@ -571,7 +571,7 @@ def _read_receipt(data, filename, mime):
     gemini_reason = "Gemini is not configured"
     if gemini.is_configured():
         try:
-            # After a failed ML call (up to 60 s) a retried read could pass gunicorn's 120 s: read once (BE-26).
+            # After a failed ML call (up to 60 s) a retried read could pass gunicorn's 120 s: read once (BE-28).
             return gemini.receipt_from_image(data, mime, retry=not ml_tried), "gemini"
         except gemini.UpstreamError as e:
             gemini_reason = str(e)

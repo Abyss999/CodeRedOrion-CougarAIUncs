@@ -236,8 +236,13 @@ def _to_num(v):
     if isinstance(v, (int, float)):
         return float(v) if math.isfinite(v) else None
     if isinstance(v, str):
-        s = v.replace("$", "").replace(" ", "")
-        if "," in s and "." in s:  # 1,299.50 -> thousands separator
+        s = v.replace("$", "").replace(" ", "").replace("−", "-")  # unicode minus -> "-"
+        if "," in s and "." in s:  # the last separator is the decimal point, the other groups thousands
+            if s.rfind(",") > s.rfind("."):  # 1.234,56
+                s = s.replace(".", "").replace(",", ".")
+            else:  # 1,299.50
+                s = s.replace(",", "")
+        elif re.fullmatch(r"-?\d{1,3}(,\d{3})+", s):  # 1,234 / 12,345,678: thousands, not a 3-digit decimal
             s = s.replace(",", "")
         m = re.search(r"-?\d+(?:[.,]\d+)?", s)
         if m:

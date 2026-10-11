@@ -53,7 +53,7 @@
 ## What is real and what is a fallback
 
 - **Photo detection:** The Gemini fallback (`source: "gemini"`) until the teammate's YOLO lands. "Check again" works the same way.
-- **Receipts:** **TODO: confirm.** The requested description is that receipts are read by Gemini vision, not GLM-OCR; HANDOFF says there is no live OCR service and the demo uses Mock or shows the receipt tile as unavailable, while README says receipts require a configured OCR service.
+- **Receipts:** the API reads a receipt photo with Gemini vision (`POST /items/from-receipt`, response `source: "gemini"`); GLM-OCR is not used. The app has no receipt screen yet (Add 2b is not built), so show receipts through the API only, or say the tile is unavailable. Do not describe it as in-app OCR.
 - **Barcode scanner:** `DataScannerViewController` doesn't run on the Simulator, so the Simulator uses a DEBUG manual-code field.
 - **Google sign-in:** Hidden until the owner's OAuth client id exists.
 - **Gemini-generated content:** Recipes, tips' wording and macros are labelled estimates.
@@ -65,7 +65,7 @@
 | Photo suggestions fail to load | Do not present a result as live if it did not load. Check the demo's configured Gemini/API setup with the operator; exact recovery steps: **TODO: confirm**. |
 | A photo suggestion or freshness flag looks wrong | Say that photo recognition needs user review and cannot establish food safety. Correct or skip the suggestion rather than claim it is verified. |
 | The expiry prediction is missing or unexpected | Say that expiry dates are estimates based on supplied information and category defaults. Correct the suggested date if the screen allows it; otherwise: **TODO: confirm** the recovery step. |
-| Receipt scan is unavailable or returns an error | Say that receipt OCR is not live in the documented demo path. Use the Mock only if it is already enabled, or move on; do not describe it as live OCR. |
+| Receipt scan is unavailable or returns an error | In the app: the receipt tile is unavailable by design today. Through the API: a 502 means Gemini is rate-limited or down; wait a minute and retry once, otherwise move on. Never describe receipts as in-app OCR. |
 | Barcode camera does not open in Simulator | Explain that the scanner does not run in Simulator and use the DEBUG manual-code field. |
 | Google sign-in is absent | Explain that it is hidden until the OAuth client id exists. Use the prepared email sign-in if available; setup for the demo account: **TODO: confirm**. |
 | Impact is not reachable | The handoff says Impact is reachable through a debug launch flag until Home wiring is complete. The exact flag and current build integration: **TODO: confirm**; do not imply the screen is wired if it is not. |
@@ -80,7 +80,7 @@
    Photo detection uses the Gemini fallback until the teammate's YOLO lands. Photos cannot establish food safety, and visible-spoilage flags need user review.
 
 3. **Is receipt scanning using GLM-OCR?**  
-   **TODO: confirm** the current demo implementation: HANDOFF says live receipt OCR is unavailable and the demo uses Mock or an unavailable tile. README says receipts require a configured OCR service.
+   No. Receipts are read by Gemini vision through the API; GLM-OCR was evaluated and is deferred. The app's receipt screen is not built yet, so receipts are shown through the API only.
 
 4. **What happens when I donate an item?**  
    A donated outcome counts as food saved. If the item has an open Share listing, the donation fulfils it.
