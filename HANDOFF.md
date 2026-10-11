@@ -30,7 +30,7 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 | ML Colab FAST profile (~45–50 min run: capped detector set, yolo26n 512 px), #87 (Jose) | merged | ML QA PASS (`docs/qa/ml.md`); ML-66 fixed; ML-67 (low), ML-68 (info) open |
 | ML-69 fix: classifier RAM cache OOM-killed Colab (#88, Jose) | **open, CI green, QA PASS** | needed before a fresh Colab FAST run from `main` |
 | **First trained model** `fwr_20261011` (FAST: detector 30 ep ≈ 26 min, classifier 10 ep ≈ 17 min on a T4) | trained, **not scored** | weights: Drive `fwr_runs/fwr_20261011/data_a4729025_fast/export/`, local `../mldata/models/fwr_fast_20261011` (`current` →). The Drive `predictions.jsonl` was truncated by Drive sync; score from `export.zip` |
-| Compose `ml` service (opt-in profile, no host port, CPU, OCR off) + `OCR_BACKEND=off` (Jose) | this PR, `feat/ml-compose-service` | photo → YOLO → Gemini enrichment → `POST /items` verified end to end on 2026-10-11 |
+| Compose `ml` service (opt-in profile, no host port, CPU, OCR off) + `OCR_BACKEND=off` (Jose) | this PR, `feat/ml-compose-service` | ML QA PASS (ML-70–72 fixed, incl. the serve image that never built); photo → YOLO → Gemini enrichment → `POST /items` verified end to end in containers on 2026-10-11 |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22's track**; Colab can run | don't schedule agents for it unless the owner asks |
 | Design | 38 screens (22 + the gap audit's 16, incl. FulfilConfirm) + dark artboards; canvas v53 (round 3), mirrored in #82 | `docs/design/`; design QA READY WITH FIXES, fixes applied |
 
@@ -197,7 +197,7 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
 
 ## QA status
 - **Backend:** PASS on `main` after #79 (2199 passed, 98%). BE-8 … BE-22 resolved (BE-21 accepted as documented; #84 re-verified BE-19–22). Open: BE-7 (info). Follow-up only if memory gets tight: lower `ENRICH_MAX_PIXELS` to about 25 MP.
-- **ML / pipeline:** the 8-source dataset (#62) and #73 are independent PASSes; the FAST profile (#87) and ML-69 (#88) are ML QA PASSes. ML-57/59/60/61/63/66/69 and PL-8 fixed; PL-5 won't-fix; ML-51/52/55/62 named risks. Open: ML-11–14, ML-28, ML-32, ML-40, ML-64 (low), ML-65 (info), ML-67 (low), ML-68 (info). First model trained (`fwr_20261011`), **not evaluated yet**.
+- **ML / pipeline:** the 8-source dataset (#62) and #73 are independent PASSes; the FAST profile (#87) and ML-69 (#88) are ML QA PASSes. ML-57/59/60/61/63/66/69/70/71/72 and PL-8 fixed (ML-70–72: compose `ml` service, ML QA PASS); PL-5 won't-fix; ML-51/52/55/62 named risks. Open: ML-11–14, ML-28, ML-32, ML-40, ML-64 (low), ML-65 (info), ML-67 (low), ML-68 (info). First model trained (`fwr_20261011`), **not evaluated yet**.
 - **Design:** the full-canvas UI/UX gate passed with fixes (v51). Round 3 is READY WITH FIXES, with the fixes applied (v53, #82).
 - **iOS:** the foundation (#47), Fridge (#64) and PR0 (#81) PASS; IOS-14–18 fixed. IOS-13 open (low).
 - **Integration:** not run yet.
