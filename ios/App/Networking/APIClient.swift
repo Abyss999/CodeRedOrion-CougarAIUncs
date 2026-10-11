@@ -100,7 +100,8 @@ protocol APIClient: Sendable {
 
     // MARK: People
     /// `GET /people/reachable` (coming): friends and members of your groups.
-    func reachablePeople() async throws -> [Person]
+    /// With `itemId` (an item you own), the person who claimed its open listing has `is_claimer: true`.
+    func reachablePeople(itemId: String?) async throws -> [Person]
 
     // MARK: Insights
     func impact(range: ImpactRange) async throws -> Impact
@@ -109,6 +110,7 @@ protocol APIClient: Sendable {
 }
 
 extension APIClient {
+    func reachablePeople() async throws -> [Person] { try await reachablePeople(itemId: nil) }
     func createItem(_ item: NewItem) async throws -> Item {
         guard let first = try await createItems([item]).first else {
             throw APIError.decoding("Empty create response")

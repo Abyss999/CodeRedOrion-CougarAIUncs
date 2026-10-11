@@ -58,43 +58,47 @@ final class RemoveFlowUITests: XCTestCase {
         XCTAssertEqual(haptics(app), ["success"], "remove → .success only, got \(haptics(app))")
     }
 
-    func testGaveAwayWithoutListingHidesRecipient() {
+    /// "Shared it" selects the tile and reveals the Given-to row; nothing is removed until Done.
+    func testSharedItWithoutListingNeedsDone() {
         let app = launch()
         openRemove(app, item: "item-eggs")
-        XCTAssertFalse(app.any(RemoveArgs.recipient).exists)
-        XCTAssertTrue(app.any(FID.outcome("donated")).label.contains("Gave it away"))
+        XCTAssertFalse(app.any(RemoveArgs.recipient).exists, "remove.recipient was deleted in the polish")
+        XCTAssertFalse(app.any(FID.outcome("donated")).label.contains("Gave"), "relabelled to Shared it")
+        XCTAssertEqual(app.any(FID.outcome("donated")).label, "Shared it")
+        XCTAssertFalse(app.any("remove.given").exists, "Given to appears only after Shared it is picked")
         app.any(FID.outcome("donated")).tap()
+        XCTAssertTrue(app.any("remove.given").waitForExistence(timeout: 3))
+        XCTAssertTrue(app.fridgeRow("item-eggs").exists, "choosing Shared it must not remove yet")
+        XCTAssertEqual(app.any("remove.given.menu").value as? String, "Someone not on BiteDown")
+        app.buttons["remove.done"].tap()
         assertRowGoneAndToast(app, item: "item-eggs", name: "Eggs")
     }
 
-    /// Claimed open listing (spinach → Marcus): a static, non-interactive line names the claimer.
-    /// The app sends no recipient_id (the server credits the claimer); that is covered by the
-    /// sheet code (`RemoveChoice(outcome:)`) and `RemoveRequestShapeTests.testDonatedWithoutRecipientOmitsKey`.
-    func testGaveAwayWithClaimedListingShowsClaimerLine() {
+    /// Claimed open listing (spinach → Marcus): the Given-to menu defaults to the claimer.
+    func testSharedItWithClaimedListingDefaultsToClaimer() {
         let app = launch(RemoveArgs.listingSeed + [RemoveArgs.recordHaptics])
         openRemove(app, item: "item-spinach")
-        let line = app.any(RemoveArgs.recipient)
-        XCTAssertTrue(line.waitForExistence(timeout: 2), "claimer line missing")
-        XCTAssertTrue(line.label.contains("Marcus Ojeda"), line.label)
-        XCTAssertNotEqual(line.elementType, .button, "the claimer line is static, not a control")
-        XCTAssertFalse(line.isSelected)
-        XCTAssertFalse(app.any("remove.recipient.other").exists)
-        XCTAssertFalse(app.any("remove.recipient.user-marcus").exists)
-        let hint = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Closes your Share listing'")).firstMatch
-        XCTAssertTrue(hint.exists || app.any(FID.outcome("donated")).debugDescription.contains("Closes your Share listing"),
-                      "Gave away subtitle should mention the Share listing")
-        attachScreenshot(app, name: "remove-sheet-listing")
+        XCTAssertFalse(app.any(RemoveArgs.recipient).exists)
         app.any(FID.outcome("donated")).tap()
+        let menu = app.any("remove.given.menu")
+        XCTAssertTrue(menu.waitForExistence(timeout: 3), "Given to menu missing")
+        let value = menu.value as? String ?? ""
+        XCTAssertTrue(value.contains("Marcus Ojeda"), value)
+        XCTAssertFalse(value.contains("claimed it"), "round 3 dropped the (claimed it) suffix: \(value)")
+        attachScreenshot(app, name: "remove-sheet-shared-claimed")
+        app.buttons["remove.done"].tap()
         assertRowGoneAndToast(app, item: "item-spinach", name: "spinach")
-        XCTAssertEqual(haptics(app), ["success"], "donated → .success only, got \(haptics(app))")
+        XCTAssertEqual(haptics(app).filter { $0 == "success" }.count, 1, "exactly one success haptic: \(haptics(app))")
     }
 
-    /// Open listing without a claimer (carrots): no recipient UI at all.
-    func testGaveAwayUnclaimedListingShowsNoRecipient() {
+    /// Open listing without a claimer (carrots): defaults to Someone not on BiteDown.
+    func testSharedItWithUnclaimedListingDefaultsToNobody() {
         let app = launch()
         openRemove(app, item: "item-carrots")
-        XCTAssertFalse(app.any(RemoveArgs.recipient).exists, "no claimer: no recipient line")
         app.any(FID.outcome("donated")).tap()
+        XCTAssertTrue(app.any("remove.given.menu").waitForExistence(timeout: 3))
+        XCTAssertEqual(app.any("remove.given.menu").value as? String, "Someone not on BiteDown")
+        app.buttons["remove.done"].tap()
         assertRowGoneAndToast(app, item: "item-carrots", name: "Carrots")
     }
 

@@ -173,8 +173,9 @@ extension LiveAPIClient {
 
     // MARK: People
 
-    func reachablePeople() async throws -> [Person] {
-        let r: PeopleResponse = try await send("GET", "/people/reachable", body: noBody())
+    func reachablePeople(itemId: String?) async throws -> [Person] {
+        let query = itemId.map { [URLQueryItem(name: "item_id", value: $0)] } ?? []
+        let r: PeopleResponse = try await send("GET", "/people/reachable", query: query, body: noBody())
         return r.people
     }
 }

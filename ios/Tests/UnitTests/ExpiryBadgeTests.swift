@@ -22,9 +22,9 @@ final class ExpiryBadgeTests: XCTestCase {
         let c = cal("America/Chicago")
         let now = date(2026, 10, 10, 14, 30, c)
         XCTAssertEqual(badge((2026, 10, 10), now: now, c)?.text, "Today")
-        XCTAssertEqual(badge((2026, 10, 11), now: now, c)?.text, "1 day")
-        XCTAssertEqual(badge((2026, 10, 12), now: now, c)?.text, "2 days")
-        XCTAssertEqual(badge((2026, 10, 24), now: now, c)?.text, "14 days")
+        XCTAssertEqual(badge((2026, 10, 11), now: now, c)?.text, "Tomorrow")
+        XCTAssertEqual(badge((2026, 10, 12), now: now, c)?.text, "1–2 days")
+        XCTAssertEqual(badge((2026, 10, 24), now: now, c)?.text, "1–2 weeks")
         XCTAssertEqual(badge((2026, 10, 9), now: now, c)?.text, "Expired")
         XCTAssertEqual(badge((2026, 9, 1), now: now, c)?.text, "Expired")
     }
@@ -51,13 +51,15 @@ final class ExpiryBadgeTests: XCTestCase {
     func testFreshDoesNotChangeBadge() {
         let c = cal("America/Chicago")
         let now = date(2026, 10, 10, 9, 0, c)
-        XCTAssertEqual(badge((2026, 10, 15), now: now, c, freshness: .fresh)?.text, "5 days")
+        XCTAssertEqual(badge((2026, 10, 15), now: now, c, freshness: .fresh)?.text, "4–5 days")
     }
 
-    func testSpoiledShowsCheck() {
+    func testSpoiledShowsLooksOff() {
         let c = cal("America/Chicago")
         let now = date(2026, 10, 10, 9, 0, c)
-        XCTAssertEqual(badge((2026, 10, 20), now: now, c, freshness: .spoiled)?.text, "Check")
+        XCTAssertEqual(badge((2026, 10, 20), now: now, c, freshness: .spoiled)?.text, "Looks off")
+        XCTAssertEqual(badge((2026, 10, 20), now: now, c, freshness: .spoiled)?.style, .urgent)
+        XCTAssertNotEqual(badge((2026, 10, 20), now: now, c, freshness: .spoiled)?.text, "Check", "renamed in round 3")
     }
 
     func testNoExpiry() {
@@ -72,7 +74,7 @@ final class ExpiryBadgeTests: XCTestCase {
         let expiry = date(2026, 10, 11, 0, 0, c)
         let before = date(2026, 10, 10, 23, 59, c)
         let after = date(2026, 10, 11, 0, 1, c)
-        XCTAssertEqual(ExpiryBadgeModel.make(expiry: expiry, freshness: nil, now: before, calendar: c)?.text, "1 day")
+        XCTAssertEqual(ExpiryBadgeModel.make(expiry: expiry, freshness: nil, now: before, calendar: c)?.text, "Tomorrow")
         XCTAssertEqual(ExpiryBadgeModel.make(expiry: expiry, freshness: nil, now: after, calendar: c)?.text, "Today")
         let next = date(2026, 10, 12, 0, 1, c)
         XCTAssertEqual(ExpiryBadgeModel.make(expiry: expiry, freshness: nil, now: next, calendar: c)?.text, "Expired")
@@ -94,22 +96,78 @@ final class ExpiryBadgeTests: XCTestCase {
     func testDaylightSavingBoundaryStillCountsCalendarDays() {
         let c = cal("America/Chicago") // DST ends 2026-11-01
         let now = date(2026, 10, 31, 12, 0, c)
-        XCTAssertEqual(badge((2026, 11, 2), now: now, c)?.text, "2 days")
-        XCTAssertEqual(badge((2026, 11, 1), now: now, c)?.text, "1 day")
+        XCTAssertEqual(badge((2026, 11, 2), now: now, c)?.text, "1–2 days")
+        XCTAssertEqual(badge((2026, 11, 1), now: now, c)?.text, "Tomorrow")
     }
 
     func testAPIDateOnlyParsesToLocalMidnightSoBadgeMatches() throws {
         let c = cal("America/Chicago")
         let expiry = try XCTUnwrap(APIDate.parse("2026-10-12", calendar: c))
         let now = date(2026, 10, 10, 22, 0, c)
-        XCTAssertEqual(ExpiryBadgeModel.make(expiry: expiry, freshness: nil, now: now, calendar: c)?.text, "2 days")
+        XCTAssertEqual(ExpiryBadgeModel.make(expiry: expiry, freshness: nil, now: now, calendar: c)?.text, "1–2 days")
     }
 
     func testAccessibilityText() {
-        XCTAssertEqual(ExpiryBadgeModel(text: "Today", style: .urgent).accessibilityText, "Expires today")
-        XCTAssertEqual(ExpiryBadgeModel(text: "3 days", style: .later).accessibilityText, "Expires in 3 days")
-        XCTAssertEqual(ExpiryBadgeModel(text: "Expired", style: .urgent).accessibilityText, "Expired")
-        XCTAssertEqual(ExpiryBadgeModel(text: "Use soon", style: .useSoon).accessibilityText, "Use soon")
-        XCTAssertEqual(ExpiryBadgeModel(text: "Check", style: .urgent).accessibilityText, "Check, looks spoiled")
+        XCTAssertEqual(ExpiryBadgeModel(kind: .today).accessibilityText, "Expires today")
+        XCTAssertEqual(ExpiryBadgeModel(kind: .tomorrow).accessibilityText, "Expires tomorrow")
+        XCTAssertEqual(ExpiryBadgeModel(kind: .exactDays(3)).accessibilityText, "Expires in 3 days")
+        XCTAssertEqual(ExpiryBadgeModel(kind: .expired).accessibilityText, "Expired")
+        XCTAssertEqual(ExpiryBadgeModel(kind: .useSoon).accessibilityText, "Use soon")
+        XCTAssertTrue(ExpiryBadgeModel(kind: .looksOff).accessibilityText.hasPrefix("Looks off"))
+        let range = ExpiryBadgeModel(kind: .estimated(days: 3)).accessibilityText
+        XCTAssertFalse(range.contains("–"), "VoiceOver must not read an en dash: \(range)")
+        XCTAssertTrue(range.contains("2 to 3 days"), range)
+    }
+
+    // MARK: Fridge polish: estimated ranges
+
+    func testEstimatedRangeVocabularyAcrossBoundaries() {
+        let c = cal("America/Chicago")
+        let now = date(2026, 10, 10, 9, 0, c)
+        func text(_ days: Int) -> String? {
+            let e = c.date(byAdding: .day, value: days, to: c.startOfDay(for: now))!
+            return ExpiryBadgeModel.make(expiry: e, freshness: nil, now: now, calendar: c)?.text
+        }
+        XCTAssertEqual(text(3), "2–3 days")
+        XCTAssertEqual(text(7), "6–7 days")
+        XCTAssertEqual(text(8), "1–2 weeks")
+        XCTAssertEqual(text(14), "1–2 weeks")
+        XCTAssertEqual(text(15), "2–3 weeks")
+        XCTAssertEqual(text(21), "2–3 weeks")
+        XCTAssertEqual(text(22), "3+ weeks")
+        XCTAssertEqual(text(400), "3+ weeks")
+        for d in 2...60 {
+            let t = try! XCTUnwrap(text(d))
+            XCTAssertFalse(t.contains(" day ") || t == "1 day", "day \(d): \(t)")
+            XCTAssertFalse(t.isEmpty)
+        }
+    }
+
+    /// A date the person typed is exact; only estimates become ranges.
+    func testUserEnteredDateStaysExact() {
+        let c = cal("America/Chicago")
+        let now = date(2026, 10, 10, 9, 0, c)
+        let e = date(2026, 10, 15, 0, 0, c)
+        XCTAssertEqual(ExpiryBadgeModel.make(expiry: e, freshness: nil, estimated: false, now: now, calendar: c)?.text, "5 days")
+        XCTAssertEqual(ExpiryBadgeModel.make(expiry: e, freshness: nil, estimated: true, now: now, calendar: c)?.text, "4–5 days")
+    }
+
+    func testOnePerRowStatusPriority() {
+        let c = cal("America/Chicago")
+        let now = date(2026, 10, 10, 9, 0, c)
+        // Looks off beats expired; expired beats use soon.
+        XCTAssertEqual(badge((2026, 10, 1), now: now, c, freshness: .spoiled)?.text, "Looks off")
+        XCTAssertEqual(badge((2026, 10, 1), now: now, c, freshness: .semiFresh)?.text, "Expired")
+        XCTAssertEqual(badge((2026, 10, 11), now: now, c, freshness: .semiFresh)?.text, "Tomorrow")
+        XCTAssertEqual(badge((2026, 10, 30), now: now, c, freshness: .semiFresh)?.text, "Use soon")
+    }
+
+    func testSpokenPhraseNeverUsesTheDisplayDash() {
+        for k: ExpiryBadgeModel.Kind in [.looksOff, .expired, .today, .tomorrow, .useSoon, .exactDays(4),
+                                         .estimated(days: 3), .estimated(days: 10), .estimated(days: 30)] {
+            let m = ExpiryBadgeModel(kind: k)
+            XCTAssertFalse(m.accessibilityText.contains("–"), "\(k)")
+            XCTAssertFalse(m.phrase.isEmpty)
+        }
     }
 }

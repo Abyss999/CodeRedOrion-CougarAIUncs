@@ -32,6 +32,7 @@ import Foundation
 /// - `-UITestClaimConflict`   claiming a listing fails with 409 `already_claimed`
 /// - `-UITestEmailUnknown`    adding a friend fails with 404 `not_found` (unknown email)
 /// - `-UITestFailBatch`       `remove-batch` and `restore-batch` fail (network error)
+/// - `-UITestFailPeople`      `GET /people/reachable` fails (the Given-to menu falls back to its defaults)
 /// - `-UITestFailShare`       `POST /share` fails (network error)
 /// - `-UITestOpenImpact`     present ImpactView full screen from RootTabView on launch (until Home links to it)
 /// - `-UITestImpactFailOnce` the first `GET /impact` fails (network), the retry succeeds
@@ -74,6 +75,7 @@ struct LaunchConfiguration: Equatable, Sendable {
     var impactFailOnce = false
     var failSocial = false
     var failFulfil = false
+    var failPeople = false
     /// `-UITestUndoWindow <seconds>`; nil keeps `UndoToastTiming`.
     var undoWindow: Duration?
 
@@ -115,6 +117,7 @@ struct LaunchConfiguration: Equatable, Sendable {
     static let flagFailShare = "-UITestFailShare"
     static let flagOpenImpact = "-UITestOpenImpact"
     static let flagImpactFailOnce = "-UITestImpactFailOnce"
+    static let flagFailPeople = "-UITestFailPeople"
     static let flagUndoWindow = "-UITestUndoWindow"
     /// Effectively "never" for `-UITestLoadingForever`.
     static let foreverDelay: Duration = .seconds(3600)
@@ -156,6 +159,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         impactFailOnce = arguments.contains(Self.flagImpactFailOnce)
         failSocial = arguments.contains(Self.flagFailSocial)
         failFulfil = arguments.contains(Self.flagFailFulfil)
+        failPeople = arguments.contains(Self.flagFailPeople)
         if signedOut { signedIn = false }
         if expiredSession { signedIn = true }
         if let i = arguments.firstIndex(of: Self.flagUndoWindow), arguments.indices.contains(i + 1),
@@ -168,7 +172,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         // Seeding or signing in only makes sense against the mock.
         if seed != nil || signedIn || failNetwork || slowNetwork || loadingForever || failList || failListOnce
             || failRemove || failRestore || restoreNotRemoved || slowRemove || slowRestore
-            || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails || receiptUnavailable || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare || impactFailOnce || failSocial || failFulfil || micDenied { useMockAPI = true }
+            || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails || receiptUnavailable || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare || impactFailOnce || failSocial || failFulfil || micDenied || failPeople { useMockAPI = true }
     }
 
     /// Parsed from the process arguments in DEBUG; always empty in Release.
@@ -217,6 +221,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         if failSocial { for k in ["listRequests", "listMyRequests", "listShares"] { b.failures[k] = offline } }
         if failFulfil { b.failures["fulfilRequest"] = offline; b.failures["createRequest"] = offline }
         if loadingForever { for k in ["listRequests", "listMyRequests", "listShares"] { b.delays[k] = Self.foreverDelay } }
+        if failPeople { b.failures["reachablePeople"] = offline }
         return b
     }
 }

@@ -101,7 +101,7 @@ extension MockData {
 
         let people = [
             Person(id: marcusFull.id, displayName: "Marcus Ojeda", kind: .friend,
-                   groups: [GroupRef(id: moody.id, name: moody.name)], isClaimer: true),
+                   groups: [GroupRef(id: moody.id, name: moody.name)], isClaimer: false),
             Person(id: ana.id, displayName: "Ana Reyes", kind: .friend, groups: [GroupRef(id: moody.id, name: moody.name)], isClaimer: false),
             Person(id: devon.id, displayName: "Devon Park", kind: .groupMember,
                    groups: [GroupRef(id: moody.id, name: moody.name), GroupRef(id: ccs.id, name: ccs.name)], isClaimer: false),
