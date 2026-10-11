@@ -12,7 +12,9 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
   dependency.
 - Any change to architecture, endpoints, schema, setup or the ML data contract updates `docs/` in
   the same PR.
-- Update `HANDOFF.md` at the end of every work session.
+- Update `HANDOFF.md` and the affected `docs/` at every checkpoint (a PR merged, a QA verdict, a ruling,
+  a milestone) and at the end of every work session. Status, the in-flight table, next steps and QA status
+  must match what's merged, so a fresh session can pick up from `HANDOFF.md` alone.
 - Feature branches and PRs into `main` only. Never push to `main`. Small commits with clear
   messages.
 - Verify before claiming done: run the code, hit the endpoint, build the app. A builder's own

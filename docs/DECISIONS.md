@@ -2,6 +2,9 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — gunicorn gthread (#63)
+- **The API container runs one `gthread` worker with 4 threads** (`GUNICORN_THREADS`, default 4; `--timeout 120`, `--graceful-timeout 30`). A slow Gemini call no longer blocks other requests, and the in-process recipe cache stays shared (lock-guarded). *Why not several processes:* the cache is per process and there is no Redis. This closes the follow-up noted under "Backend wave 2 rulings".
+
 ## 2026-10-11 — Multi-audience requests and tips (#66)
 - **A request targets `audiences {friends, group_ids}`** (at least one, ≤ 50 groups) through the `request_audiences` join table. One note shows on every chosen board. `requests.group_id` is dropped after the backfill in migration 0006. The legacy `group_id` body field is accepted for one release (deprecated, keeping its old 403); sending both → 400; an audiences group you're not in → 404.
 - **You only see the audiences you belong to.** The others are counted (`hidden_count`), never named, so group names can't leak.
