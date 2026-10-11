@@ -40,7 +40,7 @@ def image_cells(root: Path, split: str, p: Path):
     cls = [int(l.split()[0]) for l in (root / "labels" / split / f"{stem}.txt").read_text().splitlines() if l.strip()]
     fr = [int(x) for x in (root / "freshness" / split / f"{stem}.txt").read_text().split()]
     names = json.loads((root / "class_names.json").read_text())
-    return {(names[str(c)], "spoiled" if f else "fresh") for c, f in zip(cls, fr)}
+    return {(names[str(c)], {0: "fresh", 1: "spoiled", 2: "semi_fresh"}[f]) for c, f in zip(cls, fr)}
 
 
 def check(root: Path) -> dict:
@@ -134,7 +134,7 @@ def box_cells(root: Path):
             cls = [int(l.split()[0]) for l in lf.read_text().splitlines() if l.strip()]
             fr = [int(x) for x in ff.read_text().split()]
             for c, f in zip(cls, fr):
-                out[(names[str(c)], "spoiled" if f else "fresh")][sp] += 1
+                out[(names[str(c)], {0: "fresh", 1: "spoiled", 2: "semi_fresh"}[f])][sp] += 1
     return out
 
 

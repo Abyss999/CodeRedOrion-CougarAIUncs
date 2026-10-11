@@ -25,12 +25,12 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-SOURCES = ("fresh_stale_fruits_veg", "fridge_objects", "hien_fridge", "vegqual")
+SOURCES = ("agrifreshnet", "fresh_stale_fruits_veg", "fridge_objects", "hien_fridge", "vegqual")
 SPLITS = ("train", "val", "heldout")
 PHASH_T = 6
 
 _EPOCH = re.compile(r"(?<!\d)(1[4-9]\d{11})(?!\d)")                       # 13-digit epoch ms (2014-2033)
-_COMPACT = re.compile(r"(?<!\d)(20\d{6})[_-]?([0-2]\d[0-5]\d[0-5]\d)(?!\d)")  # IMG_20200727_223202
+_COMPACT = re.compile(r"(?<!\d)(20\d{6})[_-]?([0-2]\d[0-5]\d[0-5]\d)(?:\d{3})?(?!\d)")  # IMG_20200727_223202
 _SHOT = re.compile(r"(20\d\d-\d\d-\d\d)_at_(\d{1,2})[_.](\d\d)[_.](\d\d)(?:_(AM|PM))?")  # Screen_Shot_2020-07-29_at_8_31_22_PM
 
 

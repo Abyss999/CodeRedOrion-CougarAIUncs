@@ -498,3 +498,136 @@ Method: executed the notebook's own code (cell 1 helper functions, cell 4 restor
 - Notebook is valid JSON (all code cells still parse); `ml/yolo` tests 35 passed.
 
 **Final verdict for #33: PASS.** (Open, accepted: a same-size bit flip inside the tar is not detected by the stamp.)
+
+# 2026-10-10 (evening) - ML QA for PR A2 (`feat/semi-fresh-data`, draft #31): AgriFreshNET as 5th source
+
+Tools (mine, `ml/eval/`): `leakage_check.py` (AgriFreshNET added to `SOURCES`; the compact-timestamp regex accepts the 3 millisecond digits of `IMG_YYYYMMDD_HHMMSSmmm`, which the first build's grouping missed); `stratification_check.py` is main's #27 version plus one change (freshness codes 0/1/2 map to fresh/spoiled/semi_fresh; it used to count code 2 as spoiled); **new `variant_dup_check.py`** (pHash of the 8 dihedral variants, min distance; held-out to train+val, val to train, within-set augmentation rate, specimen components) with `tests/test_variant_dup_check.py` (flip / rot90 / rot270 / flip+rot90 copies are caught; 5 cases, run by hand in qa-venv because venv-ml has no `imagehash`, so they skip in venv-ml). Hashing ran only while no `prepare_dataset` was running. **The dataset moved under me four times** (fwr_data_a2 built 19:35, 19:46, 19:51, 19:55; then fwr_data_a2b at 20:05); I re-ran every check on each build. **Final verdict is on `fwr_data_a2b`.**
+
+## Build history (what the earlier builds got wrong, kept as the "before")
+| build | finding |
+|---|---|
+| a2 #1 (spec grouping only, 13,879 AgriFreshNET originals) | **ML-21 FAIL on AgriFreshNET: 884 / 1,157 timestamped held-out images (76%) within 60 s of a train/val image, 887 within 300 s, min gap 0 s.** Cause: grouping was by pHash specimen, never by time, and `parse_capture_time` ignored milliseconds. Same original photo (same stamp, different `spec_` id) in train and held-out for 35 stems. Also **potato/spoiled train 6 / val 74 / held-out 123 images** (train not the majority) and papaya/semi_fresh forced all-to-train. |
+| a2 #2 | potato/spoiled recut (train 133); time leak unchanged (887 within 300 s). |
+| a2 #3 (session grouping across classes, 13,848 AgriFreshNET, aug_ copies still in) | ML-21 PASS (0 within 300 s, min gap 383 s, pHash 0.58%); stratification PASS. Variant-aware: **92.4% of AgriFreshNET images have a <= 6 near-duplicate (any split)**, 38 such pairs straddle splits. Cross-stage same-class <= 6: 4.9% vs 2.8% same-stage (held-out). |
+| **a2b (final)** | below |
+
+## fwr_data_a2b: per area
+**1. Specimen grouping: PASS with caveats (cross-stage overlap is measured, not gated, per ruling A).**
+- `aug_` files: **none.** All 4,754 staged AgriFreshNET files were checked by MD5 against the zip: 0 are only available under an `aug_` name (13 share bytes with an `aug_` name but also with an original). 4,674 AgriFreshNET originals reach the dataset.
+- Cap (300 per class x freshness, ruling B): 24 cells, **max 298, min 45** (cucumber spoiled 45 and papaya semi_fresh 48 have fewer non-augmented files than the cap; bitter_melon semi 101, orange fresh 114, papaya fresh 114, pineapple semi 119 follow). 0 cells at exactly 300 (the 300 cap was applied before the pHash purge and the splits). Spread (my time-session count per cell, which includes every source in the cell): orange/semi_fresh 128 sessions, pineapple/semi_fresh 67, eggplant/semi_fresh 29, tomato/semi_fresh 22, banana/semi_fresh 10, bitter_melon/semi_fresh 9, cucumber/semi_fresh 8, papaya/semi_fresh 6. I did not verify the round-robin order itself, only that each cell spans several sessions and all three splits.
+- Share of train: AgriFreshNET 3,539 of 10,385 (34.1%, down from about 60%).
+- Augmentation duplicates: **within-set <= 6 variant rate 27.4%** (was 92.4% with aug_ copies in), 123 pairs straddle splits (see gate below); fridge_objects 5.6%, Kaggle 26.6%, hien_fridge 67.6% (same fixed fridge; all in-split, 0 straddle), vegqual 89.4% (stem-group series, 0 straddle).
+- **Cross-stage specimen overlap (held-out and val vs train; same class; dihedral min distance):**
+
+| | held-out <= 6 | <= 8 | <= 10 | val <= 6 | <= 8 | <= 10 |
+|---|---|---|---|---|---|---|
+| same class, any stage | 4.7% | 25.6% | 49.8% | 4.2% | 20.1% | 41.4% |
+| same class, **other stage** than the query | 2.5% | 14.5% | 33.2% | 2.8% | 10.0% | 27.1% |
+| same class, same stage | 2.7% | 17.4% | 39.3% | 2.2% | 14.5% | 31.5% |
+| **different class (noise floor)** | 3.8% | 18.6% | 49.9% | 5.0% | 20.9% | 46.4% |
+
+  The noise floor is as high as the same-class rate: at <= 10 pHash on this cloth-on-white background cannot tell a specimen from any other round fruit, so the "<= 10 across stages" figure is **saturated and not usable as an overlap rate** (it is what made the builder's giant components). The honest reading is that cross-stage overlap is **not detectable above noise** at the pHash level after the aug_ copies were removed (a2 #3 was 4.9% other-stage vs 4.3% floor, with the aug_ copies in). I eyeballed 8 same-class d <= 6 pairs and 8 d = 8 cross-stage pairs from a2b (side by side): **1 or 2 of 16 plausibly the same physical item** (a decaying bitter melon with the same curly stem, held-out rotten vs train semi); the rest are different specimens of the same produce (different tomatoes, different melons). The same exercise on a2 #1/#3 gave roughly half of pairs that look like the same specimen at two ages (papayas with the same ridge, an orange with identical dimples, a banana, a cucumber), so the aug_ exclusion and the cap did remove most of it. **Residual risk, not zero:** WhatsApp-named (`IMG-YYYYMMDD-WAnnnn`) and `Banana_3`-style files have no parseable time and fall back to pHash components at 4 to 8, which cannot link a fresh and a rotten photo of one item. Label every AgriFreshNET and semi_fresh metric "cross-stage specimen overlap possible".
+
+**2. Leakage (ML-21), per source, a2b: PASS on the QA.md criterion as measured by `leakage_check.py`; the literal dihedral-variant gate does NOT pass (see ML-40).**
+
+| source | held-out | with ts | within 60 s | within 300 s | min gap | pHash <= 6 (identity) | dHash (info) | **variant pHash <= 6** (held-out to train+val) | val to train |
+|---|---|---|---|---|---|---|---|---|---|
+| agrifreshnet | 633 | 398 | 0 | **0** | 383 s | 6 = **0.95%** (<= 1%) | 4.9% | **47 = 7.4%** | 8.6% |
+| fresh_stale_fruits_veg | 313 | 199 | 0 | 0 | 7,651 s | 0 | 3.8% | 17 = 5.4% | 6.8% |
+| fridge_objects | 114 | 1 | 0 | 0 | n/a | 0 | 3.5% | 0 | 0 |
+| hien_fridge | 180 | 0 | 0 | 0 | n/a | 0 | 45.6% (same fridge, see ML-27) | 0 | 0 |
+| vegqual | 216 | 216 | 0 | 0 | 312 s | 0 | 2.8% | 0 | 0 |
+
+  The identity-hash AgriFreshNET margin is **0.95% against a 1% limit** (6 of 633), one image from failing. The variant gate (min over 8 dihedral variants, which makes 8 chances per pair) fails on AgriFreshNET and Kaggle. Cause: false positives from near-uniform backgrounds. In a2b the same-class rate at d <= 6 is 4.7% against 3.8% for different classes (a tomato "matching" a bitter melon is a false positive by construction), and 6 of the 8 same-class pairs I viewed were different objects. Kaggle's flags are the black 45-degree rotation padding (corners dominate the hash): of 8 pairs viewed on a2, about 5 were a green pepper vs a red tomato and 1 to 2 were the same pepper at two ages. I do **not** call this leakage, but I also cannot make the literal ruling pass; **orchestrator to rule** whether the variant gate should be same-class-only and/or computed on the central crop (ML-40). Within-set, 123 variant pairs <= 6 straddle splits for AgriFreshNET; I did not split these into same-class and cross-class, so treat them as an upper bound.
+
+**3. semi_fresh (informational only, no gate). PASS (nothing held-out-only; one cell is thin).** images train / val / held-out (a2b), my own counts from disk and agreeing with the report:
+
+| class/semi_fresh | train | val | held-out | sessions |
+|---|---|---|---|---|
+| banana | 154 | 21 | 17 | 10 |
+| bitter_melon | 63 | 9 | 29 | 9 |
+| cucumber | 206 | 6 | 11 | 8 |
+| eggplant | 232 | 11 | 11 | 29 |
+| orange | 217 | 41 | 40 | 128 |
+| papaya | 29 | 2 | 17 | 6 |
+| pineapple | 90 | 18 | 11 | 67 |
+| tomato | 212 | 38 | 37 | 22 |
+
+  No semi cell is held-out-only or val-only; every one has train. All 8 are "required" under the ruling (>= 10 images and >= 2 units) and all 8 have held-out images, so all are measurable, but five of them have <= 17 held-out images (banana 17, cucumber 11, eggplant 11, pineapple 11, papaya 17; papaya is also train-poor at 29): the precision/recall will be noisy. On the discarded a2 #3 (aug_ copies in) these cells were about 3 to 5 times larger; dropping aug_ copies and the cap is why they are small.
+
+**4. Class mapping: PASS.** Not 20 but **all 4,674 AgriFreshNET originals**: each a2b image was matched to its staged file and then, by MD5, to its zip member; folder label to (class, freshness) was recomputed independently (`Fresh/Semi fresh/Semi_Fresh/Rotten` to fresh/semi_fresh/spoiled, `Bittermelon` to bitter_melon, cucumber maps to the existing `cucumber` class) and compared with the label file and the freshness sidecar: **4,674 / 4,674 correct** (also 13,879 / 13,879 on the earlier a2). Sidecar codes in the AgriFreshNET files (including synthetic copies) are exactly **{0, 1, 2}** (1,901 / 2,119 / 1,860). `class_names.json` has 21 ids (papaya 18, pineapple 19, bitter_melon 20 appended).
+
+**5. ML-16 confound: still open, now partly mitigated.** Fresh AND spoiled come from AgriFreshNET plus another source for **banana (Kaggle), eggplant (VegQual), orange (Kaggle), tomato (VegQual, Kaggle, fridge_objects fresh_assumed)**. **semi_fresh comes only from AgriFreshNET for all 8 classes.** AgriFreshNET is the *only* source of fresh/spoiled for **bitter_melon, cucumber, papaya and pineapple**, so "spoiled" for those four is fully confounded with the source. Spoiled from one source only: pineapple, papaya, bitter_melon, cucumber (AgriFreshNET), apple (Kaggle), onion, potato (VegQual). No spoiled at all: lemon, butter, bacon, yogurt, milk, avocado, egg, cheese, soda. The binary YOLO gates therefore still can only be claimed per source, and any AgriFreshNET-only class is a studio-cloth domain.
+
+**6. Licence and attribution: PASS.** CC BY 4.0, DOI 10.17632/42m5tb7yv9.1, authors, URL: in `pipeline/ingestion/agrifreshnet.py` (header + `LICENCE`, `URL`, `DOI`, `CITATION`), `docs/ML.md` (Attributions, and the sources table) and `docs/PIPELINE.md` (table + Attributions). `sources.json` has licence and url.
+
+**7. Suites (rebased head): PASS.** venv-ml, from `ml/`: serve 14, ocr 89, yolo 56 (includes `test_capture_time.py`); `ml/eval/tests` from the root 138 passed, 1 skipped; pipeline CI command 164 passed, 2 skipped. **The 3 failures known from #27 are gone after the rebase** (I saw them on the pre-rebase tree: `test_no_group_straddles_splits`, `test_prepare_semi_fresh_class`, `test_variants_labels_and_counts`, empty val split). **Parser parity test** (`ml/yolo/tests/test_capture_time.py`) passes: 14 formats parsed by both parsers (including the millisecond forms), 5 non-time names ignored by both, and the gaps agree. It imports my `leakage_check.stamp`; it covers the regex change I made, so a future edit there must keep it green. Note both parsers still ignore `IMG-YYYYMMDD-WAnnnn`.
+
+**8. Secret scan: clean** (only `FAKE_KEY = "AIzaSy-FAKE-KEY..."` in `backend/tests/test_gemini_usage.py`, a test sentinel).
+
+**Stratification (main's checker + my 3-class fix): PASS, FAILURES none**, report-vs-manifest 0 mismatches. Not measurable: onion/fresh and onion/spoiled (one session, 234 / 177 images). Required cells with no val image: apple/spoiled, potato/fresh, potato/spoiled (info). Cells that rely on pooling rather than 2 sessions of >= 10: avocado, bacon, butter, cheese, lemon fresh, orange/spoiled, pineapple fresh/semi/spoiled (they have many tiny sessions; the pool rule counts them). No cell is present only outside train. potato/spoiled train is 133 of 207 images (64%).
+
+## Bugs (ML-38..41; renumbered from QA's ML-33..36, which collided with #33's IDs)
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-38 | **high** | a2 #1/#2: AgriFreshNET held-out images within 300 s of train/val images (887 of 1,524 timestamped, min gap 0 s): specimen grouping ignores capture time and `parse_capture_time` ignored `IMG_..._HHMMSSmmm`. 35 original photo stems also straddled splits | **fixed in a2b** (0 within 300 s; parser parity test) |
+| ML-39 | high | a2 #1: potato/spoiled train 6 / val 74 / held-out 123 images (train minority, model effectively untrained on it), papaya/semi_fresh sent all to train as "not measurable" despite 6 sessions | **fixed in a2b** (train 133 / val 0 / held-out 74; papaya semi measurable) |
+| ML-40 | medium | The literal dihedral-variant pHash <= 6 gate fails on AgriFreshNET (7.4%) and Kaggle (5.4%) even after aug_ removal, because min-over-8-variants on plain / padded backgrounds yields false positives (cross-class floor 3.8%). Identity pHash for AgriFreshNET is 0.95% (limit 1%, thin margin). Needs a ruling: gate on same-class pairs and mask the Kaggle rotation padding, or accept identity hash + this report | **open, orchestrator** |
+| ML-41 | low | semi_fresh held-out cells are small after the cap (11 to 40 images; banana 17, cucumber 11, eggplant 11, pineapple 11, papaya 17), potato fresh/spoiled and apple/spoiled have no val; metrics will be noisy | open (informational) |
+| ML-37 | low | `stratification_check.py` (main) counted freshness code 2 (semi_fresh) as spoiled, merging semi into spoiled cells | **fixed** (3-class mapping in `ml/eval`) |
+| ML-27 | medium | (unchanged) hien_fridge dHash 45.6%: same fridge, rearranged items | open |
+
+## Verdict (fwr_data_a2b)
+- **Specimen grouping: adequate for training and for informational reporting; not a clean guarantee.** Session grouping across classes removed the time leak; the aug_ exclusion and the cap removed the augmented-copy overlap; what is left is cross-stage specimen overlap on untimestamped (WhatsApp, `Banana_3`) files, which pHash cannot measure above the noise floor, and about 1 in 8 eyeballed borderline pairs looked like one item at two ages. It is **not** adequate on a2 #1/#3 (time leak and aug_ copies).
+- **ML-21 on a2b:** timestamp and identity-pHash criteria **PASS for all 5 sources**; the literal dihedral-variant gate **FAIL** for AgriFreshNET (7.4%) and Kaggle (5.4%) on false positives (ML-40, needs a ruling). A model trained on a2b may be quoted per source with AgriFreshNET / semi_fresh labelled "cross-stage specimen overlap possible".
+- **PASS:** class mapping, licence, suites, secret scan, stratification (main's check), semi_fresh cells present. **FAIL (pending ruling):** variant-aware gate (ML-40).
+
+# 2026-10-10 (night) - ML QA for PR #31 (`feat/semi-fresh-data`): Colab dry run, semi_fresh training path, ML-40 reporting
+
+Scope: the notebook changes (AgriFreshNET download + ingest, `DRY_RUN`, `make_subset.py`, `SEMI_FRESH_THRESHOLD`, cls assert), the dry-run training path on MPS, the suites, and my own `ml/eval` changes for the ML-40 ruling. Baseline for the notebook diff: **main's notebook predates #33** (no `run_check`, no stamp), so I diffed against the #33 notebook (`wt/colab`, which carries the #33 safety code) as well as against main.
+
+## Part 1: results per item
+| # | Item | Result |
+|---|---|---|
+| 1 | Notebook valid JSON, 7 cells, all code cells parse (with `!`/`%` stubbed). Against #33's notebook the diff is only: `DRY_RUN`, `CACHE_DIR`/`RUN_DIR` split, pipeline requirements, cell 3d, cls assert, `SEMI_FRESH_THRESHOLD`, dry branch of cells 5 and 6. **Nothing from #33 dropped:** `tar` create and extract are `subprocess.run(..., check=True)`; `.part` removed on any exception; archive re-read with `tar_counts` and compared with `dir_counts` before the stamp; stamp (`DRIVE_SHA`) written last; restore re-counts and compares the stamp and the report bytes, invalidating the stamp on mismatch; `run_check` deletes the json, asserts exit 0 and that the json exists; RUN_ID regex `^[A-Za-z0-9][A-Za-z0-9_-]*$`; Drive required. | **PASS** |
+| 2 | Dry-run isolation. `CACHE_DIR = fwr_runs/<RUN_ID>` holds tar, stamp and small copies (shared); `RUN_DIR = CACHE_DIR + "_dry"` only when `DRY_RUN`, and it is the only thing passed to `--project`. Dry checkpoints therefore live in `<RUN_ID>_dry/`; a real run with the same RUN_ID has an empty `<RUN_ID>/det`, so `train_stage` goes "no usable checkpoint -> from scratch" (nothing to skip or resume). The dataset cache is found by the stamp (`DATA_ON_DRIVE`), so a dry run followed by a real run restores from Drive without re-downloading. **The gates (cell 4) are not conditional on `DRY_RUN`**: they run in both modes, on the freshly built or the restored copy, before the dry-run branch of cell 5. Real-mode cell 6 is unchanged. Weakness: ML-44 (`_dry` suffix collision). | **PASS** (ML-44 low) |
+| 3 | The AgriFreshNET cell is inside `else:` of `if DATA_ON_DRIVE` (skipped on restore). The ingest uses `subprocess.run(..., check=True)`; the size assert (> 300 MB; real size 347,828,971) and the SHA-256 `assert` stop the run on a mismatch. The flags are right (`--data-root` before the sub-command, `--specimen-groups --exclude-source-augs --max-per-cell 300 --drop-raw`; `ingest_report.json` is written last, `source.json` before it, the `curation.before/after` keys exist, matching my local a2b staging with 4,754). **But the download itself fails: see ML-42.** The public API does return `sha256_hash` (`6607a48b...`) and the filename `Processed Data.zip` matches. | **FAIL** (ML-42) |
+| 4 | `make_subset.py` on `fwr_data_a2b` (stride 20): two runs give identical stats and an identical symlink set. Subset: train 520, val 63, heldout 197 (of 10,385 / 1,243 / 3,938); cls/train fresh 308 / semi_fresh 61 / spoiled 280, cls/val 19 / 8 / 21 (3 classes in both); detector classes 21 of 21 in train, 20 of 20 in held-out. Every image has its label and freshness file with the same stem; all symlinks resolve; `heldout_gt.jsonl` (197 lines) and `heldout_manifest.csv` (197 rows) match the chosen held-out images exactly; freshness codes in the sidecars equal the `freshness` in the GT lines (0 mismatches of 197); `data.yaml` `path:` rewritten. Scratch dir deleted. | **PASS** |
+| 5 | Dry-run training on MPS (yolo26n + yolo26n-cls from `mldata`, `--epochs 1 --cls-epochs 1 --batch 8 --resume --semi-fresh-threshold 0.4`, `.venv-train`): rc 0 in 55 s; classifier saw 649 train / 48 val images in **3 classes**; export has `detector.pt freshness.pt predictions.jsonl heldout_gt.jsonl heldout_manifest.csv class_names.json dataset_report.json`; **`predictions.jsonl` has 197 lines, 556 predictions: fresh 478, semi_fresh 75, spoiled 3** (the 1-epoch model, so the numbers mean nothing, but the threshold plumbing and the 3-class output work). A second invocation with the same project printed `[det] already finished ... skipping` / `[cls] already finished` and re-exported, as designed. No `train.py` was running before; the 32 MB scratch dir is deleted. | **PASS** |
+| 6 | Suites: `ml/yolo` **60 passed**; `ml/serve` 14; `ml/ocr` 89; `ml/eval/tests` 143 passed, 1 skipped (the variant tests skip without `imagehash`; the 9 of them pass in `.venv-train`); pipeline CI command **164 passed, 2 skipped**. | **PASS** |
+
+## Part 2: ML-40 eval reporting (my code, `ml/eval/`)
+**`variant_dup_check.py` is now report only (always exit 0, no `criterion` field) and the notebook does not call it** (grep: 0 mentions in the notebook; the cell-4 gate is identity pHash <= 6 from `leakage_check.py`).
+- Same-class only: the class comes from the YOLO label files (a pair counts when the two images share a class id; images without labels share the key `?`).
+- Padding: black rotation padding (3 or 4 black corners and 2-60% black pixels) is filled with the mean colour of the rest of the image, then only the **central 80%** is hashed (`--crop`, `--no-mask`). Cache keyed on these settings.
+- Noise floor next to each rate: the nearest different-class image from a random subset of different-class references **the same size** as that query's same-class reference set (seeded), plus the unmatched all-different-class rate, and the excess in points. A same-class rate that is equal to the floor is background similarity, not duplication.
+- Tests (`tests/test_variant_dup_check.py`, 9): flip / rot90 / rot270 / flip+rot90 copies are caught as same-class; unrelated images not; a rotated copy in a different class is not a same-class hit but is the floor; padding masked (2 images) and an ordinary image untouched; crop size; CLI returns 0 on a 100% duplicate.
+
+**Re-run on `fwr_data_a2b` (held-out -> train+val, T = 6, central 80%, padding masked, same class):**
+| source | held-out | same-class <= 6 | different-class floor (size-matched) | floor (all different-class refs) | excess (points) | identity-only same class | padding masked | within-set same-class | within-set pairs straddling splits |
+|---|---|---|---|---|---|---|---|---|---|
+| agrifreshnet | 633 | **4.90% (31)** | 1.11% | 3.63% | **+3.79** | 1.74% | 0 | 17.4% | 79 |
+| fresh_stale_fruits_veg (Kaggle) | 313 | **0.32% (1)** | 0.0% | 0.0% | +0.32 | 0.0% | 1,999 of the source's images | 21.0% | 7 |
+| fridge_objects | 114 | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 11 | 5.8% | 0 |
+| hien_fridge | 180 | 5.56% (10) | 0.0% | 0.0% | +5.56 | 5.56% | 0 | 65.7% | 1 |
+| vegqual | 216 | 1.85% (4) | 0.46% | 1.39% | +1.39 | 1.39% | 13 | 88.7% | 1 |
+- **Kaggle: 5.4% (old, all-class, unmasked) -> 0.32%.** The flags were the rotation padding and cross-class matches, as I said in the a2b verdict (ML-40). Val -> train: Kaggle 1.0% against a floor of 0.0%.
+- **AgriFreshNET is not noise: 4.9% against a size-matched floor of 1.1%** (val -> train 5.0% against 0.4%). I looked at 10 random same-class d <= 6 pairs: 3 look like the same item or the same shot (an orange, a green orange, a tomato from a slightly different angle), 7 are different specimens of the same produce in the same pose on the same cloth. So there is a real, small, same-class residual of roughly 10 held-out images that I cannot call clean, consistent with the "cross-stage specimen overlap possible" label (and the within-set number 17.4% shows how much of the source is still near-duplicate series). It stays reported, not gated, per the ruling. The gate itself is unchanged: identity pHash for AgriFreshNET was 0.95% (6 of 633) on the full image, still one image from the 1% limit; on the central 80% crop the same-class identity-only rate here is 1.74%, which is a different hash, not a gate result.
+- hien_fridge 5.56% is its multi-object fixed-camera scenes (same class set, same fridge; ML-27/ML-32), as before. VegQual 1.85% is mostly stem-group series from the same plant.
+- Raw output: `scratchpad/var2_a2b.json`.
+
+**`detection_metrics.py` (semi_fresh Wilson CIs, information only, no gate):** each class in `freshness_3way` now carries `precision_ci95` and `recall_ci95` (Wilson on tp / n_pred and tp / n_gt, `[None, None]` when the denominator is 0); new `semi_fresh_by_source(...)` gives semi_fresh precision and recall with CIs overall and per source from `--manifest`, real images only (synthetic copies excluded, as for spoiled recall by source); `main` prints both with "NOT a gate". 6 new tests in `test_semi_fresh_eval.py` (hand-computed n = 2 interval 0.0945..0.9055, empty denominator, every class has CIs and the block serialises, per-source with the synthetic copy excluded, CLI prints and `check_thresholds` has no semi_fresh gate). `ml/eval/tests`: 143 passed.
+
+## Bugs (continuing from ML-41)
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| **ML-42** | **high (blocks the Colab run)** | Cell 3d cannot download AgriFreshNET: `urllib.request.urlopen("https://data.mendeley.com/public-api/datasets/42m5tb7yv9")` and `urlretrieve(download_url, ...)` use the default `Python-urllib` User-Agent, and Mendeley's Cloudflare answers **HTTP 403** to both (reproduced from this machine: the API call raises `HTTPError 403`; `curl -A Python-urllib` on the file URL gets 403, `-A Mozilla/5.0` gets a 302 to S3 and a 206 on a Range request). The notebook would stop loudly at cell 3 on the first dry run (so no wrong data, and it costs minutes, not hours), but the one-click run does not work. Colab's IP may be treated differently; do not rely on it. **Fix:** send a browser User-Agent for both calls, e.g. `H = {"User-Agent": "Mozilla/5.0"}`, `json.load(urllib.request.urlopen(urllib.request.Request(api, headers=H)))`, and download with `urllib.request.urlopen(Request(url, headers=H))` streamed to the file (or `!curl -sL -A "Mozilla/5.0" -o ...`). I verified this recipe returns the file metadata and a 206 with `Content-Range: bytes 0-999/347828971`; I did not download the 348 MB file. | **open (builder)** |
+| ML-43 | low | (a) If the API stops publishing `sha256_hash`, `if want:` silently skips verification; make it `assert want`, or print a loud warning, since the size check alone (> 300 MB) is weak. (b) `fl = [...] or meta["files"][:1]` falls back to the first file when `Processed Data.zip` is missing, which could be a different archive; raise instead. (c) The gate cell's final print still says "dihedral-variant gate is pending ML-35"; it is now ML-40, ruled as reported only. (d) `docs/ML.md` line 28 and QA.md may still describe that gate as pending (not my files). | open (builder / orchestrator) |
+| ML-44 | low | `RUN_DIR = CACHE_DIR + "_dry"` collides with a real RUN_ID that itself ends in `_dry` (the regex allows it): a real run with `RUN_ID=x_dry` has `RUN_DIR == fwr_runs/x_dry`, which is the dry-run folder of RUN_ID `x`, so it would see a finished 1-epoch checkpoint and skip training. Reject RUN_IDs ending in `_dry` in the regex cell. | open (builder) |
+| ML-40 | medium | **Resolved by ruling:** variant check is report only, same-class, padding masked, central crop, floor shown (above). | **closed** (implemented in `ml/eval`) |
+| ML-41 | low | semi_fresh cells small; now reported with Wilson CIs (informational). | open (informational) |
+
+## Verdict for #31
+- Items 1, 2, 4, 5, 6 **PASS**; Part 2 (ML-40 reporting, semi_fresh CIs) **done and tested**.
+- Item 3 **FAIL: ML-42.** The dry run cannot start from a clean Colab VM until the download sends a User-Agent. Everything downstream of the download (ingest flags, subset, 3-class training, threshold plumbing, export) works on real data locally.
+- **Overall: NOT READY TO MERGE; PASS conditional on ML-42** (a few-line fix; re-run item 3 after it: the notebook cell can be tested for the API + Range request without downloading the full file). ML-43 and ML-44 are low and can ride along.

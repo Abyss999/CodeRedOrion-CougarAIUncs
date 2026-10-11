@@ -89,7 +89,7 @@ def group_key(src: str, path: Path, series: bool = False) -> str:
 
 # Capture-time patterns found in filenames. SEARCHED (not anchored) so staged names such as
 # '<cls>__IMG_20250101_123456.rf.<sha>' work. Different 'kinds' are different clocks.
-_RX_COMPACT = re.compile(r"(?<!\d)((?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))_?([01]\d|2[0-3])([0-5]\d)([0-5]\d)(?!\d)")
+_RX_COMPACT = re.compile(r"(?<!\d)((?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))[_-]?([01]\d|2[0-3])([0-5]\d)([0-5]\d)(?:\d{3})?(?!\d)")   # optional ms: IMG_20251102_075610660
 _RX_EPOCH_MS = re.compile(r"(?<!\d)(1[4-9]\d{11}|20\d{11})(?!\d)")      # 2014..2033 in ms
 # 'Screen Shot 2018-06-08 at 4.59.36 PM', 'WhatsApp Image 2020-11-07 at 11.35.36 PM' (also sanitised with '_')
 _RX_SCREENSHOT = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})[ _]at[ _](\d{1,2})[._:](\d{2})[._:](\d{2})(?:[ _]*([AP]M))?", re.I)
@@ -862,6 +862,9 @@ def main(argv=None):
                   f"{n}/{fr}" for g in gt if "__low" not in g["image"] and "__warm" not in g["image"]
                   for n, fr in ((lb["name"], lb["freshness"]) for lb in g["labels"])).items())),
               "source_by_split": {k: dict(v) for k, v in src_split.items()},
+              "train_share_by_source": {k: round(v.get("train/images", 0) / max(1, sum(x.get("train/images", 0) for x in src_split.values())), 4)
+                                        for k, v in src_split.items()},
+              "source_curation": {x["name"]: x["curation"] for x in sources if x.get("curation")},
               "dropped_images": dict(drops),
               "empty_label_images": sum(v for k, v in drops.items() if k.endswith(":empty_label_file")),
               "crops": crop_report,

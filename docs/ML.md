@@ -8,15 +8,25 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 **Gate: do not run it until ML QA has re-verified ML-21 on the session-grouped split** (the notebook also stops itself unless
 `dataset_report.json` has `split_grouping: "session"` and `ml/eval/leakage_check.py` reports 0 held-out images within 300 s of a train/val image).
 1. Runtime -> Change runtime type -> **T4 GPU**.
-2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped).
-3. **Runtime -> Run all.** Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted).
-   Cell 1 has a form field `RUN_ID` (default `fwr_YYYYMMDD` = today). Everything for the run lives in `MyDrive/fwr_runs/<RUN_ID>/`.
-   **If you got disconnected: reconnect, keep the same `RUN_ID`, Runtime -> Run all; it resumes from the last epoch on Drive.**
+2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped). AgriFreshNET needs no secret.
+3. **Dry run first.** Cell 1 has a checkbox `DRY_RUN` (**default on**) and the `RUN_ID` field. **Runtime -> Run all** with `DRY_RUN` on: download, prepare, all gates,
+   Drive cache, then **1 epoch on a deterministic 5% subset** (`ml/yolo/make_subset.py`: every 20th file per split / class folder, symlinks; all three freshness
+   classes kept) for detector and classifier, then the export, then it stops with **`DRY RUN OK`** (about 15 min). Its checkpoints go to `MyDrive/fwr_runs/<RUN_ID>_dry/`,
+   so the real run can never resume them. The dataset cache (`<RUN_ID>/fwr_data.tar`) is shared. (Ultralytics' own `fraction=0.05` exists in 8.4.175 but takes the *first*
+   5% of the sorted file list, i.e. one source or one class folder, which would not test the 3-class head.)
+4. **Real run:** untick `DRY_RUN`, keep the **same `RUN_ID`**, **Runtime -> Run all**. The prepared dataset is restored from Drive (no downloads), the gates re-run, then
+   detector 80 ep + classifier 30 ep. Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/`.
+   **If you got disconnected: reconnect, keep the same `RUN_ID` and `DRY_RUN` setting, Runtime -> Run all; it resumes from the last epoch on Drive.**
    Write the `RUN_ID` down: left at the default it is today's date, so resuming after midnight needs it typed in.
-4. Download `export.zip` from the last cell and hand it to the team.
-The notebook downloads VegQual (figshare), the two Roboflow sets (API) and, if Kaggle creds exist, raghavrpotdar; derives a
-`sources.colab.json` from the repo's `sources.json` with `/content/raw/...` roots; runs `prepare_dataset.py`,
-`train.py --device auto --resume` (yolo26s 80 ep + classifier 30 ep) and the export. Expect 3-4.5 h on a free T4.
+5. Download `export.zip` from the last cell and hand it to the team. Cell 5 also has a `SEMI_FRESH_THRESHOLD` field (default 0.5), passed through
+   `train.py --semi-fresh-threshold` (env `SEMI_FRESH_THRESHOLD`) to `export_predictions.py`, so predictions can be re-labelled without retraining.
+The notebook downloads VegQual (figshare), the two Roboflow sets (API), raghavrpotdar (if Kaggle creds exist) and **AgriFreshNET from the public Mendeley release**
+(file selected by name from `data.mendeley.com/public-api/datasets/42m5tb7yv9`; both requests send a browser-like `User-Agent` because Mendeley returns 403 to urllib's default; the zip is always verified against the hardcoded SHA-256 `6607a48b...3f11`; a `RUN_ID` ending in `_dry` is rejected), ingests it with `python -m pipeline --data-root /content/pipeline_data
+ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300` (4,754 images, same as the local a2b run), derives a
+`sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (yolo26s 80 ep +
+classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
+`stratification_check.py` (3-class mapping) and a check that `cls/{train,val}` has `fresh`, `semi_fresh` and `spoiled`. The gate is identity pHash <= 6 and <= 1% per source; the
+dihedral-variant near-duplicate check is **reported only** (same-class, masked padding, ML-40), not a gate in the notebook (ML-35 ruling). Expect 3-4.5 h on a free T4 for the real run.
 
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
@@ -73,6 +83,11 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
   (`pepper` mapped to `bell_pepper`, `tomatoes` to `tomato`, `eggs` to `egg`).
 - **Hien_Fridge** - Roboflow Universe, workspace `gracelearning`,
   https://universe.roboflow.com/gracelearning/hien_fridge-tathx . Licence CC BY 4.0. Dropped: the `others` class.
+- **AgriFreshNET Freshness and Shelf-Life Image Dataset** - Risdin, Salauddin, Tufa, Hossain; Mendeley Data,
+  v1, DOI 10.17632/42m5tb7yv9.1, https://data.mendeley.com/datasets/42m5tb7yv9 . Licence CC BY 4.0. Changes:
+  relabelled into our taxonomy (bitter melon -> `bitter_melon`; cucumber, papaya, pineapple, banana, orange, tomato,
+  eggplant), semi-fresh stage kept as `semi_fresh`, day-range suffixes dropped, re-split by inferred specimen.
+  Ingestion code ported from @LemurTech22's pipeline (#21 -> #26).
 
 **Status 2026-10-10 (feat/ml-full-data): all four sources are downloaded and enabled** (no `pending`), under
 `mldata/raw/`:
@@ -82,6 +97,7 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
 | `fridge_objects` | Roboflow **v1**, exported yolov5pytorch (YOLO txt) | 963 (731/125/107) | CC BY 4.0 | names avocado, bacon, butter, cheese, eggs, lemon, milk, pepper, tomatoes, yogurt match the class_map; all boxes assumed fresh |
 | `hien_fridge` | Roboflow **v12**, yolov8 | 1,912 (1378/363/171; 1,763 kept) | CC BY 4.0 | names apple, egg, milk_carton, others, soda_can, yogurt_container match; `others` dropped; assumed fresh |
 | `fresh_stale_fruits_veg` | Kaggle raghavrpotdar (no version number; downloaded 2026-10-10) | 14,683 files, folder-per-class | **CC0 1.0** | stale -> spoiled, capsicum -> bell_pepper, bitter_gourd dropped (whole image); **`max_per_class: 250`** images per class x freshness (about 2,500 kept, so it does not swamp VegQual 3.2k / fridge 2.9k; chosen by a deterministic hash). Files are augmentations (`name.jpg_0_1039.jpg`) of far fewer originals; `Screen Shot <date> at <time>` names give capture times. |
+| `agrifreshnet` | Mendeley Data **v1**, DOI 10.17632/42m5tb7yv9.1 (`Processed Data.zip`, 348 MB, downloaded 2026-10-10) | 14,160 files (24 folders x 590: 8 produce x fresh / semi_fresh / rotten). **After curation: 4,754 staged** (see below) | CC BY 4.0 | Ingested with `python -m pipeline ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300`. Cucumber, papaya, pineapple and bitter_melon are taxonomy classes (nothing dropped); `semi_fresh` is kept as its own label. **Heavily augmented**: 63% of the files are the authors' `aug_<n>_<original>` copies and 92% of all images (78-98% per class) have a flip/rotation-aware pHash <= 6 near-duplicate elsewhere in their class (some are look-alike backgrounds, not true copies). **Curation (orchestrator ruling B):** (1) all 8,943 `aug_` files are excluded (augmentation is our pipeline's job), leaving 5,174 originals after label-conflict and duplicate removal; (2) each class x freshness cell is capped at **300**, picked round-robin over split units (session / specimen) with a seeded hash order, not the first 300: 5 cells were above the cap (tomato/fresh 590, orange/semi_fresh 397, papaya/spoiled 332, banana/spoiled 301, ...) and 420 images were dropped, so 5,174 -> 4,754 staged (before/after per cell in `source.json` -> `curation` and in `dataset_report.json` -> `source_curation`; share of train in `train_share_by_source`). **Grouping (ruling A, used for this run):** timestamped files are grouped by 300 s capture session, untimestamped files by cross-stage specimen component (variant-aware pHash, <= 10, tightened per class to 6/4); the specimen+session union chains into 54% of the curated set, so it was not used. **AgriFreshNET and semi_fresh metrics must be labelled "cross-stage specimen overlap possible"**: a specimen photographed on different days in different stages can fall in different splits when its files are timestamped. Details: `docs/PIPELINE.md`. |
 Kaggle in the notebook uses the `KAGGLE_API_TOKEN` secret as a Bearer token against the Kaggle REST API
 (`/api/v1/datasets/download/<owner>/<dataset>`).
 
@@ -137,7 +153,7 @@ same eval without reading `class_names.json`.
   1. **Series / augmentation stem**: filename stem without `.rf.<hash>`, the Kaggle `_0_1039` tail, a `<cls>__<fresh>__`
      prefix and `Copy of `; trailing digits are stripped so numbered series (`Defected_begun_3`, `_4`) join one group.
   2. **Capture session**: capture time is *searched* in the name (`IMG20250926100615`, `IMG_20251004_163630`,
-     `20250101_123456`, 13-digit epoch ms in 2014-2033, `Screen Shot 2018-06-08 at 4.59.36 PM`), also in staged PR-B names such as
+     `20250101_123456`, the same with a hyphen (`IMG-20250101-123456`) or trailing milliseconds (`IMG_20251102_075610660`, AgriFreshNET; the ms digits are ignored), 13-digit epoch ms in 2014-2033, `Screen Shot 2018-06-08 at 4.59.36 PM`), also in staged PR-B names such as
      `banana__fresh__IMG_20250101_123456.rf.<sha>.jpg`. Per source and clock format, photos <= `--session-gap` seconds
      (default **300**) apart are chained into one session. **No span cap** (the old 120 s cap cut sessions and leaked).
   3. **Perceptual near-duplicates**: 64-bit pHash (`dedup.py`, numpy only; agrees with `imagehash.phash` to <= 2 bits and
@@ -201,11 +217,11 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
 1. Colab -> GPU runtime. Open `ml/yolo/train_colab.ipynb` (or clone the repo and `cd ml/yolo`).
    (Quick path: section 0. The steps below are the manual equivalent.)
 2. `pip install -r requirements.txt` (ultralytics==8.4.175). Never paste API keys into cells; use Colab Secrets.
-3. Download the four sources into `/content/raw/<name>` (Roboflow: YOLO export at the versions in `sources.json`; Kaggle REST with `KAGGLE_API_TOKEN`). Copy
+3. Download the sources into `/content/raw/<name>` (Roboflow: YOLO export at the versions in `sources.json`; Kaggle REST with `KAGGLE_API_TOKEN`) and ingest AgriFreshNET (`python -m pipeline ingest-dataset ... --specimen-groups --exclude-source-augs --max-per-cell 300`, see section 2). Copy
    use the repo's `sources.json` with the roots rewritten (the notebook does this).
 4. `python prepare_dataset.py --sources sources.json --out /content/fwr_data`; read `dataset_report.json`
    (classes with no data, dropped labels). Fix mapping before training.
-5. `python train.py --data /content/fwr_data --project <RUN_DIR> --resume` (detector 80 ep, classifier 30 ep, then exports). Exports
+5. `python train.py --data /content/fwr_data --project <RUN_DIR> --resume` (detector 80 ep, classifier 30 ep, then exports; `--semi-fresh-threshold` sets the semi_fresh cut-off of the exported predictions). Exports
    **`last.pt` by default** (`--weights last`): val has no potato and no apple/spoiled (ML-28), so val-picked
    `best.pt` would be blind to them. Fixed epochs; all metrics come from the held-out split.
 6. Collect `runs/export/`: `detector.pt`, `freshness.pt`, `predictions.jsonl`, `heldout_gt.jsonl`, `heldout_manifest.csv`.

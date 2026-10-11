@@ -33,7 +33,8 @@ Definitions (all documented so the numbers can be audited):
     localisation alone (IoU >= 0.5, greedy by confidence, freshness ignored), then counted in a
     3x3 confusion matrix confusion[gt][pred] with an extra "missed" column (GT with no match) and
     a "false_positive" row (prediction with no GT). Per-class 3-way precision = diag / column sum
-    (incl. false positives), recall = diag / row sum (incl. missed).
+    (incl. false positives), recall = diag / row sum (incl. missed). Each comes with a 95% Wilson CI
+    (`precision_ci95`, `recall_ci95`; informational), also semi_fresh per source (`semi_fresh_by_source`, needs --manifest).
   * Lighting split: the same metrics on the images of each lighting group; `recall_drop` is
     (normal recall - group recall) * 100, in percentage points (negative = group is better).
 """
@@ -180,7 +181,9 @@ def freshness_3way(gt_rows, pred_rows, conf=0.0, match_name=False):
         tp = conf_m[c][c]
         n_gt = sum(conf_m[c].values())
         n_pred = sum(conf_m[g][c] for g in FRESHNESS3) + fp_row[c]
-        out[c] = {"precision": _ratio(tp, n_pred), "recall": _ratio(tp, n_gt), "tp": tp, "n_gt": n_gt, "n_pred": n_pred}
+        out[c] = {"precision": _ratio(tp, n_pred), "recall": _ratio(tp, n_gt), "tp": tp, "n_gt": n_gt, "n_pred": n_pred,
+                  # informational 95% Wilson CIs (like the spoiled per-source numbers); (None, None) when the denominator is 0
+                  "precision_ci95": list(wilson_ci(tp, n_pred)), "recall_ci95": list(wilson_ci(tp, n_gt))}
     return out
 
 
@@ -366,6 +369,24 @@ def spoiled_recall_by_source(gt_rows, pred_rows, manifest, conf=0.0, match_name=
     return out
 
 
+def semi_fresh_by_source(gt_rows, pred_rows, manifest, conf=0.0, match_name=False, real_only=True):
+    """semi_fresh 3-way precision and recall (localisation-only matching, as freshness_3way) overall and per SOURCE,
+    each with a 95% Wilson CI and its counts. INFORMATION ONLY, never gated (docs/QA.md "Freshness gates"): every
+    semi_fresh label comes from one source (ML-16), so the per-source split mostly shows that one source; n is small
+    for several classes (ML-41). real_only drops synthetic low/warm copies (same boxes, not independent samples)."""
+    pi = {r["image"]: r for r in pred_rows}
+    rows = [r for r in gt_rows if not (real_only and manifest.get(r["image"], {}).get("lighting_method") == "synthetic")]
+    def one(sub):
+        pr = [pi.get(r["image"], {"image": r["image"], "predictions": []}) for r in sub]
+        c = freshness_3way(sub, pr, conf, match_name)["semi_fresh"]
+        return {k: c[k] for k in ("precision", "precision_ci95", "recall", "recall_ci95", "tp", "n_gt", "n_pred")}
+    out = {"all": one(rows), "by_source": {}}
+    for src in sorted({manifest.get(r["image"], {}).get("source", "") for r in rows}):
+        sub = [r for r in rows if manifest.get(r["image"], {}).get("source", "") == src]
+        out["by_source"][src or "unknown"] = one(sub)
+    return out
+
+
 def _fmt(x):
     return "n/a" if x is None else f"{x:.3f}"
 
@@ -387,7 +408,8 @@ def print_report(res):
         print(f"{g:11s}" + "".join(f"{t['confusion'][g][c]:12d}" for c in cols))
     print(f"{'false_pos':11s}" + "".join(f"{t['false_positive'][c]:12d}" for c in FRESHNESS3))
     for c in FRESHNESS3:
-        print(f"3-way {c:11s} P={_fmt(t[c]['precision'])} R={_fmt(t[c]['recall'])} (n_gt={t[c]['n_gt']})")
+        pc, rc = t[c]["precision_ci95"], t[c]["recall_ci95"]
+        print(f"3-way {c:11s} P={_fmt(t[c]['precision'])} CI95=[{_fmt(pc[0])}, {_fmt(pc[1])}] R={_fmt(t[c]['recall'])} CI95=[{_fmt(rc[0])}, {_fmt(rc[1])}] (n_gt={t[c]['n_gt']}, n_pred={t[c]['n_pred']})")
     for lt, g in d["by_lighting"].items():
         o = g["freshness"]["overall"]; s = g["freshness"]["spoiled"]
         print(f"[{lt}] n={g['n_images']} mAP={_fmt(g['map50'])} recall={_fmt(o['recall'])} spoiled_recall={_fmt(s['recall'])}")
@@ -413,6 +435,8 @@ def main(argv=None):
         man = load_manifest(a.manifest)
         res["detection"]["spoiled_recall_by_source"] = spoiled_recall_by_source(
             list(gi.values()), load_jsonl(a.pred), man, a.conf, a.match_name)
+        res["detection"]["semi_fresh_by_source"] = semi_fresh_by_source(
+            list(gi.values()), load_jsonl(a.pred), man, a.conf, a.match_name)
     print_report(res)
     sr = res["detection"].get("spoiled_recall_by_source")
     if sr:
@@ -421,6 +445,12 @@ def main(argv=None):
             for lab_, g in (("all", v["all"]), *((f"  {c}", x) for c, x in v["by_class"].items())):
                 ci = g["ci95"]
                 print(f"{src:24s} {lab_:14s} n_gt={g['n_gt']:4d} recall={_fmt(g['recall'])} CI95=[{_fmt(ci[0])}, {_fmt(ci[1])}]")
+    sf = res["detection"].get("semi_fresh_by_source")
+    if sf:
+        print("-- semi_fresh precision / recall with 95% Wilson CI, real images only (information only, NOT a gate; semi_fresh comes from one source, ML-16) --")
+        for src, g in (("ALL", sf["all"]), *sf["by_source"].items()):
+            print(f"{src:24s} P={_fmt(g['precision'])} CI95=[{_fmt(g['precision_ci95'][0])}, {_fmt(g['precision_ci95'][1])}] (n_pred={g['n_pred']})  "
+                  f"R={_fmt(g['recall'])} CI95=[{_fmt(g['recall_ci95'][0])}, {_fmt(g['recall_ci95'][1])}] (n_gt={g['n_gt']})")
     ls = res["detection"].get("lighting_sources")
     if ls:
         print(f"-- lighting by source (real n={ls['n_real']}, synthetic n={ls['n_synthetic']}; synthetic is usually EASIER) --")
