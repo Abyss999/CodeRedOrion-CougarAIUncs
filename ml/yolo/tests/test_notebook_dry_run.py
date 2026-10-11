@@ -66,3 +66,35 @@ def test_make_subset_is_deterministic_and_keeps_every_class(tmp_path):
     assert sorted(p.name for p in (tmp_path / "s1" / "cls" / "train").iterdir()) == ["fresh", "semi_fresh", "spoiled"]
     assert len((tmp_path / "s1" / "heldout_gt.jsonl").read_text().splitlines()) == a["heldout"] == 3
     assert (tmp_path / "s1" / "labels" / "train" / "im000.txt").exists()
+
+
+def _code():
+    return "\n".join(t for t, k in cells() if k == "code")
+
+
+def test_mendeley_requests_send_a_user_agent_and_verify_sha256():
+    code = _code()
+    assert code.count("headers=UA") == 2 and "Mozilla/5.0" in code                  # API call AND file download (ML-42)
+    assert "urlretrieve(url" not in code
+    assert '6607a48bf2817f9dfc8d4a1c32ce663c1d8308b4b1251e9bf65f074fcac53f11' in code   # ML-43: never silently skipped
+    assert 'h.hexdigest() == AGRI_SHA256' in code and "if want:" not in code
+    assert 'f["filename"] == "Processed Data.zip"' in code and "meta[\"files\"][:1]" not in code
+
+
+def test_gate_message_matches_the_ml35_ruling():
+    code = _code()
+    assert "pending ML-35" not in code and "identity pHash <= 6 and <= 1% per source" in code and "ML-40" in code
+    assert "pending ML-35" not in (Path(__file__).resolve().parents[3] / "docs" / "ML.md").read_text()
+
+
+def test_run_id_ending_in_dry_is_rejected():
+    code = _code()
+    assert 'assert not RUN_ID.endswith("_dry")' in code
+    # behaviour of the guard, extracted from the cell
+    guard = next(l for l in code.splitlines() if l.startswith('assert not RUN_ID.endswith("_dry")'))
+    for rid, ok in (("fwr_20261010", True), ("fwr_x_dry", False), ("dry", True)):
+        try:
+            exec(guard, {"RUN_ID": rid}); passed = True
+        except AssertionError:
+            passed = False
+        assert passed is ok, rid

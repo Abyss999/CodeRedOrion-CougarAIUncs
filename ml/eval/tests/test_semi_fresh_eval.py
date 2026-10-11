@@ -214,3 +214,69 @@ def test_end_to_end_semi_passes_gates_with_fresh_semi_confusion(tmp_path):
     g.write_text("\n".join(json.dumps(r) for r in gt)); p.write_text("\n".join(json.dumps(r) for r in pr))
     assert dm.main(["--gt", str(g), "--pred", str(p), "--json", str(o)]) == 0
     assert ct.main([str(o), "--allow-missing-section", "ocr"]) == 0
+
+
+# ---------- semi_fresh P/R with Wilson 95% CIs (information only) ----------
+def test_semi_fresh_pr_has_wilson_ci_hand_computed():
+    gt, pr = mixed()
+    t = evaluate(gt, pr)["detection"]["freshness_3way"]["semi_fresh"]
+    # tp 1, n_pred 2 (a1 + FP b5), n_gt 2 -> P = R = 0.5 with the n=2 Wilson interval
+    assert (t["tp"], t["n_pred"], t["n_gt"]) == (1, 2, 2)
+    assert t["precision_ci95"] == pytest.approx(list(dm.wilson_ci(1, 2)))
+    assert t["recall_ci95"] == pytest.approx(list(dm.wilson_ci(1, 2)))
+    lo, hi = t["recall_ci95"]
+    assert lo == pytest.approx(0.0945, abs=1e-3) and hi == pytest.approx(0.9055, abs=1e-3)
+    assert lo < t["recall"] < hi and hi - lo > 0.5          # n=2: the interval is wide, which is the point
+
+
+def test_semi_fresh_ci_none_when_no_denominator():
+    gt = [row("a", "labels", [lab("fresh", 0)])]
+    pr = [row("a", "predictions", [pred("fresh", 0)])]
+    t = evaluate(gt, pr)["detection"]["freshness_3way"]
+    assert t["semi_fresh"]["precision"] is None and t["semi_fresh"]["precision_ci95"] == [None, None]
+    assert t["semi_fresh"]["recall"] is None and t["semi_fresh"]["recall_ci95"] == [None, None]
+    assert all(0 <= t["fresh"][k][0] <= t["fresh"][k][1] <= 1 for k in ("precision_ci95", "recall_ci95"))
+
+
+def test_ci_present_for_every_class_and_json_serialisable():
+    gt, pr = mixed()
+    t = evaluate(gt, pr)["detection"]["freshness_3way"]
+    for c in dm.FRESHNESS3:
+        assert set(("precision_ci95", "recall_ci95")) <= set(t[c])
+    json.dumps(t)
+    assert t["gated"] is False
+
+
+def test_semi_fresh_by_source_real_only_and_per_source():
+    # source A: 2 semi GT, 1 found, 1 FP; source B: 1 semi GT found. A synthetic copy of A must not add a sample.
+    gt = [row("a1", "labels", [lab("semi_fresh", 0), lab("semi_fresh", 1)]),
+          row("b1", "labels", [lab("semi_fresh", 0)]),
+          row("a1__low", "labels", [lab("semi_fresh", 0), lab("semi_fresh", 1)], "low")]
+    pr = [row("a1", "predictions", [pred("semi_fresh", 0), pred("semi_fresh", 7)]),
+          row("b1", "predictions", [pred("semi_fresh", 0)]),
+          row("a1__low", "predictions", [pred("semi_fresh", 0), pred("semi_fresh", 1)], "low")]
+    man = {"a1": {"lighting_method": "auto", "source": "A"}, "b1": {"lighting_method": "auto", "source": "B"},
+           "a1__low": {"lighting_method": "synthetic", "source": "A"}}
+    r = dm.semi_fresh_by_source(gt, pr, man)
+    a = r["by_source"]["A"]
+    assert (a["tp"], a["n_gt"], a["n_pred"]) == (1, 2, 2) and a["recall"] == 0.5 and a["precision"] == 0.5
+    assert a["recall_ci95"] == pytest.approx(list(dm.wilson_ci(1, 2)))
+    b = r["by_source"]["B"]
+    assert (b["recall"], b["precision"], b["n_gt"]) == (1.0, 1.0, 1)
+    assert r["all"]["n_gt"] == 3 and r["all"]["tp"] == 2
+    assert dm.semi_fresh_by_source(gt, pr, man, real_only=False)["all"]["n_gt"] == 5
+
+
+def test_main_reports_semi_fresh_by_source_and_never_gates_on_it(tmp_path, capsys):
+    gt = [row("a", "labels", [lab("semi_fresh", 0), lab("spoiled", 1)])]
+    pr = [row("a", "predictions", [pred("fresh", 0), pred("spoiled", 1)])]       # semi_fresh recall 0, still passes the gates
+    g = tmp_path / "g.jsonl"; p = tmp_path / "p.jsonl"; o = tmp_path / "o.json"; m = tmp_path / "m.csv"
+    g.write_text(json.dumps(gt[0])); p.write_text(json.dumps(pr[0]))
+    m.write_text("image,lighting_method,variant_of,source\na,auto,,S\n")
+    assert dm.main(["--gt", str(g), "--pred", str(p), "--json", str(o), "--manifest", str(m)]) == 0
+    out = capsys.readouterr().out
+    assert "semi_fresh precision / recall with 95% Wilson CI" in out and "NOT a gate" in out
+    res = json.loads(o.read_text())["detection"]
+    assert res["semi_fresh_by_source"]["by_source"]["S"]["recall"] == 0.0
+    names = {n for n, _, _ in ct.run_checks(json.loads(o.read_text()))}
+    assert not any("semi" in n.lower() for n in names)                          # check_thresholds has no semi_fresh gate

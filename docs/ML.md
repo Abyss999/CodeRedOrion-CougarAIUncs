@@ -21,12 +21,12 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 5. Download `export.zip` from the last cell and hand it to the team. Cell 5 also has a `SEMI_FRESH_THRESHOLD` field (default 0.5), passed through
    `train.py --semi-fresh-threshold` (env `SEMI_FRESH_THRESHOLD`) to `export_predictions.py`, so predictions can be re-labelled without retraining.
 The notebook downloads VegQual (figshare), the two Roboflow sets (API), raghavrpotdar (if Kaggle creds exist) and **AgriFreshNET from the public Mendeley release**
-(file URL from `data.mendeley.com/public-api/datasets/42m5tb7yv9`, size and SHA-256 checked), ingests it with `python -m pipeline --data-root /content/pipeline_data
+(file selected by name from `data.mendeley.com/public-api/datasets/42m5tb7yv9`; both requests send a browser-like `User-Agent` because Mendeley returns 403 to urllib's default; the zip is always verified against the hardcoded SHA-256 `6607a48b...3f11`; a `RUN_ID` ending in `_dry` is rejected), ingests it with `python -m pipeline --data-root /content/pipeline_data
 ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300` (4,754 images, same as the local a2b run), derives a
 `sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (yolo26s 80 ep +
 classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
-`stratification_check.py` (3-class mapping) and a check that `cls/{train,val}` has `fresh`, `semi_fresh` and `spoiled`. The dihedral-variant near-duplicate gate is
-**not** in the notebook (pending ML-35). Expect 3-4.5 h on a free T4 for the real run.
+`stratification_check.py` (3-class mapping) and a check that `cls/{train,val}` has `fresh`, `semi_fresh` and `spoiled`. The gate is identity pHash <= 6 and <= 1% per source; the
+dihedral-variant near-duplicate check is **reported only** (same-class, masked padding, ML-40), not a gate in the notebook (ML-35 ruling). Expect 3-4.5 h on a free T4 for the real run.
 
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
