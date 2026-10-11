@@ -118,7 +118,8 @@ final class LiveAPIClient: APIClient {
     }
 
     func perform<T: Decodable>(_ method: String, _ path: String, query: [URLQueryItem],
-                                       rawBody: Data?, contentType: String, authenticated: Bool) async throws -> T {
+                                       rawBody: Data?, contentType: String, authenticated: Bool,
+                                       timeout: TimeInterval? = nil) async throws -> T {
         let base = baseURL.current
         guard var comps = URLComponents(url: base, resolvingAgainstBaseURL: false) else { throw APIError.invalidRequest("Bad API URL") }
         comps.percentEncodedPath += path
@@ -127,6 +128,7 @@ final class LiveAPIClient: APIClient {
 
         var req = URLRequest(url: url)
         req.httpMethod = method
+        if let timeout { req.timeoutInterval = timeout }
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let rawBody {
             req.httpBody = rawBody
@@ -136,8 +138,17 @@ final class LiveAPIClient: APIClient {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
+        // A longer per-request timeout also needs a longer session idle timeout (the session default is 30 s).
+        var requestSession = session
+        if let timeout, session.configuration.timeoutIntervalForRequest < timeout {
+            let config = session.configuration
+            config.timeoutIntervalForRequest = timeout
+            config.timeoutIntervalForResource = max(config.timeoutIntervalForResource, timeout + 30)
+            requestSession = URLSession(configuration: config)
+        }
+        defer { if requestSession !== session { requestSession.finishTasksAndInvalidate() } }
         let data: Data, response: URLResponse
-        do { (data, response) = try await session.data(for: req) }
+        do { (data, response) = try await requestSession.data(for: req) }
         catch is CancellationError { throw CancellationError() }
         catch let e as URLError where e.code == .cancelled { throw CancellationError() }
         catch { throw APIError.network(error.localizedDescription) }

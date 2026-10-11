@@ -25,6 +25,7 @@ import Foundation
 /// - `-UITestPhoto502`        `from-photo` and `from-receipt` fail with 502 `upstream_unavailable`
 /// - `-UITestCameraDenied`    screens behave as if camera access is denied (no mock call; read `launch.cameraDenied`)
 /// - `-UITestTossFails`       removing with outcome `thrown_out` fails (used / donated still work)
+/// - `-UITestReceiptUnavailable` the Add sheet shows the Receipt tile as unavailable (as on the live API while OCR is down)
 /// - `-UITestRecipes502`      `POST /recipes/suggest` fails with 502 `upstream_unavailable`
 /// - `-UITestGoogle409`       Google sign-in fails with 409 `account_exists_use_password`
 /// - `-UITestClaimConflict`   claiming a listing fails with 409 `already_claimed`
@@ -58,6 +59,7 @@ struct LaunchConfiguration: Equatable, Sendable {
     var photo502 = false
     var cameraDenied = false
     var tossFails = false
+    var receiptUnavailable = false
     var recipes502 = false
     var google409 = false
     var claimConflict = false
@@ -95,6 +97,7 @@ struct LaunchConfiguration: Equatable, Sendable {
     static let flagPhoto502 = "-UITestPhoto502"
     static let flagCameraDenied = "-UITestCameraDenied"
     static let flagTossFails = "-UITestTossFails"
+    static let flagReceiptUnavailable = "-UITestReceiptUnavailable"
     static let flagRecipes502 = "-UITestRecipes502"
     static let flagGoogle409 = "-UITestGoogle409"
     static let flagClaimConflict = "-UITestClaimConflict"
@@ -132,6 +135,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         photo502 = arguments.contains(Self.flagPhoto502)
         cameraDenied = arguments.contains(Self.flagCameraDenied)
         tossFails = arguments.contains(Self.flagTossFails)
+        receiptUnavailable = arguments.contains(Self.flagReceiptUnavailable)
         recipes502 = arguments.contains(Self.flagRecipes502)
         google409 = arguments.contains(Self.flagGoogle409)
         claimConflict = arguments.contains(Self.flagClaimConflict)
@@ -152,7 +156,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         // Seeding or signing in only makes sense against the mock.
         if seed != nil || signedIn || failNetwork || slowNetwork || loadingForever || failList || failListOnce
             || failRemove || failRestore || restoreNotRemoved || slowRemove || slowRestore
-            || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails
+            || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails || receiptUnavailable
             || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare || impactFailOnce { useMockAPI = true }
     }
 
