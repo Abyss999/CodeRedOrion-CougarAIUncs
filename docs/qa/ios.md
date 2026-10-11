@@ -448,3 +448,40 @@ Mac: Apple M4 Pro, Xcode 26.6. Simulator: a throwaway iPhone 17 Pro (iOS 26.3), 
 - D: Account section in the Debug sheet (long-press the version label): sign in, create account, sign out, error text, status line.
 
 ### Verdict: PASS WITH NOTES. IOS-70 open (low).
+
+
+## 2026-10-11: Fridge session handling (qa/page-sweep-2026-10-11, uncommitted)
+Scope: `FridgeView` observes `env.auth.session` and calls `FridgeModel.sessionChanged(from:to:)`; `load()` drops results from an older `generation`. Simulator: a throwaway iPhone 17 Pro (iOS 26.3), deleted after.
+
+### Review
+- Launch double-load: none. `onChange` has no `initial`, and `.task(id: storage)` is the only launch load.
+- Same-user token refresh while the first load is still in flight starts a second concurrent `listItems` (sections and errors are both nil). Harmless: stagger fires once (`everLoaded`), last writer wins with identical data.
+- Sign-out then sign-in: `errors = [:]` runs before the sign-in branch, so Pantry and Freezer are not stuck on `unauthorized`. Verified by test.
+- A stale 401 from user A cannot sign out B (A4 token guard); a late A 401 on remove only reaches `removeFailed`, see IOS-71.
+- Reduce Motion and stagger: `sessionChanged` adds no animation; the only stagger restart is the one in `load()` (first load per storage after a reset), unchanged rule. Sign-out does not stagger.
+- A late remove/restore completion is **not** fenced by `generation` (`remove`, `undo`, `removeFailed`, `restoreFailed`, `FridgeModel.swift`). See bugs.
+
+### Tests added (`ios/Tests/UnitTests/FridgeSessionTests.swift`, 18)
+A `SwitchAPIClient` (forwards to the A or B Mock, one-shot gates on list/remove/restore, injectable errors) makes the races deterministic. Covers: sign-out gives `unauthorized` for all three storages and no toast/banner/pending toast; sign-in after sign-out gives content, one stagger restart, Pantry not stuck; A to B drops A rows, loads B, other storages unloaded, exactly one list call; B while on Pantry; token refresh keeps items, no restagger, no refetch, clears errors (visible and other storage); nil to nil no-op; A to B and sign-out during a slow A load discard A's result (no stagger); remove in flight succeeding / failing after a switch, failing after sign-out; restore in flight succeeding / failing after a switch.
+
+### Bugs
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| IOS-71 | medium | A remove that fails after the user changed re-inserts user A's row into user B's list. `removeFailed` sees `locallyRemoved` cleared, so `undone` is true and it calls `insert(item, at: location)`, which only checks that the id is not listed and that `sections[storage]` exists. B shows A's item (37 rows instead of 36); it also clears no state. Repro: remove an item, drop the network, sign out and sign in as another user before the request fails. Fix: capture `generation` in `remove` and bail in `removeFailed` (and the success path) when it differs. Test: `testRemoveInFlightThatFailsAfterSwitchDoesNotInsertARowIntoB` (now a normal assertion) | fixed, verified |
+| IOS-72 | medium | An Undo whose restore fails after the user changed shows "Couldn't undo. X is still removed." plus an error haptic and a VoiceOver announcement in B's session, and adds A's id to `locallyRemoved` (it would hide a B item with the same id). Same cause as IOS-71 (`undo` and `restoreFailed` ignore `generation`). Test: `testRestoreInFlightThatFailsAfterSwitchShowsNoBannerInB` (now a normal assertion) | fixed, verified |
+
+A removal that succeeds after a switch, and any remove failure after sign-out, leave B untouched (tests pass).
+
+### Results
+| Run | Result |
+|---|---|
+| Unit (`FoodWasteReducerTests`) | 399 run, 3 skipped (Keychain, unsigned host), **0 failures** |
+| UI (`FoodWasteReducerUITests`) | 51 run, **0 failures** |
+
+### Not covered by unit tests (manual check)
+Sign out then in as a different user on the Fridge tab with the Pantry segment selected; remove an item and go offline, then switch accounts before the request fails (IOS-71 shows the old row in the new list).
+
+### Re-verify after the builder's fix
+`remove()` and `undo()` capture `generation` and drop late completions. The two pinned tests are now plain assertions and pass; full unit + UI suites green. Note: an Undo tapped and then followed by an account switch before the removal settles skips the server restore (item stays removed for the old user); acceptable, since the old session is gone.
+
+### Verdict: PASS. IOS-71 and IOS-72 fixed, no open bugs.
