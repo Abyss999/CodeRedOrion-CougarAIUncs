@@ -935,3 +935,59 @@ Both are now pinned by tests.
 | ML-60 | medium | `stratification_check.py` `_merge_by_phash` (a168253) | The merge relabelled timestamped sessions as `/s:` stem groups, hid cross-split near-duplicates as info, and chained with no cap (prepare caps at 600) | **fixed** (a2d88f5). Owner ruling: a cross-split pair is a warning (`info.phash_cross_split_pair_examples`); leakage_check's ≤ 1% stays the gate; `qa_pr62_strat_merge.py` (cap read from `dataset_report`, default 600) |
 | ML-61 | low | `train_colab.ipynb` cell 1 | `!pip install` swallowed failures | **fixed** (4973397); `qa_pr62_ml57.py` |
 | ML-62 | medium | data / split assignment | VegQual has 0 held-out spoiled images (above) | **open: named risk**, report VegQual spoiled N/A |
+
+# 2026-10-11: ML-63, Colab cell 1 `unrar-cffi` build failure (branch `fix/colab-unrar-build`, uncommitted diff)
+
+## Verdict: **PASS**. The fix builds and imports `unrar-cffi` everywhere the old cell failed, and the built UnRAR decompresses a real RAR5 file with its CRC checked.
+
+## Reproduction and fix matrix
+Fresh `uv venv --seed -p 3.13` (CPython 3.13.5, gcc 14) per row, `PIP_NO_CACHE_DIR=1` so no built wheel is reused between rows. "Old" is cell 1 at `main`. "New" is the extracted pip() helper plus the unrar block (the `-r requirements.txt` line is skipped). "Legacy" means `PIP_USE_PEP517=0`, pip's setup.py path that Colab took.
+
+| pip | setuptools | legacy | old cell | new cell | `from unrar.cffi import rarfile` (new) |
+|---|---|---|---|---|---|
+| 24.0 | 68.1.2 | yes | ok | ok | ok |
+| 24.0 | 75.2.0 | yes | ok | ok | ok |
+| 24.0 | 80.9.0 | yes | **fails**: `metadata-generation-failed`, `No module named 'vcs_versioning'` | ok | ok |
+| 24.0 | 84.0.0 | yes | **fails** (same error) | ok | ok |
+| 26.2.1 | 84.0.0 | no | ok | ok | ok |
+| 24.0 | none | yes | n/a | ok (the cell installs `setuptools==80.9.0`) | ok |
+| 26.2.1 | none | no | n/a | ok (the cell installs `setuptools==80.9.0`) | ok |
+
+- **The new helper on failure:** running it in the failing 84.0.0 legacy venv with a bare `pip("unrar-cffi==0.2.2")` prints pip's own `ModuleNotFoundError: No module named 'vcs_versioning'` and `error: metadata-generation-failed`, then raises `CalledProcessError` rc 1.
+- **Decompression is real:** `pipeline/ingestion/fetch.py`'s `unrar_bytes` (its own source, run in each new venv) on `rar5-crc.rar` from the rarfile 4.2 sdist (SHA-256 `8e1c8e72…69ef`, checked against PyPI). That archive holds 2 members, and `unrar_bytes` reads the first. Its first member `stest1.txt` is compressed from 55 B to 2,048 B. Output: 2,048 B, crc32 `0xc5b7e6a2`, which matches the archive. Flipping one byte inside the packed data raises `BadRarFile` (error code 12).
+- **Observation (not ML-63, no bug filed):** `unrar-cffi` does not raise when a **file header** is corrupted. In a per-byte sweep, flips at bytes 77, 78 and 92 return wrong bytes or empty bytes silently, and a flip at byte 28 (main header) hangs. `fetch_meatscan` already guards against this: each range-read header must match the QuickOpen copy byte for byte, it builds the main header itself, and `save_downscaled` decodes each image. So no change is needed.
+
+## Pins (PyPI)
+| Pin | Python | cp313 |
+|---|---|---|
+| `cffi==2.1.1` | >= 3.10 | `cp313-manylinux2014_x86_64` wheel |
+| `setuptools_scm==8.1.0` | >= 3.8, needs `setuptools` and `packaging` | pure Python |
+| `pytest-runner==6.0.1` | >= 3.7 | pure Python |
+| `wheel==0.45.1` | >= 3.8 | pure Python |
+| `setuptools==80.9.0` | >= 3.9 | pure Python |
+
+`setuptools_scm` 8.1.0 builds `unrar-cffi` under setuptools 68.1.2, 75.2.0, 80.9.0 and 84.0.0 (matrix above). The transitive `packaging` and `pycparser` are unpinned, as before.
+
+## Tests
+- New `ml/eval/tests/qa_ml63_unrar_build.py` (7 tests). It runs the real cell-1 helper and unrar block against a recorder and checks:
+  - the pinned build tools install before `--no-build-isolation unrar-cffi==0.2.2`;
+  - `setuptools==80.9.0` installs only when setuptools is missing;
+  - no bare unrar install is left;
+  - the helper passes `check=True` and `capture_output`;
+  - on failure the helper prints pip's stdout and stderr tails and re-raises, including when both streams are `None`;
+  - the `docs/PIPELINE.md` pins match the notebook's.
+
+  Run against cell 1 at `main`, 5 of these tests fail, so they catch the old code.
+- `qa_pr62_ml57.py` and `qa_new_sources.py` pass unchanged: the new call still matches their regexes.
+- Suites run with `.venv-ml` and `-o python_files='test_*.py qa_*.py'`:
+
+  | Suite | Result |
+  |---|---|
+  | `ml/yolo/tests` | 64 passed |
+  | `ml/eval/tests` | 249 passed |
+  | `pipeline/tests` | 279 passed, 2 skipped (2-class tests, pre-existing), 3 xfailed (PL-5, accepted) |
+
+## Bugs (this review)
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-63 | high | `train_colab.ipynb` cell 1 | `pip("unrar-cffi==0.2.2")` fails on Colab (Python 3.13, legacy setup.py path): setuptools fetches `setuptools_scm` 10.x as a `setup_requires` egg without `vcs_versioning`. Colab hid pip's error. | **fixed** (uncommitted diff on `fix/colab-unrar-build`): pinned build tools, then `--no-build-isolation`; the helper prints pip's output and re-raises; `qa_ml63_unrar_build.py` |
