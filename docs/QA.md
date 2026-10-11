@@ -79,8 +79,10 @@ Detail lives in [`qa/backend.md`](qa/backend.md) and [`qa/ml.md`](qa/ml.md). The
 | 2026-10-10 | #5 | Backend social | Backend QA: 158/158 (100 Wave 1 + 57 social + 1 migration), coverage 94%. Visibility tested for friend, pending, stranger, group member and non-member on every list and mutating endpoint | **PASS** | none |
 | 2026-10-10 | #50 | Backend items wave 2 (stored freshness and confidence, share on items, restore, delete account) | Backend QA: 680 passed, 1 skipped, 3 xfailed, coverage 97%. Migration 0004 round trip; restore leaves `/impact` exactly as before for every outcome, 10-minute window, atomic; `DELETE /auth/me` removes or anonymises every row (events tombstoned); N+1 checks on `share`. BE-8 fixed in the PR | **PASS** | BE-9 (low): ruled non-blocking, fix in backend PR 2 |
 | 2026-10-10 | #57 | Backend insights wave 2: impact split / reasons / previous / last 6 weeks; recipe servings, `uses_items` objects, per-user cache; `remove-batch` / `restore-batch`; number caps | Backend QA: full suite 965 passed, 1 skipped, coverage 98%, no xfails. Impact exact before and after every batch pair; all-or-nothing batches with row locks; DST matrix (4 session zones × 4 frozen nows); scalar Gemini responses on every caller | **PASS** | none (BE-9, BE-10, BE-13 fixed in the PR) |
+| 2026-10-10 | #54 | Receipts → full candidates, Gemini category guide + retry (Jose / LemurTech22) | **Independent** backend QA: full suite 1215 passed, 1 skipped, 98%; FAIL → fixed (BE-11, 12, 14 ported with Jose as co-author; BE-13 via #57). Independent ML check: serve 14, ocr 89, eval 206. The author's self-signed QA is kept as his record and doesn't count for the gate | **PASS** | none |
+| 2026-10-10 | #47 | iOS foundation: tokens, fonts, assets, APIClient + Live/Mock, Keychain, glass tab bar, motion, states, a11y ids | iOS QA on iPhone 17 Pro and iPhone SE at AX5: unit 117 / UI 24 each, 0 failed (3 Keychain tests skip unsigned, by design). Backend `isoformat` timestamps decode (15 tests). Reduce Motion paths, toast clip, light/dark/AX5 screenshots in `docs/qa/media/ios-foundation/`. CI green on macos-26 | **PASS** | IOS-10 residual (an inner image label in each tab button that VoiceOver doesn't reach): accepted |
 
-**Not yet tested anywhere:** the iOS build (no Xcode yet), live Gemini (no key), the live ML service and YOLO accuracy (no GPU), GLM-OCR image-to-text, `docker compose up` of the full stack, and the integration demo path.
+**Not yet tested anywhere:** the live ML service and YOLO accuracy (paused: a teammate owns the models), GLM-OCR image-to-text, Google Sign-In end to end, and the integration demo path.
 
 ## Bug list
 Severity: **blocker** (breaks demo path) · high · medium · low. Full repros are in the area logs.
@@ -91,10 +93,11 @@ Severity: **blocker** (breaks demo path) · high · medium · low. Full repros a
 | BE-8 | low | Backend | `NaN` / `Infinity` numbers passed validation and hit a DB CHECK (500 instead of 400) | fixed (#50) |
 | BE-9 | low | Backend | A finite `est_price` beyond numeric(10,2) (e.g. `1e8`) overflows and returns 500 instead of 400. Strict xfail `test_huge_est_price_is_400_not_500` | fixed (#57) |
 | BE-10 | low | Backend | `/impact` week buckets, zero-fill and week/month windows depended on the DB session time zone and DST | fixed (#57) |
-| BE-11 | low | Backend | Receipt TOTAL / TAX / SUBTOTAL lines came back as item candidates | fixed on #54, pending merge |
-| BE-12 | low | Backend | `categorized_by` said `gemini` when Gemini categorized nothing | fixed on #54, pending merge |
-| BE-13 | low | Backend | A scalar Gemini JSON reply caused a 500 instead of 502 / fallback | fixed at the root in #57 (`_generate` shape check); #54 picks it up on merge |
-| BE-14 | low | Backend | A receipt coupon line (negative price) made the candidate batch fail on `POST /items` | fixed on #54, pending merge |
+| BE-11 | low | Backend | Receipt TOTAL / TAX / SUBTOTAL lines came back as item candidates | fixed (#54) |
+| BE-12 | low | Backend | `categorized_by` said `gemini` when Gemini categorized nothing | fixed (#54) |
+| BE-13 | low | Backend | A scalar Gemini JSON reply caused a 500 instead of 502 / fallback | fixed (#57, root `_generate` shape check; verified on #54) |
+| BE-14 | low | Backend | A receipt coupon line (negative price) made the candidate batch fail on `POST /items` | fixed (#54) |
+| IOS-4 – IOS-11 | medium/low | iOS | Foundation review and QA findings (tab selection after Add, date decoding, AX5 toast wrapping, a11y ids, ad-hoc sizes); detail in `qa/ios.md` | fixed (#47) |
 | ML-1 – ML-6 | medium/low | ML | Receipt parser: qty-first lines, trailing UPCs, Costco item numbers, "Merchandise Total", EUR totals, OCR-spaced decimals | fixed (#3) |
 | ML-7 – ML-9 | medium/low | ML | Mixed-case total phrases, voided items, and multi-buy lines | fixed (#8) |
 | ML-10 | medium | ML | Products containing a skip word were dropped (`INSTANT OATMEAL`) | fixed (#8) |
