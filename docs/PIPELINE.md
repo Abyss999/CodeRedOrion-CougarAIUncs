@@ -29,6 +29,9 @@ Run these from the repo root with the project venv (`.venv/bin/pip install -r pi
 .venv/bin/python -m pipeline ingest-dataset --zip "~/Downloads/AgriFreshNET ....zip" --name agrifreshnet --adapter agrifreshnet
 # MeatScan (cow meat) and DaFiF (fish): fetch first (see their sections), then ingest the fetched folder
 .venv/bin/python -m pipeline fetch-meatscan --out ../mldata/raw/meatscan --per-class 450      # needs: pip install unrar-cffi==0.2.2
+# unrar-cffi 0.2.2 builds from source on Python > 3.9. If pip runs its setup.py directly (Colab), setuptools fetches the newest
+# setuptools_scm without vcs_versioning and the build fails (ML-63). Then install the build tools first and build against them:
+#   pip install cffi==2.1.1 setuptools_scm==8.1.0 pytest-runner==6.0.1 wheel==0.45.1 && pip install --no-build-isolation unrar-cffi==0.2.2
 .venv/bin/python -m pipeline ingest-dataset --dir ../mldata/raw/meatscan --name meatscan --adapter meatscan --max-per-cell 300
 .venv/bin/python -m pipeline fetch-dafif --out ../mldata/raw/dafif --max-per-cell 300
 .venv/bin/python -m pipeline ingest-dataset --dir ../mldata/raw/dafif --name dafif --adapter dafif --max-per-cell 300
