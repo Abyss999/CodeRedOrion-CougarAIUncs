@@ -2,6 +2,14 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Deadline mode for iOS CI (owner; #109)
+- **iOS PR CI builds and runs unit tests only** (`-skip-testing:FoodWasteReducerUITests`). The full UI suite runs on every push to `main`. *Why:* a 25–32 min UI run per PR doesn't fit the deadline.
+- **The gate becomes:**
+  - an iOS PR merges only if its local iOS QA PASS includes the UI tests for the flows it touches (on the iPhone 17 Pro sim);
+  - a red UI run on `main` blocks further iOS merges until it's fixed.
+- **Duplicate runs:** `concurrency` cancels stale duplicate runs on PRs only, never on `main` pushes.
+- To revert after the deadline, restore UI tests in PR CI.
+
 ## 2026-10-11 — Receipts fall back to Gemini vision (owner; #95)
 - **`POST /items/from-receipt` falls back to Gemini vision** when the OCR service is unset or fails, like `/items/from-photo`. This reverses "receipts have no fallback (502)". The receipt response gains `source` (`ocr` | `gemini`). *Why:* receipt scanning works in the demo before the teammate's GLM-OCR engine is deployed. *Cost:* at most one Gemini call per scan, counted against the same quota.
 - **#97** (QA sweep by teammate duwudlekat) needs the author to merge main in, independent QA, a collision check with the in-flight screen PRs, and a check that its sign-in exists only in DEBUG builds.
