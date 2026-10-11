@@ -13,9 +13,12 @@
 <style>
 body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
 a{color:#1F4D2B}a:hover{color:#13261A}
-@keyframes mic-pulse{0%{box-shadow:0 0 0 0 rgba(138,59,14,.45)}100%{box-shadow:0 0 0 14px rgba(138,59,14,0)}}
-@keyframes rise-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+@keyframes mic-pulse{0%{box-shadow:0 0 0 0 rgba(138,59,14,.30)}100%{box-shadow:0 0 0 8px rgba(138,59,14,0)}}
+@keyframes rise-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+[style*="rise-in"]{animation-name:fade-in!important;animation-duration:.15s!important;animation-delay:0s!important}
+[style*="mic-pulse"]{animation:none!important;box-shadow:0 0 0 4px rgba(138,59,14,.25)!important}}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; box-sizing: border-box; background: #4C5A4F; display: flex; flex-direction: column; justify-content: flex-end">
@@ -30,7 +33,7 @@ a{color:#1F4D2B}a:hover{color:#13261A}
     <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #2B3D30">What did you get?
       <span style="display: flex; align-items: flex-start; gap: 8px; min-height: 96px; box-sizing: border-box; padding: 12px 8px 12px 14px; border-radius: 14px; border: 2px solid #1F4D2B; background: #FFFFFF">
         <textarea rows="3" style="flex: 1; border: 0; outline: none; resize: none; font-family: inherit; font-size: 17px; line-height: 1.4; color: #13261A; background: transparent">2 lb chicken thighs, a bag of spinach, a dozen eggs and some oat milk</textarea>
-        <button type="button" aria-label="Stop listening" style="width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 22px; background: #FBE3CF; display: flex; align-items: center; justify-content: center; animation: mic-pulse 1.2s ease-out infinite">
+        <button type="button" aria-label="Stop listening" style="width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 22px; background: #FBE3CF; display: flex; align-items: center; justify-content: center; animation: mic-pulse 1.6s ease-out infinite">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A3B0E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
       </span>
       <span style="font-size: 13px; font-weight: 500; color: #8A3B0E">Listening… tap the mic to stop</span></label>
@@ -41,7 +44,7 @@ a{color:#1F4D2B}a:hover{color:#13261A}
     </div>
     <ul style="list-style: none; margin: 0; padding: 0; background: #FFFFFF; border-radius: 16px">
       <sc-for list="{{items}}" as="i" hint-placeholder-count="4">
-        <li style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #E6EDD6; animation: rise-in 0.35s cubic-bezier(.2,.8,.2,1) both; animation-delay: {{i.delay}}">
+        <li style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #E6EDD6; animation: rise-in 0.3s cubic-bezier(.2,.8,.2,1) both; animation-delay: {{i.delay}}">
           <span style="{{i.tile}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{i.stroke}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{i.icon}}"></path></svg></span>
           <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">{{i.name}}</span><span style="font-size: 13px; color: #45584A">{{i.meta}}</span></span>
           <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #EEF5D6; color: #1F4D2B">{{i.when}}</span>

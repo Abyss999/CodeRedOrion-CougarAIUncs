@@ -50,7 +50,7 @@ Social ─┬─ Food Pantry widget ─▶ Food Pantry (claim)
 | 13 | Receipt review | `ReceiptReview` | Receipt → items | `POST /items/from-receipt`, `POST /items` | Native `VNDocumentCameraViewController`. Shows the raw line under each cleaned name. Non-food starts unticked |
 | 14 | Recipes | `Recipes` | **Core 4** | `POST /recipes/suggest` | Filters: expiring first, under 30 min, vegetarian. Macros |
 | 15 | Recipe detail | `RecipeDetail` | Cook from what you have | (the suggestion's payload), then `POST /items/:id/remove` ×N (outcome `used`) | "I made this" marks its fridge items used, which feeds Impact |
-| 16 | Impact | `Impact` | Impact dashboard (main goal) | `GET /impact?range=` | CO₂e hero, saved/money tiles, 6-week chart, waste reasons |
+| 16 | Impact | `Impact` | Impact dashboard (main goal) | `GET /impact?range=` | CO₂e hero, saved/money tiles, 6-week chart, waste reasons. **The screen scrolls**: the waste-reasons section sits below the fold on a 390×844 screen, so the artboard clips it |
 | 17 | Social | `Social` | Food Pantry widget + request board | `GET /share`, `GET /requests`, `POST /requests/:id/fulfil` | "I have it" button is 44 pt. Sticky notes with their source header |
 | 18 | Food Pantry | `FoodPantry` | Shared surplus (main goal) | `GET /share`, `POST /share/:id/claim` | All / Friends / Groups filter |
 | 19 | Ask for something | `RequestComposer` | Post a request | `POST /requests` | 280-character limit. Audience: friends or one group |

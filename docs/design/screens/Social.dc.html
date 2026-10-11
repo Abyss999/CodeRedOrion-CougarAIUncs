@@ -13,8 +13,9 @@
 <style>
 body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
 a{color:#1F4D2B}a:hover{color:#13261A}
-@keyframes note-drop{0%{opacity:0;transform:translateY(-16px) rotate(0deg)}70%{opacity:1}100%{opacity:1;transform:translateY(0) rotate(var(--tilt))}}
-@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+@keyframes note-drop{0%{opacity:0;transform:translateY(-12px) rotate(0deg)}70%{opacity:1}100%{opacity:1;transform:translateY(0) rotate(var(--tilt))}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){[style*="note-drop"]{animation-name:fade-in!important;animation-duration:.15s!important;animation-delay:0s!important}}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F8E8; display: flex; flex-direction: column">
@@ -83,10 +84,10 @@ const base = 'min-height: 168px; box-sizing: border-box; padding: 14px; border-r
 return {
 pantry: ['Sourdough, half loaf', 'Basil', '6 eggs', 'Rice, 2 lb'],
 notes: [
-{ source: 'Moody Hall 4F', text: 'Anyone have 2 eggs? Baking tonight.', who: 'Marcus, 20m', noteStyle: base + 'background: #FFF6C7; --tilt: -1.2deg; transform: rotate(-1.2deg); animation: note-drop 0.5s cubic-bezier(.2,.8,.2,1) both' },
-{ source: 'Priya R.', text: 'Need a lemon for dinner, can trade cilantro', who: '1h', noteStyle: base + 'background: #E4F2C4; --tilt: 0.8deg; transform: rotate(0.8deg); animation: note-drop 0.5s cubic-bezier(.2,.8,.2,1) 60ms both' },
-{ source: 'CougarCS Kitchen', text: 'Leftover rice from the event. Bring a container.', who: 'Dana, 2h', noteStyle: base + 'background: #E4F2C4; --tilt: 0.6deg; transform: rotate(0.6deg); animation: note-drop 0.5s cubic-bezier(.2,.8,.2,1) 120ms both' },
-{ source: 'Theo Nguyen', text: 'Half a bag of shredded mozzarella?', who: '3h', noteStyle: base + 'background: #FFF6C7; --tilt: -0.7deg; transform: rotate(-0.7deg); animation: note-drop 0.5s cubic-bezier(.2,.8,.2,1) 180ms both' }
+{ source: 'Moody Hall 4F', text: 'Anyone have 2 eggs? Baking tonight.', who: 'Marcus, 20m', noteStyle: base + 'background: #FFF6C7; --tilt: -1.2deg; transform: rotate(-1.2deg); animation: note-drop 0.35s cubic-bezier(.2,.8,.2,1) both' },
+{ source: 'Priya R.', text: 'Need a lemon for dinner, can trade cilantro', who: '1h', noteStyle: base + 'background: #E4F2C4; --tilt: 0.8deg; transform: rotate(0.8deg); animation: note-drop 0.35s cubic-bezier(.2,.8,.2,1) 50ms both' },
+{ source: 'CougarCS Kitchen', text: 'Leftover rice from the event. Bring a container.', who: 'Dana, 2h', noteStyle: base + 'background: #E4F2C4; --tilt: 0.6deg; transform: rotate(0.6deg); animation: note-drop 0.35s cubic-bezier(.2,.8,.2,1) 100ms both' },
+{ source: 'Theo Nguyen', text: 'Half a bag of shredded mozzarella?', who: '3h', noteStyle: base + 'background: #FFF6C7; --tilt: -0.7deg; transform: rotate(-0.7deg); animation: note-drop 0.35s cubic-bezier(.2,.8,.2,1) 150ms both' }
 ]
 };
 }
