@@ -2,6 +2,14 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Deadline mode for iOS CI (owner; #109)
+- **iOS PR CI builds and runs unit tests only** (`-skip-testing:FoodWasteReducerUITests`). The full UI suite runs on every push to `main`. *Why:* a 25–32 min UI run per PR doesn't fit the deadline.
+- **The gate becomes:**
+  - an iOS PR merges only if its local iOS QA PASS includes the UI tests for the flows it touches (on the iPhone 17 Pro sim);
+  - a red UI run on `main` blocks further iOS merges until it's fixed.
+- **Duplicate runs:** `concurrency` cancels stale duplicate runs on PRs only, never on `main` pushes.
+- To revert after the deadline, restore UI tests in PR CI.
+
 ## 2026-10-11 — Receipt reading for the demo: Gemini vision first, GLM-OCR deferred (session `GLM OCR integration`, user instruction; LemurTech22 unavailable)
 - **Decision.** `POST /items/from-receipt` reads a receipt in this order: the ML service `/ocr` if `ML_SERVICE_URL` is set and answers, otherwise Gemini vision on the image (`gemini.receipt_from_image`, one call, JSON schema). The response gains an additive `source: "ocr"|"gemini"`. GLM-OCR is **not** used for the demo (see below). The ML service `/ocr` also gains EXIF upright handling, a 422 `ocr_no_text` for blank text and an optional `OCR_WARMUP=1`.
 - **GLM-OCR: not used for the demo; viable later.** Spike on the development laptop (RTX 3050 Ti, 4 GB), **synthetic receipts only** (rendered fixture text, not photos; not the QA gate). (1) `GlmOcrEngine` is broken: `AutoTokenizer.apply_chat_template` returns no `pixel_values`, so a blank image and three different receipts gave byte-identical empty output and the parser returned zero lines with no error; the temp-file path also raises `PermissionError` on Windows. The fix is `AutoProcessor` + `GlmOcrForConditionalGeneration` with an in-memory PIL image. (2) Stock speed was 13–26 s for a clean 0.2 MP receipt and 74–195 s for 1.2–2.4 MP photo-like images; the cause is the vision tower's Conv3d patch embed (about 11 s), and replacing it with an equivalent `F.linear` gave byte-identical text and 4–6 s at 1.2 MP (12–15 s at 2.4 MP). Peak VRAM 2.7 GiB at 1.2 MP; above the 4 GB card Windows spills into system RAM and slows, so cap input at 1.2–1.5 MP. (3) Parser scored 54/54 lines on synthetic outputs. Real-photo accuracy is unmeasured (the card reports 63.7 photographed against 77.9 digital). Pins that installed: torch 2.9.1+cu128, torchvision 0.24.1+cu128, transformers 5.17.0, accelerate 1.15.0. The engine fix is not in this PR; evidence is in `mldata/glm_spike/spike-report.md` (outside git). Why not now: the engine is unmerged work on another owner's track, real-photo accuracy is unknown, and the 60 s backend and 30 s iOS timeouts leave little margin on a 4 GB card.

@@ -1,7 +1,9 @@
+import io
 import time
 from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, jsonify, request
+from PIL import Image
 from sqlalchemy import func
 
 from ..auth import require_auth
@@ -515,6 +517,42 @@ def parse_text():
     return jsonify(candidates=candidates.normalize_all(raws))
 
 
+_IMAGE_MIMES = {"JPEG": "image/jpeg", "MPO": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+_HEIC_BRANDS = {b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"mif1", b"msf1"}
+_BAD_IMAGE = "image must be a JPEG, PNG, WEBP or HEIC photo."
+
+
+def _jpeg_scan_complete(data: bytes) -> bool:
+    """True when an EOI marker follows the first SOS marker: a JPEG cut off mid-scan has none. Trailing data after the
+    EOI (camera padding, MPO secondary images) is fine. Marker scan only, no pixel decode."""
+    sos = data.find(b"\xff\xda")
+    return sos != -1 and data.find(b"\xff\xd9", sos) != -1
+
+
+def _sniff_image(data: bytes) -> str:
+    """MIME type of a valid photo, from its bytes (never the client's header). Raises validation_error.
+
+    JPEG/PNG/WEBP: Pillow identifies the format and `verify()` checks structure without decoding pixels
+    (it cannot see a cut-off JPEG body, so a JPEG must also have an EOI marker after its first SOS). HEIC/HEIF: Pillow here has no
+    HEIF plugin, so the ISO-BMFF `ftyp` brand is checked instead. Decompression bombs are a 400, not a 500."""
+    if data[4:8] == b"ftyp" and data[8:12] in _HEIC_BRANDS:
+        return "image/heic"
+    try:
+        img = Image.open(io.BytesIO(data))  # reads the header only
+        fmt = img.format
+        img.verify()
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise validation_error("image has too many pixels.")
+    except Exception:  # UnidentifiedImageError, OSError, SyntaxError, ValueError... any undecodable upload
+        raise validation_error(_BAD_IMAGE)
+    mime = _IMAGE_MIMES.get(fmt)
+    if mime is None:
+        raise validation_error(_BAD_IMAGE)
+    if mime == "image/jpeg" and not _jpeg_scan_complete(data):
+        raise validation_error("image is truncated or corrupt.")
+    return mime
+
+
 def _image_upload():
     f = request.files.get("image")
     if f is None:
@@ -522,7 +560,7 @@ def _image_upload():
     data = f.read()
     if not data:
         raise validation_error("image is empty.")
-    return data, f.filename or "upload.jpg", f.mimetype or "image/jpeg"
+    return data, f.filename or "upload.jpg", _sniff_image(data)
 
 
 @bp.post("/from-photo")

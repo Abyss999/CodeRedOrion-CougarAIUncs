@@ -6,7 +6,7 @@
 
 Line format (written by backend/app/services/gemini.py):
     ... app.gemini.usage gemini_usage model=M purpose=P input_tokens=N output_tokens=N
-        total_tokens=N latency_ms=N status=ok|error      (N may be "null")
+        total_tokens=N latency_ms=N status=ok|error code=N|null  (N may be "null")
 Other lines are ignored.
 """
 import argparse

@@ -6,11 +6,21 @@ import pytest
 
 from app.services import candidates, gemini, ml
 
+
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
 LOGGER = "app.services.candidates"
 
 
 def img():
-    return {"image": (io.BytesIO(b"\xff\xd8\xff\xe0jpegbytes"), "p.jpg", "image/jpeg")}
+    return {"image": (io.BytesIO(TINY_JPEG), "p.jpg", "image/jpeg")}
 
 
 def raw(freshness="__missing__", name="Banana"):
