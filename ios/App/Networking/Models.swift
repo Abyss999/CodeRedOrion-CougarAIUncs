@@ -203,6 +203,8 @@ struct NewItem: Codable, Hashable, Sendable {
     var confidence: Double?
     var source: String?
     var groupId: String?
+    /// Per-100 g estimate from `from-photo` enrichment; sent back so the server stores it. Omitted when nil.
+    var nutrition: Nutrition?
 
     /// Post a candidate back as-is. Pass `expiryEdited: true` if the user changed the date.
     init(candidate c: Candidate, expiryEdited: Bool = false, source: String? = nil) {
@@ -211,6 +213,7 @@ struct NewItem: Codable, Hashable, Sendable {
         predictedExpiry = c.predictedExpiry.map { APIDate.dayString($0) }
         expirySource = predictedExpiry == nil ? nil : (expiryEdited ? .user : c.expirySource.flatMap(ExpirySource.init(rawValue:)))
         freshness = c.freshness; confidence = c.confidence
+        nutrition = c.nutrition
         self.source = source
     }
 
@@ -288,6 +291,8 @@ struct Candidate: Codable, Identifiable, Hashable, Sendable {
     var estPrice: Double?
     var predictedExpiry: Date?
     var expirySource: String?
+    /// Present only when `from-photo` was asked to `enrich` with `nutrition` (PR #79); nil otherwise.
+    var nutrition: Nutrition?
 
     /// Candidates have no server id; this is stable within one response.
     var id: String {

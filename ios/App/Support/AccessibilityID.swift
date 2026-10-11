@@ -30,6 +30,16 @@ enum AccessibilityID {
 
     enum Add {
         static let sheet = "add.sheet"
+        static let close = "add.close"
+        static let hero = "add.hero"
+        /// `key`: one | text | barcode | receipt.
+        static func tile(_ key: String) -> String { "add.tile.\(key)" }
+        static let library = "add.library"
+        static let cameraDenied = "add.cameradenied"
+        static let analyzing = "add.analyzing"
+        static let analyzingCancel = "add.analyzing.cancel"
+        static let placeholder = "add.placeholder"
+        static let placeholderBack = "add.placeholder.back"
     }
 
     // Namespaces for the upcoming screens. Each PR adds its element ids inside its own enum
@@ -54,7 +64,38 @@ enum AccessibilityID {
         static let server = "home.server"
         static let serverChange = "home.server.change"
     }
-    enum PhotoReview { static let screen = "photoreview" }
+    enum PhotoReview {
+        static let screen = "photoreview"
+        static let title = "photoreview.title"
+        static let back = "photoreview.back"
+        static let photo = "photoreview.photo"
+        static let spoiledSection = "photoreview.spoiled"
+        static func toss(_ index: Int) -> String { "photoreview.toss.\(index)" }
+        static func keep(_ index: Int) -> String { "photoreview.keep.\(index)" }
+        static func row(_ index: Int) -> String { "photoreview.row.\(index)" }
+        static func rowCheck(_ index: Int) -> String { "photoreview.row.\(index).check" }
+        static func badge(_ index: Int) -> String { "photoreview.row.\(index).badge" }
+        static func less(_ index: Int) -> String { "photoreview.row.\(index).less" }
+        static func more(_ index: Int) -> String { "photoreview.row.\(index).more" }
+        static func amountButton(_ index: Int) -> String { "photoreview.row.\(index).amount" }
+        static func amountField(_ index: Int) -> String { "photoreview.row.\(index).amountfield" }
+        static func unitMenu(_ index: Int) -> String { "photoreview.row.\(index).unit" }
+        static func amountDone(_ index: Int) -> String { "photoreview.row.\(index).done" }
+        static let missed = "photoreview.missed"
+        static let hint = "photoreview.hint"
+        static let confirm = "photoreview.confirm"
+        static let error = "photoreview.error"           // banner when adding fails
+        static let errorRetry = "photoreview.error.retry"
+        static let done = "photoreview.done"
+        static let doneButton = "photoreview.done.button"
+        static func tossBanner(_ index: Int) -> String { "photoreview.tossbanner.\(index)" }
+        // PhotoReviewError
+        static let none = "photoreview.none"             // "We couldn't spot any food"
+        static let failed = "photoreview.failed"         // 502 / offline banner
+        static let failedRetry = "photoreview.failed.retry"
+        static let retake = "photoreview.retake"
+        static let typeInstead = "photoreview.typeinstead"
+    }
     enum ItemDetail { static let screen = "itemdetail" }
     enum Impact {
         static let screen = "impact"
