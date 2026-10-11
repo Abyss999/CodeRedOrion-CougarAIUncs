@@ -2,8 +2,8 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
-## 2026-10-10 — The app is called BiteUp (owner)
-- **Product name: BiteUp**, with the tagline "Use what you have. Share what you spare." It was proposed by teammate Truc (FrankinstyLe) in #49 and approved by the owner. The positioning leans to students and shared households, which fits the social features.
+## 2026-10-10 — The app is called BiteDown (owner)
+- **Product name: BiteDown** (owner). Teammate Truc (FrankinstyLe) proposed a rename as "BiteUp" in #49, and the owner chose **BiteDown**. #49's tagline, "Use what you have. Share what you spare.", and its positioning toward students and shared households come with it until the owner says otherwise.
 - **The rename is user-facing only.** That covers the canvas (sign-in mark, settings version line, titles), the doc titles, the README and the iOS `CFBundleDisplayName`. Internal names stay: the Xcode target and scheme `FoodWasteReducer`, the repo, the Docker services and the bundle id. Renaming those would churn every open branch for no user-visible gain.
 
 ## 2026-10-10 — ML models handed to a teammate (owner)

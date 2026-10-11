@@ -104,14 +104,16 @@ chart values are always labeled.
 
 ## Spacing, radius, size
 - **Spacing:** 4 · 8 · 12 · 16 · 20 · 24 · 32. The screen gutter is 20.
-- **Radius:** chips and badges 10 · inputs 12 · rows, cards and option tiles 16 · hero cards
-  20 · sheets 28 (top corners) · Add button and icon buttons fully round.
+- **Radius:** chips and badges 10 · inputs 12 · controls 14 (secondary and Google buttons, inline
+  controls, as drawn on the artboards) · rows and cards 16 · large option tiles 18 (Add sheet,
+  barcode result, recipe cards) · hero cards 20 · sheets 28 (top corners) · Add button and icon
+  buttons fully round. `Theme.Radius` mirrors this list.
 - **Touch targets** are at least 44 pt. Primary buttons are 56 pt tall and removal options are
   68 pt.
 - **Tab bar:** the system glass `TabView`. Add is a tab, so there's no custom size.
 
 ## Motion
-Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped at 8 items, and shimmer for skeletons. Per-screen behaviour, haptics and the Reduce Motion fallbacks are in [`MOTION.md`](MOTION.md).
+Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped at 6 items (MOTION.md), and shimmer for skeletons. Per-screen behaviour, haptics and the Reduce Motion fallbacks are in [`MOTION.md`](MOTION.md).
 
 ## Components
 | Component | Seen in | Notes |
