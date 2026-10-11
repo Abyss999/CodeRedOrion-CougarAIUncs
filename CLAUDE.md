@@ -1,4 +1,4 @@
-# Food Waste Reducer — agent rules
+# BiteUp — agent rules
 
 Hackathon project (AI × sustainability/climate). iOS app that tracks fridge/pantry food, predicts
 expiry, flags spoilage from photos, suggests recipes from expiring items, and lets friends/groups

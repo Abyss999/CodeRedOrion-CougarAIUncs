@@ -2,7 +2,8 @@
 
 ## Latest documentation update — 2026-10-10
 
-- The public-facing project name is **Fridge4Friends**, with the tagline **Share more. Waste less.**
+- The public-facing project name is **BiteUp**, with the tagline **Use what you have. Share what you spare.**
+- The iOS display name, sign-in mockup, design canvas metadata, and product/agent document titles use BiteUp.
 - `README.md` now includes the product pitch, intended flow, implementation status, stack,
   local startup instructions, documentation links, and dataset attribution.
 - README status is grounded in current source and area QA logs: iOS remains a functional-screen
@@ -10,7 +11,7 @@
   records Docker startup and migration checks. The older checkpoint below predates these checks.
 - Freshness and impact estimates are explained without claiming food safety or proven waste
   prevention. The internal Xcode project and scheme are still `FoodWasteReducer`.
-- Documentation-only update. Source paths and commands were reviewed; no tests or builds were run.
+- README polish and branding update. Source paths and commands were reviewed; no tests or builds were run.
 
 _Last updated: 2026-10-10. This is checkpoint 1, the end of session 1 on the Linux VPS. The next session runs on a Mac._
 

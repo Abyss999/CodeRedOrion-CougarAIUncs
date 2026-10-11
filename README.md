@@ -1,8 +1,8 @@
-# Fridge4Friends
+# BiteUp
 
-**Share more. Waste less.**
+**Use what you have. Share what you spare.**
 
-Fridge4Friends helps students and shared households keep track of their food, decide what to
+BiteUp helps students and shared households keep track of their food, decide what to
 cook next, and share surplus with friends. Built for
 [CodeRED: Orion 2026](https://codered-orion-ccs.devpost.com/), it brings inventory, AI recipe
 suggestions, and food sharing into one iOS app.
@@ -12,7 +12,7 @@ suggestions, and food sharing into one iOS app.
 ## Why we’re building it
 
 Food gets forgotten at the back of the fridge. Planning a meal takes effort, and extra food
-often goes unused even when someone nearby could use it. Fridge4Friends makes the next action
+often goes unused even when someone nearby could use it. BiteUp makes the next action
 easier: see what needs attention, cook with it, or offer it to a friend.
 
 ## The experience
