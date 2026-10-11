@@ -730,7 +730,7 @@ Contract: docs/API.md `POST /items/:id/remove` ("`recipient_id` has three cases"
 
 ## feat/backend-gaps
 
-Four additive gaps, stacked on `feat/donation-recipient`: G1 `GET /requests?mine=1`, G2 `share.audience` on the owner's items, G3 `GET /auth/me`, G5 `GET /people/reachable`. Tests are written against `docs/API.md` as built. **Status: targeted runs green.**
+Four additive gaps, stacked on `feat/donation-recipient`: G1 `GET /requests?mine=1`, G2 `share.audience` on the owner's items, G3 `GET /auth/me`, G5 `GET /people/reachable`. Tests are written against `docs/API.md` as built. **Status: PASS (final).**
 
 **New file:** `tests/test_backend_gaps.py`.
 - **G1 (`?mine=1`)**
@@ -771,4 +771,8 @@ Four additive gaps, stacked on `feat/donation-recipient`: G1 `GET /requests?mine
 - `mine=" 1"` (leading space) was expected to be 400, but the code trims it. The contract names only `1` and `true`, so I dropped that case.
 - The `?mine=1` query-count baseline had no fulfilled request, so the conditional fulfiller lookup showed as one extra query. The baseline now includes a fulfilled request.
 
-**Bugs:** none found; BE-18 is still free. A full-suite run is still needed before the verdict.
+**Bugs:** none. BE-18 is still free.
+
+**Full suite:** run by the coordinator on HEAD `446c2ca` (with #74 merged in). `pytest -q --cov=app` gave 1708 passed and 3 skipped in 336 s, with total coverage 98%. Merging main afterwards (`06cf7fa`) changed nothing under `backend/`.
+
+**Verdict: PASS (final).** No open bugs.
