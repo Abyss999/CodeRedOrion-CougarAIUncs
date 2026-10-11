@@ -255,15 +255,34 @@ def test_empty_gemini_answer_is_not_reported_as_gemini(client, user, monkeypatch
     assert b["categorized_by"] == "heuristic"
 
 
-@pytest.mark.xfail(strict=True, reason="BE-13: non-list/non-dict Gemini JSON -> AttributeError -> 500")
-@pytest.mark.parametrize("answer", ["null", '"a string"', "42", "true"])
-def test_non_container_gemini_answer_is_not_500(client, user, monkeypatch, gem_on, ml_on, answer):
-    """BE-13: valid JSON that is neither list nor dict reaches data.get(...) in categorize_receipt_lines
-    -> AttributeError, which the route does not catch (it only catches UpstreamError) -> 500."""
-    FakeGenai(monkeypatch, [answer])
-    set_ocr(monkeypatch, LINES)
+@pytest.mark.parametrize("answer", ["null", '"a string"', "42", "true", '{"items": "nope"}', '{"items": 5}'])
+def test_non_container_gemini_answer_is_not_500(client, user, monkeypatch, gem_on, ml_on, sleeps, usage_records,
+                                                answer):
+    """BE-13 (fixed via #57 on main, verified on #54): a scalar or unusable JSON shape is an UpstreamError in
+    _generate, so the receipt falls back to the heuristic with 200 and logs one status=error line."""
+    fake = FakeGenai(monkeypatch, [answer])
+    set_ocr(monkeypatch, LINES, total=12.20)
     r = post_receipt(client, user)
-    assert r.status_code == 200 and r.get_json()["categorized_by"] == "heuristic"
+    assert r.status_code == 200, r.get_data(as_text=True)
+    b = r.get_json()
+    assert b["categorized_by"] == "heuristic" and b["total"] == 12.20
+    assert [(c["name"], c["category"]) for c in b["candidates"]] == [
+        ("GV 2% MLK GAL", "dairy"), ("CHKN BRST", "meat"), ("BANANAS", "produce_leafy")]
+    assert len(fake.calls) == 1 and sleeps == []  # not transient: no retry
+    assert len(usage_records) == 1
+    kv = _kv(usage_records[0])
+    assert kv["status"] == "error" and kv["purpose"] == "receipt_categorize"
+
+
+def test_wrapped_items_answer_still_categorises(client, user, monkeypatch, gem_on, ml_on, usage_records):
+    """list_key="items" (merged from #57): {"items": [...]} is unwrapped like a bare list."""
+    FakeGenai(monkeypatch, [json.dumps({"items": ENRICHED})])
+    set_ocr(monkeypatch, LINES)
+    b = post_receipt(client, user).get_json()
+    assert b["categorized_by"] == "gemini"
+    assert [(c["name"], c["category"]) for c in b["candidates"]] == [
+        ("2% milk", "dairy"), ("Chicken breast", "meat"), ("Bananas", "produce_leafy")]
+    assert len(usage_records) == 1 and _kv(usage_records[0])["status"] == "ok"
 
 
 # ---------- 3. number parsing ----------------------------------------------------------------
