@@ -103,7 +103,7 @@ def test_parse_capture_time_formats():
 
 
 def _rec(src, name):
-    return dict(src=src, path=Path(name), boxes=[], group=P.group_key(src, Path(name)))
+    return dict(src=src, path=Path(name), boxes=[], group=P.group_key(src, Path(name), series=True))
 
 
 def test_assign_sessions_groups_by_gap_and_keeps_rf_groups():
@@ -266,6 +266,12 @@ def test_no_cell_exists_only_outside_train():
                 assert sp == {"train"}
 
 
+def _tag(recs, suffix):
+    for r in recs:
+        r["group"] += suffix
+    return recs
+
+
 def _sess_recs(spec):
     """spec: {cell: [session sizes]} -> one group per session, one image per box"""
     recs, n = [], 0
@@ -296,3 +302,44 @@ def test_required_cells_get_a_whole_session_in_heldout_and_others_stay_in_train(
     # configurable: with --min-session-images 1 the 3-image eggplant session counts and the cell becomes required
     _, info1 = P.assign_splits(recs, 0.1, 0.1, 42, min_session_images=1)
     assert info1["cell_decisions"]["eggplant/spoiled"]["decision"] == "required_in_heldout"
+
+
+def test_train_keeps_majority_and_pooling_guards():
+    # potato/spoiled-like cell: sessions 160 / 77 / 6 must not end up with 6 images in train
+    recs = _sess_recs({"potato/spoiled": [160, 77, 6], "tomato/fresh": [200, 150, 120]})
+    for r in recs:
+        r["group"] = "s/session/compact/" + r["group"]                       # timestamped sessions
+    split, info = P.assign_splits(recs, 0.1, 0.1, 42)
+    d = info["cell_decisions"]["potato/spoiled"]
+    tr = d["boxes_train_val_heldout"][0]
+    assert tr * 2 >= sum(d["boxes_train_val_heldout"]) or d["decision"] == "not_measurable_on_heldout"
+    for k, dd in info["cell_decisions"].items():
+        if dd["decision"] == "required_in_heldout":
+            a, b, c = dd["boxes_train_val_heldout"]
+            assert a * 2 >= a + b + c, (k, dd["boxes_train_val_heldout"])
+    # pooling: a few images of a cell inside a LARGE session are fragments and are NOT pooled
+    big_sess = _sess_recs({"egg/fresh": [4], "milk/fresh": [300]})
+    for r in big_sess:
+        r["group"] = "s/session/compact/one"                                   # same session holds 4 eggs + 300 milks
+    frag = _sess_recs({"egg/fresh": [6, 5]})
+    for r in frag:
+        r["group"] = "s/session/compact/" + r["group"]
+    d = P.assign_splits(big_sess + frag + _tag(_sess_recs({"egg/fresh": [200]}), "_big"), 0.1, 0.1, 1)[1]["cell_decisions"]["egg/fresh"]
+    assert d["units"]["pool_groups"] == 2 and d["units"]["ignored_small_session_fragments"] == [4]
+    # small WHOLE groups (web photos / complete one-shot sessions) are pooled
+    web = _sess_recs({"egg/fresh": [4, 4, 3]})
+    d = P.assign_splits(web + _tag(_sess_recs({"egg/fresh": [200]}), "_big"), 0.1, 0.1, 1)[1]["cell_decisions"]["egg/fresh"]
+    assert d["units"]["pool_groups"] == 3 and d["units"]["pool_images"] == 11 and d["units"]["sessions_ge_min"] == [200]
+
+
+def test_split_dirs_always_exist(tmp_path):
+    root = tmp_path / "raw" / "v"; (root / "data.yaml").parent.mkdir(parents=True)
+    (root / "data.yaml").write_text("names: ['milk']\n"); (root / "train" / "labels").mkdir(parents=True)
+    for i in range(3):
+        img(root / "train" / "images" / f"{nm('m', i)}.jpg"); (root / "train" / "labels" / f"{nm('m', i)}.txt").write_text("0 0.5 0.5 0.6 0.6\n")
+    src = tmp_path / "s.json"
+    src.write_text(json.dumps({"sources": [{"name": "v", "kind": "yolo", "root": str(root), "freshness_default": "fresh"}]}))
+    out = tmp_path / "o"; P.main(["--sources", str(src), "--out", str(out)])
+    for sp in ("train", "val", "heldout"):
+        for sub in ("images", "labels", "freshness"):
+            assert (out / sub / sp).is_dir()

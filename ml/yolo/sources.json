@@ -1,5 +1,5 @@
 {
-  "_comment": "Real sources for the Food Waste Reducer. No secrets. class_map keys = SOURCE labels; value = canonical taxonomy name, 'name:spoiled'/'name:fresh' to force freshness, or null to drop. Sources with \"pending\": true (or a missing root) are skipped by prepare_dataset.py (none pending now). 'max_per_class' caps images per class x freshness for 'folders' sources. Roots are outside the repo under mldata/. 'drop_image_if_label' drops an entire image if it contains any listed unmodelled object (so it is not left unlabeled).",
+  "_comment": "Real sources for the Food Waste Reducer. No secrets. class_map keys = SOURCE labels; value = canonical taxonomy name, 'name:spoiled'/'name:fresh' to force freshness, or null to drop. Sources with \"pending\": true (or a missing root) are skipped by prepare_dataset.py (none pending now). 'max_per_class' caps images per class x freshness for 'folders' sources. Roots are outside the repo under mldata/. 'drop_image_if_label' drops an entire image if it contains any listed unmodelled object (so it is not left unlabeled). 'series_grouping': true groups numbered camera series (name_3, name_4, ...) into one split group; default is one group per original photo.",
   "sources": [
     {
       "name": "vegqual",
@@ -29,7 +29,8 @@
         "fresh_bitter_gourd": null,
         "defected_pointed_gourd": null,
         "fresh_pointed_gourd": null
-      }
+      },
+      "series_grouping": true
     },
     {
       "name": "fridge_objects",
@@ -79,7 +80,8 @@
         "project": "hien_fridge-tathx",
         "version": 12
       },
-      "export_format": "yolov8"
+      "export_format": "yolov8",
+      "series_grouping": true
     },
     {
       "name": "fresh_stale_fruits_veg",
@@ -106,7 +108,8 @@
       "kaggle": {
         "dataset": "raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables"
       },
-      "version_note": "Kaggle dataset; no version number exposed (record download date 2026-10-10)."
+      "version_note": "Kaggle dataset; no version number exposed (record download date 2026-10-10).",
+      "series_grouping": true
     }
   ]
 }

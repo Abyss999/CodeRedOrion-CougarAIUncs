@@ -77,9 +77,14 @@ def series_stem(path: Path) -> str:
     return key or st
 
 
-def group_key(src: str, path: Path) -> str:
-    """Pre-session group: source + numbered-series key (covers '.rf.' augmentations too)."""
-    return f"{src}/{series_stem(path)}"
+def group_key(src: str, path: Path, series: bool = False) -> str:
+    """Pre-session group. series=True (per-source option "series_grouping": true, for sources whose files are numbered
+    camera series such as Defected_begun_3/_4 or ID11_apple_001) groups the whole numbered series; otherwise one group per
+    ORIGINAL photo (the stem before '.rf.', so Roboflow augmentations stay together but different photos are independent;
+    the class prefix of staged names is kept). Capture sessions (timestamps) and pHash merging apply on top."""
+    if series:
+        return f"{src}/{series_stem(path)}"
+    return f"{src}/{_AUG_PREFIX.sub('', path.stem.split('.rf.')[0])}"
 
 
 # Capture-time patterns found in filenames. SEARCHED (not anchored) so staged names such as
@@ -170,6 +175,7 @@ def merge_near_duplicates(recs: list[dict], thresh: int, max_unit: int) -> tuple
         c = find(r["group"])
         if c in over:
             by_src_over[r["src"]] += 1          # keep the capture group as its own unit
+            r["oversized"] = True
         else:
             r["group"] = c
     sizes = Counter(r["group"] for r in recs)
@@ -283,7 +289,7 @@ def collect(sources: list[dict], skipped: Counter, drops: Counter | None = None,
                 out.append(dict(name=name, freshness=fr or assumed or "fresh", known=known,
                                 box=(xc, yc, w, h)))
             if out:
-                srecs.append(dict(src=src["name"], path=ip, boxes=out, group=group_key(src["name"], ip)))
+                srecs.append(dict(src=src["name"], path=ip, boxes=out, group=group_key(src["name"], ip, bool(src.get("series_grouping")))))
             elif not boxes:
                 drops[f"{src['name']}:empty_label_file"] += 1
             else:
@@ -333,14 +339,27 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
     total = Counter()
     for c in gcells.values():
         total.update(c)
+    bad_pool = {r["group"] for r in recs if r.get("oversized")}
+    # poolable = a WHOLE group that is itself small (< min_session_images images in total: a web photo, or a complete
+    # one-shot session), and not part of a pHash-chained component. A few images of a cell inside a LARGE session are
+    # fragments of that session and are never pooled.
+    elig = {g: (gcells[g]["__images__"] < min_session_images and g not in bad_pool) for g in gcells}
+
+    def unit_detail(k):
+        sz = [(g, gcells[g][k]) for g in gcells if gcells[g][k] > 0]
+        big = sorted((n for g, n in sz if n >= min_session_images), reverse=True)
+        small = sorted((n for g, n in sz if n < min_session_images and elig[g]), reverse=True)
+        pooled = len(small) >= 2 and sum(small) >= min_session_images
+        return {"sessions_ge_min": big, "pool_groups": len(small) if pooled else 0,
+                "pool_images": sum(small) if pooled else 0,
+                "ignored_small_session_fragments": sorted((n for g, n in sz if n < min_session_images and not elig[g]), reverse=True),
+                "units": len(big) + (2 if pooled else 0)}
+
     def n_units(k):
-        """independent units of a cell: sessions with >= min_session_images images of it, plus the pool of smaller
-        groups (counted as 2 units when it holds >= 2 groups and >= min_session_images images altogether, since
-        independent single photos can be spread over splits; one small stray session does not count)."""
-        sz = [gcells[g][k] for g in gcells if gcells[g][k] > 0]
-        big = [n for n in sz if n >= min_session_images]
-        small = [n for n in sz if n < min_session_images]
-        return len(big) + (2 if len(small) >= 2 and sum(small) >= min_session_images else 0)
+        """independent units of a cell: sessions with >= min_session_images images of it, plus a POOL of smaller groups
+        that counts as 2 units when it holds >= 2 groups and >= min_session_images images altogether. Only groups from
+        untimestamped sources (not capture-session fragments, not members of a pHash-chained component) are pooled."""
+        return unit_detail(k)["units"]
 
     # cells that are NOT measurable on held-out (>= MIN_CELL_IMAGES images but < 2 sessions with >= min_session_images
     # images of the cell) go ENTIRELY to train: every group holding them is forced into train.
@@ -419,6 +438,7 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
     # (apple/spoiled: the 98-image session instead of the 26-image one) provided no other cell loses its held-out or
     # last train presence by the swap.
     swaps = []
+    not_meas_late: set = set()
     for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
         grp_k = [g for g in gcells if gcells[g][k] > 0]
         if cell_imgs[k] < MIN_CELL_IMAGES or n_units(k) < 2 or assigned["heldout"][k] == 0 or len(grp_k) > 5:
@@ -444,32 +464,85 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
         if bad:                                           # the swap would cost another cell its coverage: undo
             assigned.clear(); assigned.update(snap[0]); out.clear(); out.update(snap[1])
             continue
-        pinned.add(g)
         swaps.append({"cell": k, "from": src, "session_cell_images": gcells[g][k], "replaced_heldout_sessions": cur_n})
-    # TRAIN MAJORITY: a scarce cell (<= 5 sessions) whose train share is smaller than its val or held-out share is
-    # rotated: largest session -> train, next -> held-out, the rest -> val. Reverted if another cell would lose
-    # coverage in any split (e.g. potato/spoiled 160/77/6 must not be trained on the 6-image session).
-    for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
-        hs = sorted((g for g in gcells if gcells[g][k] > 0), key=lambda g: -gcells[g][k])
-        if (cell_imgs[k] < MIN_CELL_IMAGES or n_units(k) < 2 or len(hs) > 5 or len(hs) < 3
-                or assigned["train"][k] >= max(assigned["val"][k], assigned["heldout"][k])
-                or any(g in forced_train or g in pinned for g in hs)):
-            continue
-        snap = ({x: Counter(c) for x, c in assigned.items()}, dict(out))
-        for i, g in enumerate(hs):
-            new_sp = "train" if i == 0 else "heldout" if i == 1 else "val"
-            if out[g] != new_sp:
-                assigned[out[g]].subtract(gcells[g]); assigned[new_sp].update(gcells[g]); out[g] = new_sp
-        if any((snap[0][sp][c] > 0 and assigned[sp][c] <= 0) for sp in ("train", "val", "heldout") for c in cell_imgs):
-            assigned.clear(); assigned.update(snap[0]); out.clear(); out.update(snap[1])
+    # TRAIN MAJORITY (approved rule): train keeps >= 50% of every measurable cell. A cell below that is re-cut at
+    # session level: largest session -> train, next -> held-out (so held-out keeps one whole session), the rest -> val.
+    # If no such cut reaches 50% in train while leaving held-out a qualifying unit, the whole cell goes to train and is
+    # marked not measurable. Another cell must not lose its train/held-out presence through a re-cut (else it is undone).
+    majority_actions = []
+    import itertools
+
+    def _required(c):
+        return cell_imgs[c] >= MIN_CELL_IMAGES and n_units(c) >= 2 and c not in not_meas_late
+
+    def _viol(cells, counts):
+        v = 0
+        for c in cells:
+            t, vv, h = counts["train"][c], counts["val"][c], counts["heldout"][c]
+            tot = t + vv + h
+            if _required(c):
+                v += (t * 2 < tot) + (h == 0)
+            if t == 0 and vv + h > 0:
+                v += 3
+        return v
+
+    def enforce_majority():
+        """Train keeps >= 50% of every measurable cell (approved rule). A violating cell is re-cut at SESSION level by
+        searching all train/val/held-out assignments of its (<= 7) movable sessions, scored jointly over every cell those
+        sessions contain (so coupled cells such as potato/fresh + potato/spoiled are solved together). If no assignment
+        gives train >= 50% with a held-out unit, the whole cell goes to train and is marked not measurable."""
+        for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
+            tot = assigned["train"][k] + assigned["val"][k] + assigned["heldout"][k]
+            if cell_imgs[k] < MIN_CELL_IMAGES or not _required(k) or tot == 0 or assigned["train"][k] * 2 >= tot:
+                continue
+            hs = [g for g in gcells if gcells[g][k] > 0 and g not in forced_train and g not in pinned]
+            before = (assigned["train"][k], assigned["val"][k], assigned["heldout"][k])
+            best = None
+            if 2 <= len(hs) <= 7:
+                cells = {c for g in hs for c in gcells[g] if c in cell_imgs}
+                base = {sp: Counter(assigned[sp]) for sp in assigned}
+                for g in hs:
+                    base[out[g]].subtract(gcells[g])
+                for plan in itertools.product(("train", "val", "heldout"), repeat=len(hs)):
+                    cnt = {sp: Counter(base[sp]) for sp in base}
+                    for g, sp in zip(hs, plan):
+                        cnt[sp].update(gcells[g])
+                    sc = (_viol(cells, cnt), sum(1 for g, sp in zip(hs, plan) if out[g] != sp))
+                    if best is None or sc < best[0]:
+                        best = (sc, plan)
+                cur = {sp: Counter(assigned[sp]) for sp in assigned}
+                if best[0][0] < _viol(cells, cur) and best[0][0] == 0 or (best[0][0] < _viol(cells, cur)
+                                                                          and (lambda c: c["train"][k] * 2 >= sum(c[x][k] for x in c))(
+                                                                              _apply_plan(hs, best[1], base))):
+                    for g, sp in zip(hs, best[1]):
+                        if out[g] != sp:
+                            assigned[out[g]].subtract(gcells[g]); assigned[sp].update(gcells[g]); out[g] = sp
+                    majority_actions.append({"cell": k, "action": "recut_by_session", "before_train_val_heldout": before,
+                                             "after_train_val_heldout": (assigned["train"][k], assigned["val"][k], assigned["heldout"][k]),
+                                             "violations_left_in_coupled_cells": best[0][0]})
+                    continue
+            for g in [g for g in gcells if gcells[g][k] > 0 and g not in pinned]:       # no cut works: whole cell to train
+                if out[g] != "train":
+                    assigned[out[g]].subtract(gcells[g]); assigned["train"].update(gcells[g]); out[g] = "train"
+            not_meas_late.add(k)
+            majority_actions.append({"cell": k, "action": "all_to_train_not_measurable", "before_train_val_heldout": before})
+
+    def _apply_plan(hs, plan, base):
+        cnt = {sp: Counter(base[sp]) for sp in base}
+        for g, sp in zip(hs, plan):
+            cnt[sp].update(gcells[g])
+        return cnt
+
+    enforce_majority()
     # val coverage for cells >= MIN_CELL_IMAGES images (best effort, from train groups only)
     moved = 0
     for k in sorted(cell_imgs, key=lambda k: cell_imgs[k]):
         if cell_imgs[k] < MIN_CELL_IMAGES or assigned["val"][k] > 0:
             continue
         holders = [g for g in gcells if gcells[g][k] > 0]
+        tot_k = assigned["train"][k] + assigned["val"][k] + assigned["heldout"][k]
         cands = [g for g in holders if out[g] == "train" and g not in forced_train and g not in pinned
-                 and assigned["train"][k] - gcells[g][k] > 0]
+                 and (assigned["train"][k] - gcells[g][k]) * 2 >= tot_k and k not in not_meas_late]
         if len(holders) < 2 or not cands:
             continue
         g = min(cands, key=lambda g: (gcells[g]["__images__"], group_hash(g, seed)))
@@ -497,6 +570,11 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
             break
     bad = [k for k in keys for sp in ("heldout", "val") if assigned[sp][k] > 0 and assigned["train"][k] == 0]
     assert not bad, f"cells present outside train only: {bad}"
+    for _ in range(2):                  # audit after the restore pass: the majority rule must hold at the end
+        enforce_majority()
+    for k in cell_imgs:
+        if assigned['heldout'][k] > 0 and assigned['train'][k] == 0:
+            raise AssertionError(k)
     decisions = {}
     for k in sorted(cell_imgs):
         q = sorted((gcells[g][k] for g in gcells if gcells[g][k] >= min_session_images), reverse=True)
@@ -505,9 +583,12 @@ def assign_splits(recs: list[dict], heldout: float, val: float, seed: int,
         reason = ("" if req else "fewer than %d images" % MIN_CELL_IMAGES if cell_imgs[k] < MIN_CELL_IMAGES else
                   "fewer than 2 independent units (sessions with >= %d images of the cell, or a pool of >= 2 smaller groups); whole cell goes to train" % min_session_images)
         decisions[k] = {"images": cell_imgs[k], "sessions": len(allsess), "session_sizes": allsess,
-                        "decision": "required_in_heldout" if req else "not_measurable_on_heldout", "reason": reason,
+                        "decision": "required_in_heldout" if req and k not in not_meas_late else "not_measurable_on_heldout",
+                        "reason": reason if not (req and k in not_meas_late) else
+                        "no session-respecting cut keeps train >= 50% and leaves held-out a qualifying unit; whole cell goes to train",
+                        "units": unit_detail(k),
                         "boxes_train_val_heldout": [assigned["train"][k], assigned["val"][k], assigned["heldout"][k]]}
-    info = {"cell_decisions": decisions, "required_cell_moves": moves, "heldout_session_upgrades": swaps, "required_cells_impossible": impossible,
+    info = {"cell_decisions": decisions, "required_cell_moves": moves, "heldout_session_upgrades": swaps, "train_majority_actions": majority_actions, "required_cells_impossible": impossible,
             "required_cells_missing_from_heldout": sorted(k for k, d in decisions.items()
                 if d["decision"] == "required_in_heldout" and assigned["heldout"][k] == 0),
             "min_session_images": min_session_images,
@@ -754,6 +835,12 @@ def main(argv=None):
                                      width=W, height=H, variant_of=rel))
                 gt.append(gt_line(vrel, kind, r["boxes"], W, H))
 
+    for sp in ("train", "val", "heldout"):                       # split dirs always exist, even when empty
+        for sub in ("images", "labels", "freshness"):
+            (out / sub / sp).mkdir(parents=True, exist_ok=True)
+    for sp in ("train", "val"):
+        for fr in sorted({b["freshness"] for r in recs for b in r["boxes"]}):
+            (out / "cls" / sp / fr).mkdir(parents=True, exist_ok=True)
     write_data_yaml(out, active)
     with open(out / "heldout_manifest.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["image", "lighting", "lighting_method", "source", "group",

@@ -149,6 +149,18 @@ same eval without reading `class_names.json`.
     leaves train at least as many images of the cell as were moved: apple/spoiled sessions 26/125/98/1 -> the 98 session is
     held out), while train keeps at least one session. Moves and collateral are listed in `required_cell_moves` and
     `heldout_session_upgrades`.
+  - **Pooling (explicit interpretation, recorded per cell as `cell_decisions[cell].units`):** web photos are each their own
+    1-image group, so counting only sessions would make every fridge cell non-measurable. Therefore groups that are
+    *themselves small* (< `--min-session-images` images in total: a web photo or a complete one-shot session) and not part
+    of a pHash-chained component are **pooled**; a pool of >= 2 such groups with >= 10 images of the cell counts as 2 units.
+    A few images of a cell inside a LARGE session are *fragments* and are never pooled (reported as
+    `ignored_small_session_fragments`, e.g. eggplant/spoiled's 3-image fragment). `units` lists `sessions_ge_min`,
+    `pool_groups`, `pool_images`. Pooled groups are pHash-distinct (near-duplicates were merged into one group beforehand);
+    the leakage gates run after pooling on the written files.
+  - **Train keeps >= 50% of every measurable cell.** A violating cell is re-cut at session level by searching all
+    train/val/held-out assignments of its (<= 7) movable sessions, scored jointly over every cell those sessions contain
+    (potato/spoiled 160/77/6 coupled to potato/fresh: train 166 / held-out 77); if no cut works the whole cell goes to
+    train and is marked not measurable. Actions are in `stratification.train_majority_actions`.
   - Otherwise the cell is **not measurable on held-out** and goes ENTIRELY to train (e.g. eggplant/spoiled 369 + 3 images,
     single-session cells banana, onion, orange). `stratification.cell_decisions` records, for every cell, the image and
     session counts, the session sizes, the decision, the reason and the train/val/held-out box counts.
@@ -160,7 +172,7 @@ same eval without reading `class_names.json`.
   `dataset_report.json.leakage_by_source` reports, per source, held-out originals with a train/val timestamp neighbour
   within 60 s / 300 s and pHash and (independent, coarser) dHash near-duplicates. **Reproducibility parameters** (all defaults): `--seed 42`, `--session-gap 300`, `--phash-threshold 6`, `--max-unit-images 600`,
 `--min-session-images 10`, `--heldout 0.10 --val 0.10`, Kaggle `max_per_class: 250` per class x freshness (images picked by SHA1
-of `seed:path`). Same sources + parameters give identical splits; QA copies live in `mldata/fwr_data_v2` / `fwr_data_v3`. `--session-gap 0` disables sessions (series grouping only). Fractions are image-count targets, but
+of `seed:path`). Same sources + parameters give identical splits; QA copies live in `mldata/fwr_data_v2` / `fwr_data_v3`. `--session-gap 0` disables sessions. **Series grouping is a per-source option** (`"series_grouping": true` in sources.json: vegqual, hien_fridge, fresh_stale_fruits_veg); sources without it (the pipeline's staged sources, fridge_objects) get one group per original photo (the stem before `.rf.`, class prefix kept). All split/crop/freshness directories are always created, even when a split is empty. Fractions are image-count targets, but
   because sessions are big the real held-out share is lumpy (see the report).
 - **Lighting tag**: auto from mean luma (<70 => `low`) and mean R/B (>1.35 => `warm`), else `normal`
   (`lighting_method=auto`; hand-correct via `--lighting-overrides file.csv` with columns `image,lighting` ->
