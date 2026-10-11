@@ -264,15 +264,12 @@ def verify(root: Path, out: dict) -> dict:
     stem_span = [s for s, v in span.items() if len(v) > 1 and not sess_ts[s]]
     if ts_span:
         fails.append(f"{len(ts_span)} timestamped sessions span more than one split: {ts_span[:3]}")
-    # a merged unit that spans splits because of a cross-split pHash pair is a failure (ML-60)
+    # cross-split pHash pairs inside merged units (ML-60) are reported with examples, not failed: the per-source <= 1%
+    # threshold for identity pHash pairs is leakage_check's gate (ML-21; owner ruling 2026-10-11, warning only)
     pm = out.get("phash_merge") or {}
     pairs = pm.get("cross_split_pairs", [])
-    if pairs:
-        for p in pairs[:5]:
-            fails.append(f"merged unit {p['unit']} spans splits {p['a_split']}/{p['b_split']} because of pHash near-duplicate "
-                         f"pair {p['a']} ({p['a_split']}) ~ {p['b']} ({p['b_split']}), hamming {p['hamming']}")
-        if len(pairs) > 5:
-            fails.append(f"... {len(pairs) - 5} more cross-split pHash pairs inside merged units")
+    info["phash_cross_split_pair_examples"] = [
+        f"{p['a']} ({p['a_split']}) ~ {p['b']} ({p['b_split']}), hamming {p['hamming']}" for p in pairs[:5]]
     info["timestamped_sessions_spanning_splits"] = len(ts_span)
     info["phash_cross_split_pairs"] = len(pairs)
     info["phash_oversized_components_not_merged"] = pm.get("oversized_components_not_merged", 0)
