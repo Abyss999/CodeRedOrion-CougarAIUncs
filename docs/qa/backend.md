@@ -199,3 +199,21 @@ Notes (not bugs): an empty-string `freshness` is normalised to `fresh` with a st
 
 - **BE-8 fixed and verified.** `parse_number` now rejects NaN, Infinity and -Infinity with 400. The xfail is now passing tests: `NaN`, `Infinity` and `-Infinity` on create for `confidence`, `est_price`, `quantity` and `est_weight_kg`, and on PATCH for `quantity`, `est_price` and `est_weight_kg`. Each case checks nothing was written (create) or the value is unchanged (PATCH).
 - **BE-9 (low, open):** a finite `est_price` beyond numeric(10,2) (1e8, 1e12, 1e300) overflows in Postgres and returns 500 instead of 400. Repro: `POST /items {"items":[{"name":"x","est_price":1e8}]}`. `test_huge_est_price_is_400_not_500` is xfail strict (3 cases), so it fails loudly once fixed. The same may apply to `est_weight_kg` and `quantity`, which are unbounded `numeric`, so likely only extreme exponents matter there; not tested.
+
+## 2026-10-10 - receipt candidates + Gemini category guide + retry (branch feat/receipt-gemini-link, rebased onto main with PR #50)
+
+**Result: PASS.** `pytest -q --cov=app` from `backend/` = **757 passed, 1 skipped, 3 xfailed, coverage 97%** (`fwr_test`; the 3 xfails are the existing BE-9 `test_huge_est_price_is_400_not_500` cases). New files: `tests/test_receipt_candidates.py` (57 tests), `tests/test_gemini_retry.py` (~30). Gemini and the ML service are stubbed; no network.
+
+| Checked | Result |
+|---|---|
+| `from-receipt` shape `{candidates,total,categorized_by}`; full item fields + `price == est_price` + `receipt_text`; candidate (as returned, with extras) posts to `POST /items {items:[...]}` -> 201 (also under PR #50 validation) | ok |
+| Gemini stub: `display_name` as name, category/food_group/storage used, invalid enums fall back, fewer entries than lines -> one candidate per line, non-dict entries, name capped at 120, `categorized_by: gemini` | ok |
+| `UpstreamError` -> heuristic + 200; not configured / no lines -> no Gemini call | ok |
+| Heuristic categories (milk, chicken, salmon, eggs, bananas, frozen peas, bread, `XQZT 99`) all in CATEGORIES | ok |
+| `_money`/`_qty`: `$3.48`, `1,29`, `1,299.50` -> 1299.5, garbage -> null, NaN/inf -> null (qty 1.0), valid JSON emitted; total variants | ok |
+| Odd ML lines (non-dict, nameless, bad types) skipped, no 500; ML down -> 502 | ok |
+| `CATEGORY_GUIDE` in parse_text, detect_from_image and categorize_receipt_lines prompts; schema enums equal CATEGORIES / FOOD_GROUPS / fridge,pantry,freezer and is passed | ok |
+| Retry: 503/429/504 codes and UNAVAILABLE/RESOURCE_EXHAUSTED/DEADLINE_EXCEEDED text retried once (sleep patched); second failure -> UpstreamError; 400/500/ValueError not retried; exactly one `gemini_usage` line per call (ok after retry, error otherwise, incl. bad JSON after retry) | ok |
+
+### Findings
+No new bugs (BE-10 unused). Observation: a receipt price above numeric(10,2) (e.g. `"999999999"`) is passed through as `est_price`, so posting it back hits the open BE-9 500 path.
