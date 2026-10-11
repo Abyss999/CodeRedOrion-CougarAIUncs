@@ -35,6 +35,9 @@ def main(argv=None):
     ap.add_argument("--det-model", default=DET_MODEL)
     ap.add_argument("--cls-model", default=CLS_MODEL)
     ap.add_argument("--cls-batch", type=int, default=64)
+    ap.add_argument("--weights", choices=("last", "best"), default="last",
+                    help="checkpoint to export/evaluate. Default last: val has no potato or apple/spoiled "
+                         "(ML-28), so val-based best-epoch selection is blind to them; train fixed epochs, use last.pt")
     ap.add_argument("--device", default="auto", help="auto (cuda, then mps, then cpu), or cpu / mps / 0 / 0,1")
     ap.add_argument("--skip-cls", action="store_true")
     a = ap.parse_args(argv)
@@ -47,14 +50,16 @@ def main(argv=None):
     det.train(data=str(data / "data.yaml"), epochs=a.epochs, imgsz=a.imgsz, batch=a.batch,
               project=a.project, name="det", exist_ok=True, device=device)
     print("det val:", det.val(data=str(data / "data.yaml"), split="val", device=device).box.map50)
-    det_best = Path(det.trainer.best)
+    pick = (lambda t: Path(t.last if a.weights == "last" else t.best))
+    det_best = pick(det.trainer)
+    print("exporting detector", a.weights, det_best)
 
     cls_best = None
     if not a.skip_cls:
         cls = YOLO(a.cls_model)
         cls.train(data=str(data / "cls"), epochs=a.cls_epochs, imgsz=224, batch=a.cls_batch,
                   project=a.project, name="cls", exist_ok=True, device=device)
-        cls_best = Path(cls.trainer.best)
+        cls_best = pick(cls.trainer)
 
     out = Path(a.project) / "export"; out.mkdir(parents=True, exist_ok=True)
     shutil.copy(det_best, out / "detector.pt")

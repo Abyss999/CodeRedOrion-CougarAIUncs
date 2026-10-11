@@ -202,7 +202,9 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
    use the repo's `sources.json` with the roots rewritten (the notebook does this).
 4. `python prepare_dataset.py --sources sources.json --out /content/fwr_data`; read `dataset_report.json`
    (classes with no data, dropped labels). Fix mapping before training.
-5. `python train.py --data /content/fwr_data` (detector 80 ep, classifier 30 ep, then exports).
+5. `python train.py --data /content/fwr_data` (detector 80 ep, classifier 30 ep, then exports). Exports
+   **`last.pt` by default** (`--weights last`): val has no potato and no apple/spoiled (ML-28), so val-picked
+   `best.pt` would be blind to them. Fixed epochs; all metrics come from the held-out split.
 6. Collect `runs/export/`: `detector.pt`, `freshness.pt`, `predictions.jsonl`, `heldout_gt.jsonl`, `heldout_manifest.csv`.
    Give the last three to ML QA (`ml/eval/`); weights are gitignored - share via Drive/release and link here.
 CLI equivalent of the notebook: `train.py`. Same code path: `infer.TwoStage` is used for export and serving.
