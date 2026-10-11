@@ -48,6 +48,22 @@ def my_groups(uid) -> dict:
     return {g.id: g for g in rows}
 
 
+def reachable_users(uid, candidate_ids) -> set:
+    """Which of `candidate_ids` the caller may donate to / see: accepted friends, or current members
+    of a group the caller is in. The caller themself is never included. Two queries, any size."""
+    ids = {c for c in candidate_ids if c != uid}
+    if not ids:
+        return set()
+    friends = friend_ids(uid) & ids
+    rest = ids - friends
+    if not rest:
+        return friends
+    mine = db.select(GroupMember.group_id).where(GroupMember.user_id == uid)
+    rows = db.session.execute(db.select(GroupMember.user_id).where(
+        GroupMember.group_id.in_(mine), GroupMember.user_id.in_(rest)).distinct()).scalars().all()
+    return friends | set(rows)
+
+
 def membership(group_id, uid):
     return db.session.get(GroupMember, (group_id, uid))
 
