@@ -1,3 +1,4 @@
+import time
 from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, jsonify, request
@@ -8,7 +9,8 @@ from ..errors import ApiError, not_found, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (CATEGORIES, EXPIRY_SOURCES, FOOD_GROUPS, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
                       ShareListing, User)
-from ..services import barcode, candidates, expiry, food_group, gemini, impact, ml, social
+from ..services import (barcode, candidates, enrich, expiry, food_group, gemini, impact, ml, nutrition,
+                        social)
 from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item,
                     share_summaries)
 
@@ -77,6 +79,14 @@ def _check_food_group(value):
     if not isinstance(value, str) or value not in FOOD_GROUPS:
         raise validation_error(f"food_group must be one of {', '.join(FOOD_GROUPS)}.")
     return value
+
+
+def _check_nutrition(value):
+    cleaned = nutrition.clean_nutrition(value)
+    if cleaned is None:
+        raise validation_error("nutrition must be an object with kcal, protein_g, carbs_g and fat_g "
+                               "per 100 g (basis per_100g), within plausible limits.")
+    return cleaned
 
 
 @bp.get("")
@@ -150,6 +160,8 @@ def _validate_new(raw: dict) -> dict:
     if raw.get("freshness") is not None:
         out["freshness"] = _check_freshness(raw["freshness"])
         out["freshness_checked_at"] = datetime.now(timezone.utc)
+    if raw.get("nutrition") is not None:  # candidate round trip: stored once, not editable (like confidence)
+        out["nutrition"] = _check_nutrition(raw["nutrition"])
     return out
 
 
@@ -516,9 +528,14 @@ def _image_upload():
 @bp.post("/from-photo")
 @require_auth
 def from_photo():
+    started = time.monotonic()
     mode = request.form.get("mode", "fridge")
     if mode not in ("fridge", "single"):
         raise validation_error("mode must be fridge or single.")
+    try:
+        facets = enrich.parse_facets(request.form.get("enrich"))
+    except ValueError as e:
+        raise validation_error(str(e))
     data, filename, mime = _image_upload()
     raws, source = None, None
     if ml.is_configured():
@@ -531,7 +548,11 @@ def from_photo():
             raws, source = gemini.detect_from_image(data, mime, mode), "gemini"
         except gemini.UpstreamError as e:
             raise upstream_unavailable(f"No vision backend available: {e}")
-    return jsonify(candidates=candidates.normalize_all(raws, source), source=source)
+    cands = candidates.normalize_all(raws, source)
+    body = {"candidates": cands, "source": source}
+    if facets:  # opt-in; enrich.run never raises and never changes the status
+        body["enrichment"] = enrich.run(cands, facets, image=data, source=source, started=started)
+    return jsonify(**body)
 
 
 @bp.post("/from-receipt")
