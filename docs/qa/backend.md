@@ -887,3 +887,22 @@ New tests: `backend/tests/test_qa_sweep_b1_b4.py` (60 tests, includes parametriz
 - Existence is consistent: the 403 for the ex-member owner only reveals an item the user already owned; single endpoints already returned 403 for other users' items, and batch returns 404.
 
 **Runs:** targeted 60 passed. Full suite (containerized runner, whole repo mounted): 2284 passed, 3 skipped, 1 failed on the first run (a wrong assertion in my own new recipes test, fixed); the targeted file then passed, so 2285 passed and 3 skipped in total. The earlier 8 env-only failures are gone.
+
+## Sweep follow-ups verification (qa/page-sweep-2026-10-11)
+
+New tests: `backend/tests/test_qa_sweep_followups.py` (18 tests). No feature code was edited. No new bugs (highest id stays BE-22). This closes the two low notes in the B1-B4 entry above.
+
+| Change | Verdict | Evidence |
+|---|---|---|
+| `caller_active_items_filter` in `/recipes/suggest` | **VERIFIED FIXED** | While a member, the group item goes to Gemini and `item_ids` naming it works. After leaving, it is absent from the Gemini payload and from `uses_items`, `item_ids` naming it (alone or with a personal id) is `404 not_found` with no Gemini call, and a user whose only items are ex-group ones gets `{"recipes": []}` without a Gemini call. Rejoining restores access. The cache key follows the filtered item set, so a pre-leave result is not replayed. |
+| Same filter in `GET /tips` | **VERIFIED FIXED** | `past_expiry` and `expiring_soon` name the group items while a member and drop them after leaving; personal items stay. With only ex-member items, neither tip appears. |
+| `people._can_see_item` | **VERIFIED FIXED** | `GET /people/reachable?item_id=`: member 200, ex-member owner 404, own personal item 200, another current member still 200. |
+| History unchanged | **VERIFIED** | After leaving, `/impact?range=all`, `top_wasted_item` and `saved_recent` equal their pre-leave values (events-based). |
+| `/recipes/suggest` body | **VERIFIED FIXED** | NUL in a dietary entry, a nested value, a key or `item_ids` is `400` with no Gemini call. `dietary` with 10 entries and 40-char entries is `200`; 11 entries, a 41-char entry and a non-string entry are `400`. No body, empty body with a JSON content type, and `{}` are `200` (defaults n=3, dietary=[]). `[]`, `null`, malformed JSON, whitespace and a JSON body sent as `text/plain` are `400`. |
+
+**Review notes (no action):**
+- Other "caller's items" selectors checked: `GET /items` already restricts to `group_id IS NULL`; the batch endpoints use current group membership; share creation rejects group items; from-photo enrichment and the `/impact` queries use the caller's own events, not items. The recipe cache key is built from the filtered set, so it is correct.
+- A body of `null` or whitespace is a `400` (as before); only a truly empty body falls back to defaults.
+- The import tidy-up in `insights.py` (`social`, `check_len`) is used and clean.
+
+**Runs:** targeted 18 passed. Full suite (containerized runner): 2303 passed, 3 skipped, 0 failed.
