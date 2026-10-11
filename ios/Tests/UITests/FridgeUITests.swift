@@ -74,8 +74,9 @@ final class FridgeUITests: XCTestCase {
     func testFreshnessBadgesHaveText() {
         let app = XCUIApplication.fridge()
         XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 5))
-        let expected = ["item-chicken": "today", "item-spinach": "1 day", "item-strawberries": "check",
-                        "item-bananas": "use soon", "item-eggs": "12 days"]
+        // Round 3: one status per row. Looks off, Tomorrow, estimated ranges ("11–12 days" → 1–2 weeks).
+        let expected = ["item-chicken": "today", "item-spinach": "tomorrow", "item-strawberries": "looks off",
+                        "item-bananas": "use soon", "item-eggs": "1 to 2 weeks"]
         for (id, text) in expected {
             let b = app.any(FID.badge(id))
             XCTAssertTrue(app.reveal(b), "badge \(id) missing")
@@ -89,7 +90,7 @@ final class FridgeUITests: XCTestCase {
         XCTAssertTrue(app.reveal(b))
         XCTAssertTrue(b.label.contains("Expired"), b.label)
         XCTAssertTrue(app.reveal(app.any(FID.badge("item-berries"))))
-        XCTAssertTrue(app.any(FID.badge("item-berries")).label.lowercased().contains("check"))
+        XCTAssertTrue(app.any(FID.badge("item-berries")).label.lowercased().contains("looks off"))
     }
 
     func testEmptyState() {
@@ -144,7 +145,7 @@ final class FridgeUITests: XCTestCase {
     }
 
     /// The row is a container: one combined text element (name + meta) and the badge. The spoiled
-    /// state is spoken in words ("Photo check: looks spoiled", "Check, looks spoiled").
+    /// state is spoken in words ("Photo check: looks spoiled", "Looks off, may be spoiled").
     func testRowVoiceOverLabelAndTargets() {
         let app = XCUIApplication.fridge()
         XCTAssertTrue(app.any("fridge.title").waitForExistence(timeout: 5))
@@ -154,8 +155,9 @@ final class FridgeUITests: XCTestCase {
         let labels = row.descendants(matching: .any).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }
         let joined = labels.joined(separator: " | ").lowercased()
         XCTAssertTrue(joined.contains("strawberries"), joined)
-        XCTAssertTrue(joined.contains("looks spoiled"), "spoiled must be in words, not colour only: \(joined)")
-        XCTAssertEqual(app.any(FID.badge("item-strawberries")).label, "Check, looks spoiled")
+        XCTAssertTrue(joined.contains("looks off"), "spoiled must be in words, not colour only: \(joined)")
+        XCTAssertFalse(joined.contains("photo check"), "meta is the quantity only: \(joined)")
+        XCTAssertEqual(app.any(FID.badge("item-strawberries")).label, "Looks off, may be spoiled")
         // The swipe target is the List cell that holds the row.
         let cell = app.cells.containing(.any, identifier: FID.row("item-strawberries")).firstMatch
         let rowInfo = XCTAttachment(string: "row: \(row.debugDescription)\ncell: \(cell.debugDescription)")

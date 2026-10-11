@@ -35,8 +35,8 @@ final class MockAPIClientTests: XCTestCase {
         let items = try await client().listItems(storage: nil, groupBy: nil).allItems
         func badge(_ id: String) -> String? { ExpiryBadgeModel.make(for: items.first { $0.id == id }!)?.text }
         XCTAssertEqual(badge("item-chicken"), "Today")
-        XCTAssertEqual(badge("item-spinach"), "1 day")
-        XCTAssertEqual(badge("item-strawberries"), "Check")
+        XCTAssertEqual(badge("item-spinach"), "Tomorrow")
+        XCTAssertEqual(badge("item-strawberries"), "Looks off")
         XCTAssertEqual(badge("item-bananas"), "Use soon")
     }
 

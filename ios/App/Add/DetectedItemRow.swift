@@ -145,11 +145,16 @@ enum DetectedBadge {
     /// else "Use soon" for `semi_fresh`; else an estimated expiry range.
     static func make(expiry: Date?, freshness: Freshness?, confidence: Double?, now: Date = Date(),
                      calendar: Calendar = .current) -> ExpiryBadgeModel? {
-        if let confidence, confidence < 0.5 { return .init(text: "Not sure", style: .later) }
-        if freshness == .semiFresh { return .init(text: "Use soon", style: .useSoon) }
+        if let confidence, confidence < 0.5 { return .init(kind: .notSure) }
+        if freshness == .semiFresh { return .init(kind: .useSoon) }
         guard let expiry else { return nil }
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: expiry)).day ?? 0
-        return .init(text: rangeText(days: days), style: days <= 1 ? .urgent : .later)
+        switch days {
+        case ..<0: return .init(kind: .expired)
+        case 0: return .init(kind: .today)
+        case 1: return .init(kind: .tomorrow)
+        default: return .init(kind: .estimated(days: days))
+        }
     }
 
     /// Estimated ranges, not exact dates: 2–3 days … 3+ weeks.
