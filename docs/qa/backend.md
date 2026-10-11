@@ -252,7 +252,7 @@ Notes (not bugs, for the builder):
 ### Re-verification after commit 7044932 (BE-11, BE-12 fixed)
 Targeted runs only, from `backend/` on `fwr_test`: `tests/test_receipt_candidates_qa.py` = **130 passed, 4 xfailed** (BE-13 x4, strict); the author's `tests/test_receipt_candidates.py` = 57 passed; `tests/test_gemini_retry.py` = 20 passed. Combined: 207 passed, 4 xfailed. Full suite still pending.
 
-- **BE-11 fixed.** `candidates.is_receipt_total` (case-insensitive, anchored at the start of the name: optional `sales|grand|visa|debit|credit`, then `subtotal|sub total|sub-total|total|tax|change|cash|card|balance|tender` with a word boundary) runs in the route before Gemini and in `from_receipt_lines`. The 6 former xfails now pass. New tests:
+- **BE-11 fixed.** `candidates.is_receipt_total` (now the tail rule, see below; it replaced the first prefix-only regex) runs in the route before Gemini and in `from_receipt_lines`. The 6 former xfails now pass. New tests:
   - 16 total-like names match (`Sub Total`, `SUB-TOTAL`, `VISA TENDER`, `DEBIT CARD`, `CHANGE`, `CASH`, `TOTAL 4.21`...).
   - 14 food names are kept: Cashews, Cardamom pods, Tortilla, Taxi bread, Totino pizza, Balanced oats and Changua, in mixed and upper case. Kept end to end with SUBTOTAL, TAX and TOTAL dropped.
   - **Totals are never sent to Gemini.** In the stubbed `generate_content` request, the contents are exactly `["GV 2% MLK GAL", "Cashews"]` for a receipt that also had SUBTOTAL, Sales Tax, GRAND TOTAL, VISA TENDER and CHANGE.
@@ -260,4 +260,15 @@ Targeted runs only, from `backend/` on `fwr_test`: `tests/test_receipt_candidate
 - **BE-12 fixed.** `categorized_by` is `"gemini"` only when some entry has a non-empty `display_name`, `category`, `food_group` or `storage`. The 4 former xfails pass. A boundary test confirms that a single usable entry (`[{}, {"category":"meat"}]`) still counts as gemini.
 - **BE-13 open** (4 strict xfails kept as they were); resolves with the rebase onto PR 2.
 
-**Known limitation for the orchestrator:** the guard drops any product whose name *starts with* a total/payment word followed by a word boundary. **"Total Cereal" is dropped** (pinned by `test_known_limitation_total_cereal_is_dropped`, which documents current behaviour; flip it if you rule it should be kept). By the same rule, names like "Cash ..." or "Change ..." used as a brand would also be dropped. Food words that merely begin with those letters (Cashews, Cardamom, Taxi, Totino, Balanced, Changua) are kept. This needs a ruling on whether the trade-off is accepted.
+**Total guard: tail rule (orchestrator ruling, implemented in `candidates.is_receipt_total`, documented in `docs/API.md` under from-receipt).** The guard replaces the earlier prefix-only regex, whose "Total Cereal is dropped" limitation is resolved. A line is dropped only if it is:
+- optional prefixes (`sales`, `grand`, or a card network: `visa|debit|credit|mastercard|mc|amex|discover`),
+- then a keyword (`subtotal`/`sub total`/`sub-total`, `total`, `tax`, `change`, `cash`, `card`, `balance`, `tender`, or a card network),
+- followed by nothing except numbers, `%`, currency, punctuation, masked card digits (`x1234`, `****1234`), or the closed word set `due, amount, amt, paid, tendered, tend, back, purchase, sale, savings, saved, auth, approved, chip, contactless` plus the card networks.
+
+Verified on top of the earlier cases (targeted: `test_receipt_candidates_qa.py` 143 passed, 4 xfailed for BE-13; `test_receipt_candidates.py` 57 passed; `test_gemini_retry.py` 20 passed):
+- **Kept:** "Total Cereal" (`test_total_cereal_is_kept`, formerly the limitation test), "Cash & Carry Crackers", "Change Coffee Co Beans" and "Discover granola".
+- **Dropped:** "TOTAL DUE", "TAX 1 8.25%", "CHANGE DUE", "CASH TENDERED", "VISA CREDIT ****1234", "BALANCE DUE", "TOTAL $4.21", "VISA x1234" and "CARD XXXX1234".
+- Both lists are also checked end to end through `/items/from-receipt`.
+- The earlier 16 drop cases and 14 food-name keeps still hold.
+
+**Note for the orchestrator:** a bare card-network line is treated as a payment line and dropped. This covers "MC", "DISCOVER" and "Discover", and also "MC 1234". It is intended under the ruling, because a product named only "Discover" or "MC" is not expected on a grocery receipt. Any brand that is exactly a keyword plus tail words (e.g. a product printed as "TOTAL SAVINGS") would also be dropped.

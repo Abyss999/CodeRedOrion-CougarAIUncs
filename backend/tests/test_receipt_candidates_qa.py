@@ -450,10 +450,28 @@ def test_total_like_names_are_receipt_totals(name):
     assert candidates.is_receipt_total(name)
 
 
-def test_known_limitation_total_cereal_is_dropped():
-    """Documented limitation (docs/qa/backend.md): a product literally named "Total ..." matches the guard.
-    Pins current behaviour; flip if the orchestrator rules it should be kept."""
-    assert candidates.is_receipt_total("Total Cereal")
+def test_total_cereal_is_kept():
+    """Orchestrator ruling (tail rule): a keyword followed by a non-receipt word is food."""
+    assert not candidates.is_receipt_total("Total Cereal")
+
+
+@pytest.mark.parametrize("name", ["Cash & Carry Crackers", "Change Coffee Co Beans", "Discover granola"])
+def test_brand_names_starting_with_keywords_are_kept(name):
+    assert not candidates.is_receipt_total(name)
+
+
+@pytest.mark.parametrize("name", ["TOTAL DUE", "TAX 1 8.25%", "CHANGE DUE", "CASH TENDERED", "VISA CREDIT ****1234",
+                                  "BALANCE DUE", "TOTAL $4.21", "VISA x1234", "CARD XXXX1234"])
+def test_tail_rule_drops_payment_lines(name):
+    assert candidates.is_receipt_total(name)
+
+
+def test_tail_rule_end_to_end(client, user, monkeypatch, ml_on):
+    keep = ["Total Cereal", "Cash & Carry Crackers", "Change Coffee Co Beans", "Discover granola"]
+    drop = ["TOTAL DUE", "TAX 1 8.25%", "CHANGE DUE", "CASH TENDERED", "VISA CREDIT ****1234", "VISA x1234",
+            "CARD XXXX1234"]
+    set_ocr(monkeypatch, [{"name": n, "price": 3.0} for n in keep + drop], total=12.0)
+    assert [c["name"] for c in post_receipt(client, user).get_json()["candidates"]] == keep
 
 
 def test_food_names_kept_end_to_end(client, user, monkeypatch, ml_on):
