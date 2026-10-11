@@ -32,7 +32,7 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 
 ## Next steps
 1. **Fridge polish** (`feat/ios-fridge-polish`, from PR0 #81): in progress on the Mac; build notes in "Screen build notes" below.
-2. **The parallel group, now that PR0 has landed:** Add (2a photo, 2b text/barcode/receipt), Home, Impact, Auth; Recipes after Home. **Then sequential:** Item detail → Social (7a pantry + requests, 7b connect + groups) → Settings. One PR each, with iOS QA, light/dark screenshots against the artboards, a motion clip and a Design delta.
+2. **The parallel group (Add 2a, Home, Impact and Auth have started; see In flight):** Add (2a photo, 2b text/barcode/receipt), Home, Impact, Auth; Recipes after Home. **Then sequential:** Item detail → Social (7a pantry + requests, 7b connect + groups) → Settings. One PR each, with iOS QA, light/dark screenshots against the artboards, a motion clip and a Design delta.
 3. **wedwqc's canvas threads** (round 3) are applied but still open on the canvas: they weren't sent to Claude, so a person with edit access must resolve them.
 4. **Owner:** create the Google OAuth iOS client (`docs/SETUP.md`).
 5. **Teammate (LemurTech22):** Colab on the 8-source data. ML-64 and ML-65 go to Jose via `food-main`.
@@ -98,8 +98,15 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Fridge polish | `feat/ios-fridge-polish` (from #81) | Mac (`food-main-mac`) | Builder + QA in progress, with the round 3 RemoveSheet and BatchUndo changes; then PR |
+| Fridge polish (IOS-19…29) | `feat/ios-fridge-polish` (from #81) | `wt/ios-fridge-polish` | Builder + QA in progress, with the round 3 RemoveSheet and BatchUndo changes; then PR |
+| Add 2a: photo (IOS-30…39) | `feat/ios-add-photo` (from 0329c6d) | `wt/ios-add-photo` | Builder + QA in progress, in parallel; includes the #79 enrichment follow-ups |
+| Home (IOS-40…49) | `feat/ios-home` (from 0329c6d) | `wt/ios-home` | Builder + QA in progress, in parallel |
+| Impact (IOS-50…59) | `feat/ios-impact` (from 0329c6d) | `wt/ios-impact` | Builder + QA in progress, in parallel |
+| Auth (IOS-60…69) | `feat/ios-auth` (from 0329c6d) | `wt/ios-auth` | Builder + QA in progress, in parallel |
+| Queued | - | - | Add 2b (text/barcode/receipt) after 2a; Recipes after Home; then Item detail → Social → Settings |
 | `docs/checkpoint-9` | this PR | `wt/checkpoint-9` (`food-orch`) | `food-main` reviews and merges |
+
+Each screen PR numbers its iOS bugs inside its own block (above), so parallel branches can't collide.
 
 **Mac notes:**
 - **Worktrees** are in `../wt/<name>` next to the main checkout. Remove merged ones with `git worktree remove`, and only the ones this project created. The owner kept `api-migrate`, `fg-followups`, `food-group`, `colab`, `semi-data` and `pr21`: their ignored files (`.env` variants, YOLO runs) exist nowhere else.
