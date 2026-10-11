@@ -8,15 +8,25 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 **Gate: do not run it until ML QA has re-verified ML-21 on the session-grouped split** (the notebook also stops itself unless
 `dataset_report.json` has `split_grouping: "session"` and `ml/eval/leakage_check.py` reports 0 held-out images within 300 s of a train/val image).
 1. Runtime -> Change runtime type -> **T4 GPU**.
-2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped).
-3. **Runtime -> Run all.** Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted).
-   Cell 1 has a form field `RUN_ID` (default `fwr_YYYYMMDD` = today). Everything for the run lives in `MyDrive/fwr_runs/<RUN_ID>/`.
-   **If you got disconnected: reconnect, keep the same `RUN_ID`, Runtime -> Run all; it resumes from the last epoch on Drive.**
+2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped). AgriFreshNET needs no secret.
+3. **Dry run first.** Cell 1 has a checkbox `DRY_RUN` (**default on**) and the `RUN_ID` field. **Runtime -> Run all** with `DRY_RUN` on: download, prepare, all gates,
+   Drive cache, then **1 epoch on a deterministic 5% subset** (`ml/yolo/make_subset.py`: every 20th file per split / class folder, symlinks; all three freshness
+   classes kept) for detector and classifier, then the export, then it stops with **`DRY RUN OK`** (about 15 min). Its checkpoints go to `MyDrive/fwr_runs/<RUN_ID>_dry/`,
+   so the real run can never resume them. The dataset cache (`<RUN_ID>/fwr_data.tar`) is shared. (Ultralytics' own `fraction=0.05` exists in 8.4.175 but takes the *first*
+   5% of the sorted file list, i.e. one source or one class folder, which would not test the 3-class head.)
+4. **Real run:** untick `DRY_RUN`, keep the **same `RUN_ID`**, **Runtime -> Run all**. The prepared dataset is restored from Drive (no downloads), the gates re-run, then
+   detector 80 ep + classifier 30 ep. Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/`.
+   **If you got disconnected: reconnect, keep the same `RUN_ID` and `DRY_RUN` setting, Runtime -> Run all; it resumes from the last epoch on Drive.**
    Write the `RUN_ID` down: left at the default it is today's date, so resuming after midnight needs it typed in.
-4. Download `export.zip` from the last cell and hand it to the team.
-The notebook downloads VegQual (figshare), the two Roboflow sets (API) and, if Kaggle creds exist, raghavrpotdar; derives a
-`sources.colab.json` from the repo's `sources.json` with `/content/raw/...` roots; runs `prepare_dataset.py`,
-`train.py --device auto --resume` (yolo26s 80 ep + classifier 30 ep) and the export. Expect 3-4.5 h on a free T4.
+5. Download `export.zip` from the last cell and hand it to the team. Cell 5 also has a `SEMI_FRESH_THRESHOLD` field (default 0.5), passed through
+   `train.py --semi-fresh-threshold` (env `SEMI_FRESH_THRESHOLD`) to `export_predictions.py`, so predictions can be re-labelled without retraining.
+The notebook downloads VegQual (figshare), the two Roboflow sets (API), raghavrpotdar (if Kaggle creds exist) and **AgriFreshNET from the public Mendeley release**
+(file URL from `data.mendeley.com/public-api/datasets/42m5tb7yv9`, size and SHA-256 checked), ingests it with `python -m pipeline --data-root /content/pipeline_data
+ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300` (4,754 images, same as the local a2b run), derives a
+`sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (yolo26s 80 ep +
+classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
+`stratification_check.py` (3-class mapping) and a check that `cls/{train,val}` has `fresh`, `semi_fresh` and `spoiled`. The dihedral-variant near-duplicate gate is
+**not** in the notebook (pending ML-35). Expect 3-4.5 h on a free T4 for the real run.
 
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
@@ -207,11 +217,11 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
 1. Colab -> GPU runtime. Open `ml/yolo/train_colab.ipynb` (or clone the repo and `cd ml/yolo`).
    (Quick path: section 0. The steps below are the manual equivalent.)
 2. `pip install -r requirements.txt` (ultralytics==8.4.175). Never paste API keys into cells; use Colab Secrets.
-3. Download the four sources into `/content/raw/<name>` (Roboflow: YOLO export at the versions in `sources.json`; Kaggle REST with `KAGGLE_API_TOKEN`). Copy
+3. Download the sources into `/content/raw/<name>` (Roboflow: YOLO export at the versions in `sources.json`; Kaggle REST with `KAGGLE_API_TOKEN`) and ingest AgriFreshNET (`python -m pipeline ingest-dataset ... --specimen-groups --exclude-source-augs --max-per-cell 300`, see section 2). Copy
    use the repo's `sources.json` with the roots rewritten (the notebook does this).
 4. `python prepare_dataset.py --sources sources.json --out /content/fwr_data`; read `dataset_report.json`
    (classes with no data, dropped labels). Fix mapping before training.
-5. `python train.py --data /content/fwr_data --project <RUN_DIR> --resume` (detector 80 ep, classifier 30 ep, then exports). Exports
+5. `python train.py --data /content/fwr_data --project <RUN_DIR> --resume` (detector 80 ep, classifier 30 ep, then exports; `--semi-fresh-threshold` sets the semi_fresh cut-off of the exported predictions). Exports
    **`last.pt` by default** (`--weights last`): val has no potato and no apple/spoiled (ML-28), so val-picked
    `best.pt` would be blind to them. Fixed epochs; all metrics come from the held-out split.
 6. Collect `runs/export/`: `detector.pt`, `freshness.pt`, `predictions.jsonl`, `heldout_gt.jsonl`, `heldout_manifest.csv`.

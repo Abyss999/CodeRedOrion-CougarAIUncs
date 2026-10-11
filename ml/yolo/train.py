@@ -8,7 +8,7 @@ GPU-side only. Equivalent to train_colab.ipynb.
 <project>/<stage>/weights/last.pt is already finished, continued with YOLO(last.pt).train(resume=True) if it is
 mid-training, and trained from scratch if there is no checkpoint. See docs/ML.md section 5.
 """
-import argparse, shutil, sys
+import argparse, os, shutil, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -105,6 +105,8 @@ def main(argv=None):
     ap.add_argument("--device", default="auto", help="auto (cuda, then mps, then cpu), or cpu / mps / 0 / 0,1")
     ap.add_argument("--resume", action="store_true",
                     help="restartable run: skip finished stages, resume unfinished ones from <project>/<stage>/weights/last.pt")
+    ap.add_argument("--semi-fresh-threshold", type=float, default=float(os.environ.get("SEMI_FRESH_THRESHOLD", "0.5")),
+                    help="P(semi_fresh) needed to label a crop semi_fresh in the exported predictions (env SEMI_FRESH_THRESHOLD, default 0.5)")
     ap.add_argument("--skip-cls", action="store_true")
     a = ap.parse_args(argv)
     from ultralytics import YOLO  # heavy, lazy
@@ -131,7 +133,8 @@ def main(argv=None):
     if cls_pt:
         shutil.copy(cls_pt, out / "freshness.pt")
     from export_predictions import main as export
-    export(["--data", str(data), "--det", str(out / "detector.pt"), "--out", str(out / "predictions.jsonl")]
+    export(["--data", str(data), "--det", str(out / "detector.pt"), "--out", str(out / "predictions.jsonl"),
+            "--device", device, "--semi-fresh-threshold", str(a.semi_fresh_threshold)]
            + (["--cls", str(out / "freshness.pt")] if cls_pt else []))
     shutil.copy(data / "heldout_gt.jsonl", out / "heldout_gt.jsonl")
     shutil.copy(data / "heldout_manifest.csv", out / "heldout_manifest.csv")
