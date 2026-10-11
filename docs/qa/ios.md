@@ -419,3 +419,51 @@ Not covered: the Mock 10-minute restore window cannot be tested without a clock 
 IOS-14 to IOS-18 are fixed and each has a passing test. IOS-18 note: `barcode()` now strips non-alphanumerics before encoding; accepted, since barcodes are 6-14 digits and the UI validates that. UI suite (51/51) was green on the earlier full run and the fixes touched no UI code.
 
 ### Verdict: PASS. No open bugs.
+
+
+## 2026-10-11: Fridge polish (feat/ios-fridge-polish)
+Mac: Apple M4 Pro, Xcode 26.6. Simulators: iPhone 17 Pro and iPhone SE QA (iOS 26.5). Spec: HANDOFF "Fridge polish" + recipient rule #78, canvas v53 (#82, mirrored in `scratchpad/design-v53`). Tests were written against the builder's finished tree.
+
+### Tests added or changed (`ios/Tests`)
+| File | Tests | What it covers |
+|---|---|---|
+| `UnitTests/FridgePolishTests.swift` (new) | 26 | #78 at model level (`.default` / `.none` / `.user` reach the API unchanged; batch Shared them and Used them always `.default`; mock honours the three cases on a claimed listing). Select lifecycle, empty selection, `remove-batch` then Undo then `restore-batch` (one batch call, no N single restores), toast wording ("3 items marked used", "N items shared"), failed batch and failed batch restore, expired window has no retry. Toast keyed by item id (two "Baby spinach" items, one fails: the other's toast survives). Refresh during a single and a batch restore: one row each, none dropped. Per-item serialisation (restore never starts before its remove ends; remove, undo, remove, undo runs in order; different items run concurrently; a batch waits for a queued restore on one of its ids). Tracking pruned after settling |
+| `UnitTests/FridgePolishAccessibilityTests.swift` (new) | 12 | Hosted-view VoiceOver tree. Row has exactly one "Remove" custom action and it fires the callback; IOS-13 (no `FoodGroup...` stop in the row or the sheet header); badge spoken as "Looks off, may be spoiled" / "Expires tomorrow"; select row is one checkbox button with Selected / Not selected; AX5: badge stacks under the text, stays one line and on screen at 320 pt; sheet tiles are reachable 68 pt buttons labelled Used it / Shared it / Threw it away with no hints; listing badge; reason rows are 68 pt buttons in order |
+| `UnitTests/ExpiryBadgeTests.swift` | rewritten, 15 | "Looks off", "Tomorrow", range vocabulary at every boundary (2–3 days … 6–7 days, 1–2 weeks, 2–3 weeks, 3+ weeks), typed dates stay exact, status priority, spoken text has no en dash |
+| `UnitTests/FridgeModelTests.swift`, `MockAPIClientTests.swift` | updated | `SpyAPIClient` records the exact `RecipientChoice`, batch calls and an ordered event log; meta is quantity only; badge copy |
+| `UITests/FridgePolishUITests.swift` (new) | 21 | No search button on Fridge, FridgeSelect, BatchUndo and FridgeEmpty; Add food on the empty state opens the Add sheet; Select chrome (count, Done, bar replaces tab bar, disabled at 0); Used them then Undo; Shared them (claimed and unclaimed) then Undo; failed batch rolls back; sheet: Shared it label, no visible "What happened to it?" heading while the group label stays, 68 pt tiles, no captions, listing and expiry badges; Given-to menu (claimer first, then others, one menu, no "(claimed it)"); Someone not on BiteDown; Cancel after Shared it removes nothing; double Done; RemoveReason title, grouped list, 68 pt rows, back; Reduce Motion; AX5 select bar stacks, badges do not wrap, Given-to fits |
+| `UITests/FridgeUITests.swift`, `RemoveFlowUITests.swift` | updated | Badge copy; the old "Gave it away" and `remove.recipient` tests now cover Shared it + Done and the Given-to default |
+
+### Results
+| Device | Run | Result |
+|---|---|---|
+| iPhone 17 Pro | full unit | 396 run, 0 failed |
+| iPhone 17 Pro | full UI | 72 run, 71 passed, 1 failed (`testSwitchingStorageDoesNotKeepAHiddenSelection`, IOS-19) |
+| iPhone SE QA at AX5 | unit: `FridgePolishTests`, `FridgePolishAccessibilityTests`, `ComponentAccessibilityTests` | 72 run, 0 failed |
+| iPhone SE QA at AX5 | UI: `FridgeUITests` + `RemoveFlowUITests` | all passed (same tree) |
+| iPhone SE QA at AX5 | UI: `FridgePolishUITests` (final run, own derived data, build and test in one script) | 21 run, 20 passed, 1 failed (IOS-19) |
+| iPhone 17 Pro | `FridgePolishUITests` re-run after the AX5 test fixes | 21 run, 20 passed, 1 failed (IOS-19) |
+Notes on the runs: another agent removed my heavy lock mid-run (about 05:30), so the first full runs overlapped a foreign build. Every failure was investigated and the Pro run was clean apart from IOS-19. XCUITest reports frames inside a presented sheet about 4% small (a 68 pt tile reads 65.3), so sheet sizes are asserted exactly on the hosted view and with 5% slack in UI.
+
+### Bugs
+| ID | Severity | Summary | Where |
+|---|---|---|---|
+| IOS-19 | low | Select mode keeps the selection when the storage segment changes. Select a Fridge item, switch to Pantry: the header still says "1 selected", Used them / Shared them stay enabled and act on an item that is not on screen. Repro: Select, tick Chicken, tap Pantry. Expected: clear the selection on a storage change (or limit `selectedItems` to the current storage). Test: `testSwitchingStorageDoesNotKeepAHiddenSelection` | `FridgeModel.swift` `selectedItems` (about line 405) spans every storage; `toggleSelection` / storage change never prune |
+| IOS-20 | low | The Given-to menu cannot reflect the claimer from the server. `FridgeView` calls `reachablePeople()` without `item_id` (SCREENS #7 says `?item_id=`), so on the live API `is_claimer` is always false; and the Mock marks Marcus as claimer for every item, so (from reading the code; not run) on an unclaimed listing (carrots) the claimer option "Marcus Ojeda" is offered as `.default` (key omitted, the server then records nobody). Today the sheet falls back on `item.share.claimedBy`, which is right for the owner, so the live impact is small. Fix: add `itemId` to the client method (and the mock), and key the sheet on it | `FridgeView.swift:52`, `RemoveSheet.swift:45-47`, `MockSocialFixtures.swift:100` |
+| IOS-21 | low | At AX5 on the SE the Given-to row is cramped: the label "Given to" wraps over three lines and the value button is 97 pt wide, so "Marcus Ojeda" is truncated to one line; the system menu is taller than the screen, so "Someone not on BiteDown" is only reachable by scrolling the menu. The artboard row never stacks. Fix: stack the label above the menu at accessibility sizes (like the sheet header) and allow the value two lines | `RemoveSheet.swift` `givenTo` (about line 150) |
+
+### Design differences (screenshots vs canvas v53)
+- RemoveSheet: no "(claimed it)" and no visible heading (matches v53). The artboard marks the claimer in the menu with a "Claimed it" icon; the system Menu cannot, so the claimer is only first in the list (delta, low). The sheet is taller than its content: about 90 pt of empty space under Cancel / Done (the detent is `contentHeight + Spacing.l` plus the safe area); the artboard ends right under the buttons.
+- RemoveReason: native glass back button in a circle (builder's declared delta; acceptable), 68 pt rows and grouped card match.
+- FridgeSelect: the bar is a `.regularMaterial` capsule over the list (declared delta), circular checkbox; it floats over the last row, which is expected. At AX5 the "N selected" and Done scroll away with the list (they are not pinned); the bar stays pinned.
+- Swipe action: forest pill with a take-out icon and the system caption "Remove" (matches the round 3 note).
+- The 2-days-out badge reads "1–2 days" (the artboard vocabulary starts at "2–3 days"; a day-1 item is "Tomorrow"). Kept as a product question, not a bug.
+
+### Not covered
+- The reachable-people fallback ("Given to" still offers the claimer and "Someone not on BiteDown" when `GET /people/reachable` fails): no launch flag fails only that call (`-UITestFailNetwork` also kills the list). Request: `-UITestFailPeople`.
+- Real VoiceOver on a device (duplicate "Remove" between the swipe action and the row custom action, IOS-13 on hardware): the hosted tree shows one custom action and no asset-name stop; the swipe-action duplication needs a device check.
+- Dark-mode contrast of the swipe tint is by eye only (screenshots below).
+- Screenshots: `scratchpad/fridge-polish-shots/` (`fridge-light/dark`, `fridgeselect-light/dark`, `removesheet-given-light/dark`, `removesheet-givenmenu-light`, `removereason-light/dark`, `fridge-swipe-light`).
+
+### Verdict: FAIL (one open low bug that blocks a clean PASS: IOS-19; IOS-20 and IOS-21 are low and can be follow-ups)
+Everything else in the Fridge polish spec passes on both devices. After IOS-19 is fixed, re-run `FridgePolishUITests` on the 17 Pro; no other test needs to change. At AX5 on the SE the Given-to menu is clipped (IOS-21), so `testGivenToSomeoneNotOnBiteDown` skips there by design.

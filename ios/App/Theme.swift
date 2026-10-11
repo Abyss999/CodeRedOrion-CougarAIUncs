@@ -24,6 +24,10 @@ enum Theme {
         static let tabInactive = Color(light: 0x5C6E5F, dark: 0x8FA391)
         static let onForest = Color(light: 0xF4F8E8, dark: 0x13261A)
         static let onForestMuted = Color(light: 0xC9D8BE, dark: 0x2F4A2A)
+        /// Undo toast countdown: the track behind the bar (Fridge/BatchUndo artboard: white at 10% on forest;
+        /// dark, where forest is the light lime, ink at 10%) and the bar itself (`onForest` at 80%).
+        static let toastTrack = Color(light: 0xFFFFFF, dark: 0x13261A, alpha: 0.1)
+        static let toastBar = Color(light: 0xF4F8E8, dark: 0x13261A, alpha: 0.8)
         static let urgentBg = Color(light: 0xFBE3CF, dark: 0x4A2614)
         static let urgentInk = Color(light: 0x8A3B0E, dark: 0xFFB98A)
         static let noteYellow = Color(light: 0xFFF6C7, dark: 0x3A3720)
@@ -57,6 +61,8 @@ enum Theme {
             "tabInactive": (0x5C6E5F, 0x8FA391, 1),
             "onForest": (0xF4F8E8, 0x13261A, 1),
             "onForestMuted": (0xC9D8BE, 0x2F4A2A, 1),
+            "toastTrack": (0xFFFFFF, 0x13261A, 0.1),
+            "toastBar": (0xF4F8E8, 0x13261A, 0.8),
             "urgentBg": (0xFBE3CF, 0x4A2614, 1),
             "urgentInk": (0x8A3B0E, 0xFFB98A, 1),
             "noteYellow": (0xFFF6C7, 0x3A3720, 1),
@@ -190,6 +196,15 @@ enum Theme {
         static let groupHeaderIcon: CGFloat = 16
         /// Undo toast countdown bar height.
         static let toastProgress: CGFloat = 3
+        /// FridgeSelect checkbox leading column (artboard: 52 pt wide) and the box inside it (24 pt).
+        static let selectColumn: CGFloat = 52
+        static let checkbox: CGFloat = 24
+        /// FridgeSelect bottom bar buttons (artboard: 52 pt tall).
+        static let selectBarButton: CGFloat = 52
+        /// Listing badge on the Remove sheet header tile (artboard: 18 pt).
+        static let listingBadge: CGFloat = 18
+        /// FridgeSelect bottom bar corner radius (artboard: 28 pt).
+        static let selectBarCorner: CGFloat = 28
         /// Skeleton placeholders, shaped like an `ItemRow`'s title, meta line and `ExpiryBadge`.
         static let skeletonTitle = CGSize(width: 140, height: 14)
         static let skeletonMeta = CGSize(width: 96, height: 11)

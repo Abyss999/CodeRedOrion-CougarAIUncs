@@ -26,6 +26,18 @@ enum AccessibilityID {
         static let removeError = "fridge.remove.error"
         static let removeErrorRetry = "fridge.remove.error.retry"
         static let removeErrorDismiss = "fridge.remove.error.dismiss"
+        /// Header "Select" text button (enters select mode) and, in select mode, "Done" and the "N selected" status.
+        static let select = "fridge.select"
+        static let selectDone = "fridge.select.done"
+        static let selectCount = "fridge.select.count"
+        /// Select-mode row (one checkbox button per item).
+        static func rowSelect(_ id: String) -> String { "fridge.row.\(id).select" }
+        /// Select-mode bottom bar and its two actions.
+        static let selectBar = "fridge.select.bar"
+        static let selectUsed = "fridge.select.used"
+        static let selectShared = "fridge.select.shared"
+        /// Empty state "Add food" button (the empty state itself is `fridge.empty`).
+        static let emptyAdd = "fridge.empty.add"
     }
 
     enum Add {
@@ -68,8 +80,13 @@ enum AccessibilityID {
         static func reason(_ rawValue: String) -> String { "remove.reason.\(rawValue)" }
         static let title = "remove.title"
         static let cancel = "remove.cancel"
-        /// Static "Gave it away goes to <claimer>" line, shown only when the open listing has a claimer.
-        static let recipient = "remove.recipient"
+        /// "Given to" row (shown once "Shared it" is selected), its menu button and the Done button.
+        static let given = "remove.given"
+        static let givenMenu = "remove.given.menu"
+        static let done = "remove.done"
+        /// Expiry badge in the sheet header, and the Food Pantry badge on the icon tile (listed items only).
+        static let badge = "remove.badge"
+        static let listingBadge = "remove.listing"
         /// Checkmark that scales in on the tapped tile.
         static func checkmark(_ rawValue: String) -> String { "remove.outcome.\(rawValue).check" }
     }
@@ -79,6 +96,8 @@ enum AccessibilityID {
         static let screen = "removereason.screen"
         static let title = "removereason.title"
         static let tip = "removereason.tip"
+        /// The grouped list of reasons (rows use `Remove.reason(_:)`).
+        static let list = "removereason.list"
     }
 
     /// Shared states (empty, error, loading). `screen` is the owning screen, e.g. "fridge".

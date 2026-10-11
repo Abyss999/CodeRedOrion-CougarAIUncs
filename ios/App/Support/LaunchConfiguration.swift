@@ -30,6 +30,7 @@ import Foundation
 /// - `-UITestClaimConflict`   claiming a listing fails with 409 `already_claimed`
 /// - `-UITestEmailUnknown`    adding a friend fails with 404 `not_found` (unknown email)
 /// - `-UITestFailBatch`       `remove-batch` and `restore-batch` fail (network error)
+/// - `-UITestFailPeople`      `GET /people/reachable` fails (the Given-to menu falls back to its defaults)
 /// - `-UITestFailShare`       `POST /share` fails (network error)
 /// - `-UITestUndoWindow <s>`   Undo toast window in seconds (e.g. 30) instead of 5 s (15 s with assistive tech)
 struct LaunchConfiguration: Equatable, Sendable {
@@ -62,6 +63,7 @@ struct LaunchConfiguration: Equatable, Sendable {
     var emailUnknown = false
     var failBatch = false
     var failShare = false
+    var failPeople = false
     /// `-UITestUndoWindow <seconds>`; nil keeps `UndoToastTiming`.
     var undoWindow: Duration?
 
@@ -97,6 +99,7 @@ struct LaunchConfiguration: Equatable, Sendable {
     static let flagEmailUnknown = "-UITestEmailUnknown"
     static let flagFailBatch = "-UITestFailBatch"
     static let flagFailShare = "-UITestFailShare"
+    static let flagFailPeople = "-UITestFailPeople"
     static let flagUndoWindow = "-UITestUndoWindow"
     /// Effectively "never" for `-UITestLoadingForever`.
     static let foreverDelay: Duration = .seconds(3600)
@@ -132,6 +135,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         emailUnknown = arguments.contains(Self.flagEmailUnknown)
         failBatch = arguments.contains(Self.flagFailBatch)
         failShare = arguments.contains(Self.flagFailShare)
+        failPeople = arguments.contains(Self.flagFailPeople)
         if signedOut { signedIn = false }
         if expiredSession { signedIn = true }
         if let i = arguments.firstIndex(of: Self.flagUndoWindow), arguments.indices.contains(i + 1),
@@ -145,7 +149,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         if seed != nil || signedIn || failNetwork || slowNetwork || loadingForever || failList || failListOnce
             || failRemove || failRestore || restoreNotRemoved || slowRemove || slowRestore
             || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails
-            || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare { useMockAPI = true }
+            || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare || failPeople { useMockAPI = true }
     }
 
     /// Parsed from the process arguments in DEBUG; always empty in Release.
@@ -189,6 +193,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         }
         if failBatch { b.failures["removeBatch"] = offline; b.failures["restoreBatch"] = offline }
         if failShare { b.failures["createShare"] = offline }
+        if failPeople { b.failures["reachablePeople"] = offline }
         return b
     }
 }

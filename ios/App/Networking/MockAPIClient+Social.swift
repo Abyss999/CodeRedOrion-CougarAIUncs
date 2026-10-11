@@ -226,8 +226,16 @@ extension MockAPIClient {
 
     // MARK: People
 
-    func reachablePeople() async throws -> [Person] {
+    /// Like the server: `is_claimer` is true only for the person who claimed `itemId`'s open listing
+    /// (the owner's own item); no item, no claim, or an unclaimed listing means all false.
+    func reachablePeople(itemId: String?) async throws -> [Person] {
         try await gate("reachablePeople")
-        return social.people
+        let claimer = items.first(where: { $0.id == itemId })
+            .flatMap { $0.share?.status == .open ? $0.share?.claimedBy?.id : nil }
+        return social.people.map { person in
+            var p = person
+            p.isClaimer = person.id == claimer
+            return p
+        }
     }
 }

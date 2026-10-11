@@ -48,7 +48,7 @@ struct RootTabView: View {
             tab(.home) { HomeView() }
             tab(.recipes) { RecipesView() }
             tab(.add) { Color.clear }  // never shown: selecting Add presents `AddSheetView`
-            tab(.fridge) { FridgeView(api: env.api) }
+            tab(.fridge) { FridgeView(api: env.api, onAdd: { showAdd = true }) }
             tab(.social) { SocialView() }
         }
         .tint(Theme.Colors.forest)
