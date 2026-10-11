@@ -360,7 +360,7 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
   - **`?mine=1`** (or `mine=true`): your own requests only, in **all** statuses (open, fulfilled,
     cancelled), newest first, same `{requests: [...]}` shape. Each carries `fulfilled_by` (the
     fulfiller's user id, or null) and `fulfilled_by_name` (their display name, or null), plus the
-    `audiences` block (you are the author, so `hidden_count` is 0). Any other `mine` value (`0`,
+    `audiences` block (`hidden_count` is 0 unless you have since left one of its audience groups). Any other `mine` value (`0`,
     `false`, empty, junk) → `400 validation_error`. Without `mine` nothing changes (open only, union
     visibility). Fixed query count (groups, rows with authors, fulfillers, audiences).
     ```json
