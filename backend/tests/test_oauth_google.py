@@ -223,7 +223,11 @@ def test_identity_conflict_checked_before_domain_rule(client, sql, jwks):
     ("link@googlemail.com", {}),
     ("link@GoogleMail.Com", {}),
     ("link@corp.example", {"hd": "corp.example"}),
-    ("link@corp.example", {"hd": "anything"}),
+    ("link@corp.example", {"hd": "CORP.EXAMPLE"}),      # hd matches the email domain case-insensitively
+    ("link@Corp.Example", {"hd": "corp.example"}),
+    ("link@corp.example", {"hd": " corp.example "}),     # API.md: hd compared trimmed
+    ("link@gmail.com", {"hd": "corp.example"}),          # gmail is linkable whatever hd says
+    ("link@googlemail.com", {"hd": "other.example"}),
 ])
 def test_link_allowed_branches(client, sql, jwks, email, extra):
     s = _signup(client, email=email.lower())
@@ -243,6 +247,15 @@ def test_link_allowed_branches(client, sql, jwks, email, extra):
     ("link@corp.example", {"hd": 5}),
     ("link@corp.example", {"hd": ["corp.example"]}),
     ("link@corp.example", {"hd": True}),
+    # hd counts only when it equals the email domain (nit on PR 3, feat/requests-audiences)
+    ("link@corp.example", {"hd": "anything"}),
+    ("link@corp.example", {"hd": "other.example"}),
+    ("link@corp.example", {"hd": "example"}),             # suffix of the domain
+    ("link@corp.example", {"hd": "evil-corp.example"}),
+    ("link@corp.example", {"hd": "corp.example.evil"}),
+    ("link@sub.corp.example", {"hd": "corp.example"}),    # parent domain is not equal
+    ("link@corp.example", {"hd": "sub.corp.example"}),
+    ("link@corp.example", {"hd": "gmail.com"}),           # hd naming a consumer domain does not help
     ("link@gmail.com.evil.example", {}),
     ("link@notgmail.com", {}),
     ("link@mail.gmail.com", {}),
@@ -257,7 +270,8 @@ def test_link_refused_account_exists_use_password(client, sql, jwks, email, extr
 
 
 @pytest.mark.parametrize("email, extra", [("brand@example.com", {}), ("brand@corp.example", {"hd": "corp.example"}),
-                                          ("brand@gmail.com", {}), ("brand@googlemail.com", {})])
+                                          ("brand@gmail.com", {}), ("brand@googlemail.com", {}),
+                                          ("brand@corp.example", {"hd": "other.example"})])
 def test_new_email_any_domain_creates_201(client, jwks, email, extra):
     r = post(client, tok(email=email, **extra))
     assert r.status_code == 201 and r.get_json()["created"] is True
@@ -270,6 +284,23 @@ def test_same_sub_non_gmail_without_hd_still_signs_in(client, sql, jwks):
     a2 = post(client, tok(sub="x", email="x@example.com")).get_json()  # created as non-gmail
     r = post(client, tok(sub="x", email="x@example.com"))
     assert r.status_code == 200 and r.get_json()["user"]["id"] == a2["user"]["id"]
+
+
+def test_mismatched_hd_does_not_block_existing_identity(client, sql, jwks):
+    """hd only gates *linking by email*: a known (provider, sub) signs in whatever hd says."""
+    a = post(client, tok(sub="m", email="m@corp.example", hd="corp.example")).get_json()
+    r = post(client, tok(sub="m", email="m@corp.example", hd="other.example"))
+    assert r.status_code == 200 and r.get_json()["user"]["id"] == a["user"]["id"]
+    assert n(sql, "user_identities") == 1
+
+
+def test_mismatched_hd_refusal_then_matching_hd_links(client, sql, jwks):
+    s = _signup(client, email="pat@corp.example")
+    err(post(client, tok(sub="p", email="pat@corp.example", hd="corp.other")), 409, "account_exists_use_password")
+    assert n(sql, "user_identities") == 0
+    r = post(client, tok(sub="p", email="pat@corp.example", hd="Corp.Example"))
+    assert r.status_code == 200 and r.get_json()["user"]["id"] == s["user"]["id"]
+    assert n(sql, "user_identities", "user_id=:u", u=s["user"]["id"]) == 1
 
 
 @pytest.mark.parametrize("ev", ["TRUE", " TRUE ", "tRuE"])

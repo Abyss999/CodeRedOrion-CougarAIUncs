@@ -608,3 +608,73 @@ None found. The latest ID is still BE-16.
 
 ### Final verdict for chore/gunicorn-gthread (backend)
 **Result: PASS (final).** The orchestrator ran the full suite on `chore/gunicorn-gthread` at HEAD a9b6a11 (clean tree): `pytest -q --cov=app` = **1421 passed, 1 skipped in 154 s, total coverage 98%**. No gunicorn processes were left afterwards. **No open bugs** (the latest ID is still BE-16). This supersedes the interim verdict above.
+
+## feat/requests-audiences (backend QA)
+Contract: docs/API.md "Request board", "Groups" (leave), "Auth" (Google rule 2b `hd`), "Recipes, impact, tips" (`GET /tips`); docs/SCHEMA.md `request_audiences`. Every test was written against the contract as approved, including dedup, the deprecated `group_id` body, and the 30-day tips window.
+
+**New files**
+- `tests/test_requests_audiences.py` (66 tests). Its fixture world has alice; bob (friend); carol (pending); dave (stranger, group H); erin (G member, not a friend); frank (friend and G member); gina (former G member); hank (K member only).
+  - **Validation:** every 400 shape (no audience, friends false with an empty list, non-object or `null` audiences, non-bool friends, `null` or non-list group_ids, a non-UUID entry, more than 50 entries, `audiences` sent with `group_id`, text bounds) writes nothing. A dedup in any spelling gives one row per group, in first-seen order. Friends true with zero friends is allowed.
+  - **Unknown, foreign and left groups:** each gives 404 even next to valid audiences, and nothing is written.
+  - **Legacy body:** no `group_id` means friends; `group_id` means that group, with the old 403/404/400.
+  - **Visibility matrix:** friends-only, group-only, and union. A friend who is also a member sees each request exactly once. Pending, stranger, former member and other-group users see nothing, and fulfil or cancel by any of them gives 404. Visibility follows accept, unfriend, join and leave. A former member who becomes a friend sees the request through the friends audience only.
+  - **Audience exposure:** a caller never sees the name or id of a group they are not in, in GET, fulfil or cancel responses. Exact `audiences` per caller:
+    - friend, not a member: `hidden_count` 2
+    - member, not a friend: 2
+    - both: 1
+    - author: 0
+    - `groups` are sorted case-insensitively. `source` and the deprecated `group_id`/`group_name` are the first visible group. Ordering is `created_at` desc, then id.
+  - **Fulfil:** the author gets 403. One fulfilment closes the note on every board, and later attempts give 409 `request_closed`. A threaded race with 2 and 4 fulfillers produces exactly one 200. Cancel removes the note from every board.
+  - **Leave:**
+    - Only that audience goes: the friends audience and the other group keep it, with no leaked name.
+    - A request whose only audience was that group is cancelled.
+    - Other members' requests, closed requests and an owner's friends audience are untouched.
+  - **Account deletion:**
+    - No orphan audience rows are left.
+    - Other members' requests stay visible.
+    - A deleted fulfiller's request is reopened with its audiences intact.
+    - A forced failure on `DELETE FROM users` rolls back the audience cleanup.
+  - **N+1:** `GET /requests` takes 5 queries for 1 request and for 37 requests with multiple audiences, as both a viewer and the author.
+  - **Rollback:** a forced failure on the `requests` or `request_audiences` insert gives a 500 with nothing written, and the next create works.
+- `tests/test_migration_0006.py` (8 tests):
+  - one head, parented on 0005
+  - schema at head: FK cascade, `requests.group_id` gone
+  - backfill on 0005 data covering friends-only, two groups, cancelled and fulfilled requests, with statuses untouched
+  - an exact round trip on single-audience data (down: `group_id` equals the original; up: identical audience rows, one per request)
+  - the documented lossy multi-audience downgrade, where friends wins, else the oldest group
+  - a double round trip
+  - CHECK and partial-unique constraints, plus the cascade on request delete
+- `tests/test_tips_observations.py` (23 tests):
+  - **Style:** every message is one line of at most 100 characters with no advice wording (try / should / remember / don't / consider / make sure / keep / buy / plan / check / avoid / store / add …).
+  - **Seeded facts:** every quoted number matches the seeded events, and messages are checked exactly per code. The contract's code order holds.
+  - **Window:** an event 29 days old counts and one 31 days old does not. Undo (`/restore`) drops the event from the tips.
+  - **Plurals:**
+    - "once", "twice", "N times"
+    - "1 item" and "N items"
+    - "The one item…"
+    - "expires" and "expire", "is" and "are"
+    - today and +2 days count as expiring soon; -1 counts as past
+  - **Long names:** names are trimmed. Lists show at most 3 names plus "and N more", and the total adds up.
+  - **Grouping and ties:** item names group case-insensitively, and ties break alphabetically.
+  - **Isolation:** another user's items, events, reasons, numbers and money never appear.
+  - **Empty state:** a single `getting_started` line.
+
+**Edited**
+- `tests/test_oauth_google.py`: `hd` must equal the email domain, case-insensitively and trimmed.
+  - **Links:** hd `CORP.EXAMPLE`, ` corp.example `, a mixed-case email domain, and gmail/googlemail whatever hd says.
+  - **409 `account_exists_use_password`, nothing written:** hd `anything`, another domain, a suffix, a lookalike, the parent or a subdomain, or hd `gmail.com`.
+  - **New tests:** a mismatched hd still creates a brand-new account with 201; a mismatched hd does not block an existing identity; a refusal followed by a matching hd links.
+- `tests/test_oauth_migration_0005.py`: compares against the script head instead of hard-coding 0005.
+
+**Contract/code disagreements seen during the build:** one. `group_ids: null` was briefly accepted as `[]` while API.md says 400, and the builder fixed it before sign-off. Nothing is open.
+
+**Observations, not bugs:**
+- The deprecated legacy `group_id` still returns 403 for a non-member, while `audiences` returns 404. This is approved and documented, and goes away with the legacy field.
+- `hidden_count` reveals how many audiences a caller can't see, but never which. This is by contract.
+- Trimmed names in tip lists can look identical, e.g. "Very Long Artisanal…" three times. This is a UX matter for the orchestrator.
+
+**Bugs:** none. The highest ID is still BE-16; open PRs #62 and #64 touch no backend.
+
+**Targeted run:** 401 passed. The files were oauth_google, requests_audiences, tips_observations, tips, migration_0006, migrations, oauth_migration_0005, wave2_migration_0004, social and wave2_account_delete.
+
+**Verdict:** PASS pending the full suite with coverage.
