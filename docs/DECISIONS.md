@@ -2,6 +2,12 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Multi-audience requests and tips (#66)
+- **A request targets `audiences {friends, group_ids}`** (at least one, ≤ 50 groups) through the `request_audiences` join table. One note shows on every chosen board. `requests.group_id` is dropped after the backfill in migration 0006. The legacy `group_id` body field is accepted for one release (deprecated, keeping its old 403); sending both → 400; an audiences group you're not in → 404.
+- **You only see the audiences you belong to.** The others are counted (`hidden_count`), never named, so group names can't leak.
+- **Leaving a group removes that audience only.** A request whose only audience was that group is cancelled.
+- **Tips cover a rolling 30 days** (matching "this month" and `/impact?range=month`). Each is one factual line of at most 100 characters, with no advice. A UX note for the Home screen: long item names trimmed in tips can look identical, so the tip text should name items in full.
+
 ## 2026-10-11 — New training sources and data rulings (#62; data owner LemurTech22, owner rulings)
 - **Three sources added, all CC BY 4.0:** MeatScan (Zenodo 16764338, cow meat), DaFiF (Mendeley vx4ptwk3pb, fish) and Food Spoilage Status (Roboflow v1, produce). food_hvk7g stays `pending` (no downloadable version, no freshness labels). Attribution is in `docs/ML.md` and the README.
 - **DaFiF freshness labels come from days on ice:** 1–3 fresh, 9–11 spoiled, 4–8 dropped. The paper's per-species cut-offs are paywalled. This is a data-owner ruling.
