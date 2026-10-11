@@ -159,6 +159,10 @@ struct Listing: Codable, Hashable, Sendable, Identifiable {
     var fulfilledAt: Date?
     /// Owner-side audience block; nil until the backend sends it.
     var audience: ListingAudience?
+    /// Pickup spot: owner and claimer only (nil for everyone else). Backend `feat/friend-qr-pickup`.
+    var pickup: Pickup? = nil
+    /// True when a spot exists, whoever can see it. Nil from older backends.
+    var pickupSet: Bool? = nil
 }
 struct ListingResponse: Codable, Sendable { let listing: Listing }
 
@@ -187,6 +191,9 @@ struct PantryListing: Codable, Hashable, Sendable, Identifiable {
     var createdAt: Date?
     var source: Source
     var item: Food
+    /// Non-nil only on a listing you claimed. Backend `feat/friend-qr-pickup`.
+    var pickup: Pickup? = nil
+    var pickupSet: Bool? = nil
 }
 struct PantryListingsResponse: Codable, Sendable { let listings: [PantryListing] }
 
