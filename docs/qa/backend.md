@@ -874,17 +874,44 @@ Nothing needed restoring. The extra strictness lives in `test_qa_be19_22.py`.
 Agent-run QA (a separate agent from the builder); **superseded by the independent PR #95 section below (food-orch), whose FAIL findings BE-29, BE-30 and BE-31 were then fixed in this PR**. `backend/tests/test_receipt_gemini_fallback.py`: **106 passed** with the real `google-genai` 1.2.0 SDK and `services/ml.py` against a stubbed `requests` transport (no network guard). Regression: `test_receipt_candidates.py`, `test_receipt_candidates_qa.py`, `test_ai_endpoints.py`, `test_receipt_yolo_parity.py` **273 passed, 3 xfailed** after three assertions were updated for the additive `source` key. Parity (`test_receipt_yolo_parity.py`, 15 passed): receipt and photo candidates share `normalize()`; strict xfails pin PARITY-1/2 (apples, carrots: receipt `produce_leafy`, YOLO `produce_hardy`, deliberate short-life default) and PARITY-3 (rice: receipt `bakery`/`fridge`, YOLO `pantry_dry`/`pantry`, a real gap that Gemini categorisation hides). Live API smoke on 2026-10-11 (script and runbook outside git): photo add 200 with `source: gemini`; removal outcomes, Impact deltas and Undo exact; failures seen were Gemini free-tier rate limits (429), not code. **Not verified:** a real Gemini receipt call under CI, and the response schema's `nullable` fields against the live API beyond one successful receipt. Verdict: **PASS WITH OPEN ITEMS** (no timeout on `detect_from_image`).
 
 ## fix/recipes-gemini-timeout — BE-23/BE-24
+## Friend QR codes + share pickup spot (feat/friend-qr-pickup, migration 0008) - food-qa
 
-Independent QA of the uncommitted builder diff (`GEMINI_TIMEOUT_S`, recipe filter). IDs: highest in `docs/QA.md` is BE-22; open PR #93 touches no `docs/qa/*.md`, so BE-23 to BE-25 are free. **Targeted runs only (orchestrator runs the full suite).**
+New files: `backend/tests/test_qa_friend_qr.py` (48), `test_qa_pickup.py` (about 85, 1 skip), `test_qa_pickup_migration.py` (2). Design as built: opaque `token_urlsafe(12)` codes in `friend_codes` (10-minute TTL), pickup object `{note, lat, lng, place_name}`.
 
-**Final verdict: PASS** (round 2: BE-25 and the truncation order fixed and verified; no open bugs).
+**Run:** my three files 140 passed, 1 skipped, 1 failed (test-side: the server trims whitespace around a code; fixed). Full suite `--cov=app`: 2362 passed, 4 skipped, 5 failed, coverage 98%. Of the 5, one is BE-32 (now a non-strict xfail) and four are older tests that the builder's change makes stale (below). No live Gemini: `conftest.py` removes the key and every Gemini test stubs `genai.Client`.
 
-| Bug | Sev | Verdict | Evidence |
+**Verified**
+- Codes: 16 chars, URL safe, `url` = `bitedown://friend/<code>`, TTL 10 minutes, no user id or email (not base64-decodable), a fresh code per GET, a different code per user.
+- Scan: 201 new, 200 pending-either-direction becomes accepted (one row), 200 idempotent for existing friends, own code 400, expired row rejected while still present, replay after expiry rejected, expiry boundary, deleted issuer 400, account delete with live codes OK.
+- 14 bad-code variants (unknown, tampered first/last, truncated, extended, swapcase, expired, URL form, 5000 chars, unicode, SQL-ish, percent, dashes): all 400 `invalid_code`, byte-identical bodies. A tampered code for an existing friend gets the same 400 (no friendship oracle).
+- Exactly one of email/code; the email flow is unchanged (201/409/400/404, `already_friends` 409 on the email path).
+- Pickup: about 30 invalid inputs all 400 with nothing written; notes trimmed; boundary values inclusive (lat 90, lng 180, 120 characters); PATCH owner only (viewer 403, hidden 404, unknown or malformed id 404), only while open (cancelled or fulfilled 409 `listing_closed`), allowed on a claimed open listing, PATCH replaces rather than merges, `null` clears every column.
+- Leak crawl: a canary note, place and lat/lng planted, then 14 read endpoints (`/share`, `/items`, `/groups/*`, pantry, `/requests`, `/people/reachable`, `/friends`, `/impact`, `/auth/me`, `/tips`) fetched as friend, friend-of-friend, stranger, pending requester, group mate and ex-member. Zero leaks. The claimer sees pickup in the claim response and in `GET /share`; after the friend is removed, or the claimer leaves the group, the claimer loses all visibility; error bodies (403/404/409) carry no pickup.
+- Pickup never changes `food_events` or Impact (week/month/all snapshots before and after set, patch, claim, clear and rejected patches); remove/restore and batch remove/restore keep it; forced failure on create and on PATCH rolls back; constant query counts (2 vs 12 listings, batch 2 vs 10).
+- Migration 0008 round trip on a populated DB: old listings get null pickup, CHECK constraints reject lat without lng, out-of-range values and over-long text at DB level, downgrade drops the columns and `friend_codes`, `friend_codes` cascades on user delete.
+
+**Bugs** (IDs from BE-32; BE-26 to BE-31 belong to other PRs)
+| ID | Severity | Summary | Repro |
 |---|---|---|---|
+| BE-32 | low-medium | A code scan that races an email request for the same pair loses the insert (IntegrityError), re-reads the pending row and returns it with `status: pending`, never accepting it. The user scanned in person but ends up pending. The two inserts can also coexist as two rows (A to B pending, B to A accepted) because the primary key is directional. | `test_concurrent_email_request_and_scan_leave_one_row` (xfail non-strict, fails about 5 in 6). Fix: in the IntegrityError branch set `existing.status = "accepted"` and commit, and lock or order the pair. |
+| BE-33 | low | `GET /friends/code` has no cap or rate limit and rows are pruned only when a new code is issued after expiry, so one user can mint unbounded rows within 10 minutes. | Loop the GET. Suggest a per-user cap (about 20 live codes) or reuse a live code. |
+
+**Stale older tests, caused by this change and owned by the builder** (QA did not edit them): `test_qa_pr79_migration.py::test_single_alembic_head_and_linear_chain` and `::test_upgrade_with_existing_data_gives_null_and_loses_nothing` assume head is `0007_items_nutrition`; `test_wave2_item_share.py::test_open_listing` and `::test_claimed_listing_shows_claimer` compare `item.share` exactly and now see the new `pickup` key. Update them to head `0008_share_pickup` and to include `pickup`.
+
+**Notes (not bugs)**
+- No unclaim endpoint exists, so that test skips. `docs/API.md` line 322 says "unclaiming keeps it"; change to "cancelling and restore keep it".
+- One code can be scanned by several people within the TTL (multi-use, fits a QR on a screen).
+- Code lookup is a DB primary-key get plus `hmac.compare_digest`; with 96 random bits a timing attack is infeasible. Surrounding whitespace in a code is trimmed and accepted by design.
+- `BE-32` cause is from reading `friends.py::_add_by_code`; I did not instrument it.
+
+**Verdict: FAIL until the builder fixes BE-32 (or the owner rules it acceptable) and updates the four stale tests.** The leak and Impact security checks all pass.
+## fix/recipes-gemini-timeout — BE-23/BE-24
+Independent QA of the uncommitted builder diff (`GEMINI_TIMEOUT_S`, recipe filter). IDs: highest in `docs/QA.md` is BE-22; open PR #93 touches no `docs/qa/*.md`, so BE-23 to BE-25 are free. **Targeted runs only (orchestrator runs the full suite).**
+**Final verdict: PASS** (round 2: BE-25 and the truncation order fixed and verified; no open bugs).
+| Bug | Sev | Verdict | Evidence |
 | BE-23 unbounded Gemini timeouts (parse_text, detect, receipt, recipes, shelf_life had no HTTP timeout) | medium | **VERIFIED FIXED** | Source scan: one `genai.Client(` and one `generate_content(` in the whole app (`services/gemini.py`); all six `_generate` call sites pass `timeout_s` (five `_default_timeout()`, enrich `ENRICH_TIMEOUT_S`). SDK unit is ms (`HttpOptions.timeout` "in milliseconds"); the code sends 30000, enrich 25000. Through the real routes with a fake client: a read timeout on `/recipes/suggest`, `/items/parse-text` and `/items/from-photo` (detect) is 502 `upstream_unavailable`, not 500; a plain timeout is not retried (1 call), `504 DEADLINE_EXCEEDED` retries once (2 calls); a failed enrich is 200 with `enrichment.status=failed`; a timeout is never cached. |
 | BE-24 recipe `title`/`minutes` unvalidated (broke iOS decoding) | medium | **VERIFIED FIXED** | Bad/blank/non-string title and null, string, 0, negative, >600, bool, NaN, list minutes drop the recipe; floats round to int; steps/missing_items filtered to strings and default `[]`; `servings`, `uses_items`, `macros`, `macros_estimated` and extra Gemini keys unchanged for good recipes. |
 | BE-25 `GEMINI_TIMEOUT_S=inf` | low | **OPEN** | `_default_timeout` accepts `inf` (it is `> 0`), then `int(inf * 1000)` raises `OverflowError` inside `_generate`'s try, so every Gemini call becomes a 502. NaN, 0, negative and junk fall back to 30 correctly. Fix: `math.isfinite(v)` in `_default_timeout` (and in `create_app`). `test_infinite_timeout_config_falls_back` is a strict xfail until fixed. |
-
 **Review notes (no bug):**
 - **From-photo budget is not tight.** The builder's 61.5 + 25 = 87 s cannot happen: `enrich` is skipped once detection took more than `ENRICH_SKIP_AFTER_S` (30 s). Longest route that also enriches is about 30 + 25 = 55 s; longest overall is 61.5 s (detect with retry, enrich skipped). Both are under the iOS 90 s client timeout and gunicorn's 120 s. If `GEMINI_TIMEOUT_S` is raised above 55 the 90 s margin shrinks (API.md already says keep it at or below 55).
 - **Truncation before filter.** `gemini.suggest_recipes` cuts to `max_results` first and the route filters after, so `max_results=1` with a bad first recipe returns `[]` although a good second one existed. Acceptable (iOS shows the empty state) and now pinned by a test; fetching `max_results + 2` would be a cheap improvement.
@@ -892,22 +919,15 @@ Independent QA of the uncommitted builder diff (`GEMINI_TIMEOUT_S`, recipe filte
 - `round()` is half-to-even: `minutes=0.5` is dropped, `600.5` is kept (as 600). Harmless.
 - The builder's rename in `test_enrich_gemini.py` is **legitimate**: the old assertion (`client_kwargs == [{}]`) encoded the bug, and the new one asserts 30000 ms for `parse_text`, while the enrich timeout tests are untouched. The builder **missed** a second stale assertion in QA's `test_qa_pr79_gemini.py::test_every_existing_gemini_function_leaves_timeout_unset` (it failed after the change). QA updated it to assert the 30000 ms timeout, renamed `test_every_non_enrich_gemini_function_sets_the_gemini_timeout`; same inputs, now stronger.
 - The builder's `test_worst_case_with_retry_under_gunicorn_timeout` is arithmetic only (`2*30+1.5 < 120`), not tied to the code; the new `test_every_generate_call_site_passes_timeout` is the real guard.
-
 **Tests added:** `backend/tests/test_qa_gemini_timeout.py` (17: 16 pass, 1 strict xfail for BE-25). Edited: `test_qa_pr79_gemini.py` (1 test).
-
 **Runs (targeted, venv, `fwr_test` on 5435):** `test_gemini_timeout`, `test_qa_gemini_timeout`, `test_gemini_retry`, `test_enrich_gemini`, `test_insights_wave2_gemini_shapes`, `test_insights_wave2_recipes`, `test_recipes_focus`, `test_macros`, `test_ai_endpoints`, `test_qa_pr79_*`, `test_gemini_usage`: **557 passed, 1 xfailed** (after the stale-test update; the first run had 556 passed, 1 failed on that test). Full suite not run.
-
 ### Round 2 re-verification (builder fixed BE-25 and the truncation order)
 - **BE-25 VERIFIED FIXED.** `_default_timeout` and `create_app` now use `math.isfinite`. `inf`, `-inf` and `nan`, as config values and as env strings (`inf`, `-inf`, `nan`, `Infinity`), all fall back to 30 s (30000 ms on the client). The two strict xfails became normal asserts (`test_non_finite_timeout_config_falls_back`, `test_env_non_finite_falls_back_in_create_app`).
 - **Truncation VERIFIED FIXED.** `gemini.suggest_recipes` asks for `min(max_results + 2, 12)` and no longer slices; the route filters the full list, then cuts to `n`, then caches the cut list. Tests: `max_results` 1/3/9/10 ask Gemini for 3/5/11/12 (the prompt's `max_results`); a bad first recipe with `max_results=1` now returns the good second one; a Gemini that returns 12 recipes for `n=3` yields exactly 3, and the repeat call is a cache hit with the same 3; the cache key still uses `n` (not the over-request), so `n=2` then `n=3` misses and returns 3. `suggest_recipes` has no other caller, so dropping its slice affects nothing else. Residual (not a bug): if Gemini returns fewer valid recipes than `n` after filtering, the user gets fewer; the 2 spares make that rare.
 - **Runs (targeted, fwr_test on 5435):** `test_gemini_timeout`, `test_qa_gemini_timeout`, `test_gemini_retry`, `test_enrich_gemini`, `test_insights_wave2_gemini_shapes`, `test_insights_wave2_recipes`, `test_recipes_focus`, `test_macros`, `test_ai_endpoints`, `test_qa_pr79_*`, `test_gemini_usage`: **581 passed, 0 failed, 0 xfailed**. Full suite not run (orchestrator).
-
 ## fix/photo-image-validation — BE-26/BE-27
-
 Independent backend QA of the uncommitted branch `fix/photo-image-validation` (worktree `fmt-photo-validate`). Stubs only, no Gemini or ML call. New file `backend/tests/test_qa_photo_validation.py` (19 tests, all pass). Targeted runs only: the new QA file, the builder's two new files and the 9 modified test files: **650 passed, 1 skipped, 0 failed, 0 xfailed** (re-run after the BE-28 fix).
-
 **Verdict: PASS** (BE-26, BE-27 and BE-28 verified fixed; one named residual, R-1, low, accepted).
-
 | Check | Result |
 |---|---|
 | BE-26 non-image to 502 | Fixed: text, PDF, GIF, a renamed file, cut-off JPEG and PNG, and a bomb all give 400 with no upstream call (stubs fail the test if called). |
@@ -917,15 +937,12 @@ Independent backend QA of the uncommitted branch `fix/photo-image-validation` (w
 | Memory | `verify()` never calls `load()` (tested by making `ImageFile.load` fail). Header-only; Pillow's bomb limit gives 400. |
 | HEIC | Forwarded as `image/heic` to both Gemini and `ml.detect`. Brand sniff only: a 12-byte `ftypheic` stub passes (documented limitation). Note: the YOLO service has no pillow-heif, so with `ML_SERVICE_URL` set a HEIC upload will fail there and fall back to Gemini via `MLUnavailable` (the route already falls through). Not a regression. The iOS app sends JPEG only. |
 | Builder edits to existing tests | Legitimate: 8 files swap fake JPEG bytes for a real 8x8 JPEG (`TINY_JPEG`); `test_thread_safety` regex gains `code=200` / `code=null`; `test_from_photo_enrich` forces "cannot crop" with `ENRICH_MAX_PIXELS=100` instead of garbage bytes, same assertions. No assertion weakened. |
-
 ### BE-28 (low): FIXED, verified. Original finding: the "FFD9 within the last 4096 bytes" check rejects valid JPEGs with large trailing data
 - Repro: `Image.new("RGB",(8,8)).save(buf,"JPEG")` plus 50,000 trailing bytes that do not end in FFD9, then POST to `/items/from-photo` gives **400 "truncated or corrupt"**, yet `Image.open(...).load()` decodes it. Test: `test_valid_jpeg_with_50kb_nonmarker_trailer_is_wrongly_rejected` (strict xfail).
 - What still passes: up to ~4 KB of trailing bytes; a primary JPEG followed by a full second JPEG (MPO / Ultra HDR gain map layout), because the second image ends in FFD9.
 - Severity: **low for the app.** `PhotoPrep.prepare` (`ios/App/Add/PhotoCapture.swift`) re-encodes through `UIImage.jpegData`, so uploads carry no appended MPF/depth data. Other clients (raw camera originals with proprietary trailers or padding) could be falsely rejected.
 - Fix: search for FFD9 anywhere after the last SOS marker (`data.rfind(b"\xff\xd9")` past the header), or `Image.load()` the JPEG under the existing pixel cap (costs a full decode, so use `draft()` for big files).
-
 **BE-28 re-verification.** The builder replaced the tail check with `_jpeg_scan_complete` (an EOI after the first SOS). `test_valid_jpeg_with_50kb_nonmarker_trailer_is_wrongly_rejected` is now a normal assert and passes; cut-off JPEGs (half, last 2 bytes) are still 400.
-
 **R-1 (residual, low, accepted, not a bug):** an EXIF-embedded thumbnail carries its own SOS and EOI, so a JPEG whose *main* scan is cut off but which has an EXIF thumbnail passes the marker check (pinned by `test_residual_exif_thumbnail_eoi_lets_cut_main_scan_through`, 200). Judgement: low. The iOS app re-encodes through `jpegData`, so it never sends such a file. For other clients the file reaches Gemini, which fails soft: the route returns the existing 502 `upstream_unavailable`, no crash and no bad data stored. Closing it needs a real decode (`Image.load()` under the pixel cap), which costs memory for a rare case. If wanted, parse the marker segments and look for EOI after the SOS that follows the SOF.
 
 ## Receipt fallback, source field and timeouts: independent QA

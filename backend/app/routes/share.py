@@ -8,7 +8,8 @@ from ..errors import ApiError, not_found, validation_error
 from ..extensions import db
 from ..models import FoodEvent, Item, ShareListing, User
 from ..services import social
-from ._util import iso, json_body, parse_uuid, path_uuid, serialize_listing
+from ._util import (iso, json_body, parse_pickup, parse_uuid, path_uuid, pickup_view, serialize_listing,
+                    set_pickup)
 
 bp = Blueprint("share", __name__, url_prefix="/share")
 
@@ -39,6 +40,7 @@ def create_listing():
     if body.get("item_id") is None:
         raise validation_error("item_id is required.")
     item_id = parse_uuid(body["item_id"])
+    pickup = parse_pickup(body.get("pickup"))
     group_id = parse_uuid(body.get("group_id"), missing_ok=True)
     item = db.session.execute(db.select(Item).where(Item.id == item_id).with_for_update()
                               ).scalar_one_or_none()
@@ -55,12 +57,13 @@ def create_listing():
     if ShareListing.query.filter_by(item_id=item.id, status="open").first():
         raise ApiError(409, "already_shared", "Item already has an open listing.")
     listing = ShareListing(item_id=item.id, owner_id=g.user.id, group_id=group_id, status="open")
+    set_pickup(listing, pickup)
     db.session.add(listing)
     db.session.add(FoodEvent(user_id=g.user.id, item_id=item.id, group_id=group_id,
                              event_type="share", category=item.category, quantity=item.quantity,
                              est_weight_kg=item.est_weight_kg, est_price=item.est_price))
     db.session.commit()
-    return jsonify(listing=serialize_listing(listing)), 201
+    return jsonify(listing=serialize_listing(listing, g.user.id)), 201
 
 
 @bp.get("")
@@ -87,6 +90,8 @@ def food_pantry():
             "owner_name": owner.display_name, "group_id": str(l.group_id) if l.group_id else None,
             "status": l.status, "claimed_by_me": l.claimed_by == me, "created_at": iso(l.created_at),
             "source": source,
+            "pickup": pickup_view(l) if l.claimed_by == me else None,
+            "pickup_set": pickup_view(l) is not None,
             "item": {"name": item.name, "category": item.category, "quantity": float(item.quantity),
                      "unit": item.unit, "predicted_expiry": item.predicted_expiry.isoformat()},
         })
@@ -103,7 +108,23 @@ def cancel_listing(listing_id):
         raise ApiError(409, "listing_closed", f"Listing is already {listing.status}.")
     listing.status = "cancelled"
     db.session.commit()
-    return jsonify(listing=serialize_listing(listing))
+    return jsonify(listing=serialize_listing(listing, g.user.id))
+
+
+@bp.patch("/<listing_id>")
+@require_auth
+def update_listing(listing_id):
+    body = json_body()
+    if "pickup" not in body:
+        raise validation_error("pickup is required (an object, or null to clear).")
+    listing = _visible_listing(listing_id, lock=True)
+    if listing.owner_id != g.user.id:
+        raise ApiError(403, "forbidden", "Only the owner can edit a listing.")
+    if listing.status != "open":
+        raise ApiError(409, "listing_closed", f"Listing is already {listing.status}.")
+    set_pickup(listing, parse_pickup(body["pickup"]))
+    db.session.commit()
+    return jsonify(listing=serialize_listing(listing, g.user.id))
 
 
 @bp.post("/<listing_id>/claim")
@@ -121,4 +142,4 @@ def claim_listing(listing_id):
         raise ApiError(409, "listing_closed", "The item is no longer available.")
     listing.claimed_by = g.user.id
     db.session.commit()
-    return jsonify(listing=serialize_listing(listing))
+    return jsonify(listing=serialize_listing(listing, g.user.id))

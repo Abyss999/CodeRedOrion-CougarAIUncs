@@ -113,10 +113,30 @@ class ShareListing(db.Model):
     claimed_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
     fulfilled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    pickup_note = db.Column(db.Text, nullable=True)
+    pickup_lat = db.Column(db.Float, nullable=True)
+    pickup_lng = db.Column(db.Float, nullable=True)
+    pickup_place = db.Column(db.Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint("status IN ('open','fulfilled','cancelled')", name="ck_share_status"),
+        CheckConstraint("(pickup_lat IS NULL) = (pickup_lng IS NULL)", name="ck_share_pickup_latlng"),
+        CheckConstraint("pickup_lat IS NULL OR (pickup_lat BETWEEN -90 AND 90 "
+                        "AND pickup_lng BETWEEN -180 AND 180)", name="ck_share_pickup_range"),
+        CheckConstraint("pickup_note IS NULL OR char_length(pickup_note) <= 120",
+                        name="ck_share_pickup_note_len"),
+        CheckConstraint("pickup_place IS NULL OR char_length(pickup_place) <= 120",
+                        name="ck_share_pickup_place_len"),
     )
+
+
+class FriendCode(db.Model):
+    """Short-lived opaque code behind the friend QR (migration 0008)."""
+    __tablename__ = "friend_codes"
+    code = db.Column(db.Text, primary_key=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
 
 
 class FoodEvent(db.Model):

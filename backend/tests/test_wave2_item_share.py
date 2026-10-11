@@ -54,7 +54,7 @@ def test_open_listing(client, pair, make_item):
     lst = share(client, a, it)
     s = listing_of(client, a, it["id"])["share"]
     assert s == {"id": lst["id"], "status": "open", "claimed_by": None,
-                 "audience": {"friends": True, "groups": []}}
+                 "audience": {"friends": True, "groups": []}, "pickup": None}
 
 
 def test_group_listing_also_reported(client, pair, make_item):
@@ -76,7 +76,8 @@ def test_claimed_listing_shows_claimer(client, pair, make_item):
     s = listing_of(client, a, it["id"])["share"]
     assert s["id"] == lst["id"]
     assert s["claimed_by"] == {"id": b["user"]["id"], "name": "Bob"}
-    assert set(s) == {"id", "status", "claimed_by", "audience"}
+    assert set(s) == {"id", "status", "claimed_by", "audience", "pickup"}
+    assert s["pickup"] is None
     assert set(s["claimed_by"]) == {"id", "name"}
 
 

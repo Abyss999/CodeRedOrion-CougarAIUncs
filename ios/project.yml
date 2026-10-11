@@ -44,6 +44,7 @@ targets:
         API_BASE_URL: $(API_BASE_URL)
         NSCameraUsageDescription: Take photos of your fridge, food and receipts to add items.
         NSMicrophoneUsageDescription: Speak the food you want to add, like "two bananas and a loaf of bread".
+        NSLocationWhenInUseUsageDescription: Use your location to drop a pickup pin where your friend can find the food you share.
         NSSpeechRecognitionUsageDescription: Turn what you say into a list of food items to add.
         # Google Sign-In. Both values come from the gitignored Local.xcconfig (see Local.xcconfig.example).
         # Unset = empty client id, which keeps the Google button hidden (GoogleSignInConfig.isEnabled).
@@ -53,6 +54,10 @@ targets:
             CFBundleTypeRole: Editor
             CFBundleURLSchemes:
               - $(GOOGLE_REVERSED_CLIENT_ID:default=com.coderedorion.googlesignin.unset)
+          - CFBundleURLName: BiteDownFriendLink
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - bitedown
         UIAppFonts:
           - Outfit-Medium.ttf
           - Outfit-SemiBold.ttf

@@ -8,7 +8,7 @@ from ..auth import make_token, require_auth
 from ..errors import ApiError, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (TOMBSTONE_USER_ID, FoodEvent, Friendship, Group, GroupMember, HelpRequest, Item,
-                      RequestAudience, ShareListing, User, UserIdentity)
+                      RequestAudience, ShareListing, FriendCode, User, UserIdentity)
 from ..services import google_auth
 from ._util import iso, json_body
 
@@ -180,6 +180,7 @@ def delete_account():
             heir.role = "owner"
     Group.query.filter_by(created_by=uid).update({"created_by": None})
     GroupMember.query.filter_by(user_id=uid).delete()
+    FriendCode.query.filter_by(user_id=uid).delete()
     ShareListing.query.filter(ShareListing.owner_id == uid).delete(synchronize_session=False)
     ShareListing.query.filter(ShareListing.item_id.in_(item_ids)).delete(synchronize_session=False)
     ShareListing.query.filter_by(claimed_by=uid).update({"claimed_by": None})
