@@ -141,7 +141,16 @@ def test_hint_marks_receipt_text_as_data():
 
 
 # ---- route ---------------------------------------------------------------------------------------------------
-def _post(client, user, data=b"\xff\xd8img", mime="image/jpeg", headers=True):
+def _real_jpeg():
+    """A decodable JPEG: main's upload validation (#102) rejects fake bytes with 400."""
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (16, 16), (200, 200, 200)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+def _post(client, user, data=None, mime="image/jpeg", headers=True):
+    data = _real_jpeg() if data is None else data
     return client.post("/items/from-receipt", data={"image": (io.BytesIO(data), "r.jpg", mime)},
                        headers=user["headers"] if headers else {}, content_type="multipart/form-data")
 
