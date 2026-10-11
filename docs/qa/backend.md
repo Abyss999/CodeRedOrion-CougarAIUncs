@@ -927,7 +927,7 @@ Independent backend QA of the uncommitted branch `fix/photo-image-validation` (w
 
 ## B1-B4 sweep verification (qa/page-sweep-2026-10-11)
 
-New tests: `backend/tests/test_qa_sweep_b1_b4.py` (60 tests, includes parametrized cases). No feature code was edited. No new bugs (no new ids; BE-23 to BE-25 were taken by fix/recipes-gemini-timeout); three low notes below.
+New tests: `backend/tests/test_qa_sweep_b1_b4.py` (60 tests, includes parametrized cases). No feature code was edited. No new bugs (no new ids; BE-23 to BE-28 were taken by fix/recipes-gemini-timeout and fix/photo-image-validation); three low notes below.
 
 | Fix | Verdict | Evidence |
 |---|---|---|
