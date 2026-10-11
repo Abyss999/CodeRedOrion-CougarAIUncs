@@ -25,40 +25,42 @@ body{background:#0F1A12}</style>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
     </header>
 
-    <form style="display: flex; flex-direction: column; gap: 6px">
-      <label for="fr-email" style="font-size: 14px; font-weight: 600; color: #C9D6BC">Add a friend by email</label>
-      <span style="display: flex; gap: 8px">
-        <input id="fr-email" type="email" placeholder="name@example.com" style="flex: 1; height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid #34483A; background: #18261B; font-size: 16px">
-        <button style="height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: #B9D871; color: #13261A; font-size: 15px; font-weight: 600">Send</button>
-      </span>
-    </form>
-
-    <section style="display: flex; flex-direction: column; gap: 8px">
-      <h3 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #9DB09F">Requests · 1</h3>
-      <div style="background: #18261B; border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 10px">
-        <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">Theo Nguyen</span><span style="font-size: 13px; color: #9DB09F">wants to be friends</span></span>
-        <button style="min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: #9DB09F; font-size: 14px; font-weight: 600">Decline</button>
-        <button style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #B9D871; color: #13261A; font-size: 14px; font-weight: 600">Accept</button>
+    <section aria-label="Friend requests" style="background: #D9EC8F; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #2B3D30"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg> Friend request</h3>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600; color: #13261A">Theo Nguyen</span><span style="font-size: 13px; color: #2B3D30">wants to be friends</span></span>
+        <button type="button" style="min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: #D9EC8F; color: #13261A; font-size: 14px; font-weight: 600">Decline</button>
+        <button type="button" style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #B9D871; color: #13261A; font-size: 14px; font-weight: 600">Accept</button>
       </div>
     </section>
-
-    <section style="display: flex; flex-direction: column; gap: 8px">
-      <h3 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #9DB09F">Groups</h3>
-      <form style="display: flex; gap: 8px">
-        <label for="gr-code" style="position: absolute; width: 1px; height: 1px; overflow: hidden">Invite code</label>
-        <input id="gr-code" type="text" placeholder="Invite code, e.g. K7PQ-M2XR" style="flex: 1; height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid #34483A; background: #18261B; font-size: 16px; letter-spacing: 0.04em">
-        <button style="height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: #B9D871; color: #13261A; font-size: 15px; font-weight: 600">Join</button>
-      </form>
-      <button style="height: 48px; border: 0; border-radius: 12px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; color: #B9D871; font-size: 15px; font-weight: 600">+ Create a group</button>
-      <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
+    <section aria-labelledby="fr-h" style="display: flex; flex-direction: column; gap: 8px">
+      <h3 id="fr-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #9DB09F">Friends · 12</h3>
+      <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px; overflow: hidden">
+          <li style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-bottom: 1px solid #2A3A2D">
+            <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 18px; background: #24361F; color: #B9D871; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0">DW</span>
+            <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">Dana Whitfield</span><span style="font-size: 13px; color: #9DB09F">2 shared items</span></span></li>
+          <li style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-bottom: 1px solid #2A3A2D">
+            <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 18px; background: #24361F; color: #B9D871; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0">MO</span>
+            <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">Marcus Ojeda</span><span style="font-size: 13px; color: #9DB09F">Claimed your spinach</span></span></li>
+        <li><a href="Connect.dark.dc.html" style="min-height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600">See all 12 friends</a></li>
+      </ul>
+      <button type="button" aria-expanded="false" aria-controls="fr-form" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; box-sizing: border-box; padding: 0 14px; border: 0; border-radius: 12px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; color: #B9D871; font-size: 15px; font-weight: 600; text-align: left">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M19 8v6M16 11h6"></path></svg><span style="flex: 1">Add friend</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M6 9l6 6 6-6"></path></svg></button>
+    </section>
+    <section aria-labelledby="gr-h" style="display: flex; flex-direction: column; gap: 8px">
+      <h3 id="gr-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #9DB09F">Groups · 2</h3>
+      <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px; overflow: hidden">
         <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
           <li><a href="GroupDetail.dark.dc.html" style="text-decoration: none; color: #E8F0DA; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border-bottom: 1px solid #2A3A2D">
             <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">{{g.name}}</span><span style="font-size: 13px; color: #9DB09F">{{g.meta}}</span></span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9DB09F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a></li>
         </sc-for>
       </ul>
+      <button type="button" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; box-sizing: border-box; padding: 0 14px; border: 0; border-radius: 12px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; color: #B9D871; font-size: 15px; font-weight: 600; text-align: left">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M12 5v14M5 12h14"></path></svg><span style="flex: 1">Create a group</span></button>
+      <button type="button" aria-expanded="false" aria-controls="gr-form" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; box-sizing: border-box; padding: 0 14px; border: 0; border-radius: 12px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; color: #B9D871; font-size: 15px; font-weight: 600; text-align: left">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9M16 7l3 3"></path></svg><span style="flex: 1">Join a group</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M6 9l6 6 6-6"></path></svg></button>
     </section>
-    <a href="Connect.dark.dc.html" style="align-self: center; min-height: 44px; display: flex; align-items: center; font-size: 15px; font-weight: 600">See all 12 friends</a>
   </section>
 </div>
 </x-dc>

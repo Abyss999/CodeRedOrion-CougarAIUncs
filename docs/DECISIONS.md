@@ -2,6 +2,28 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Design feedback round 3 (teammate wedwqc, 08:28–08:46; canvas v52–v53; design QA READY WITH FIXES, fixes applied)
+- **Owner: Home has a settings gear, never a profile picture** (44 pt, VoiceOver "Settings"), on Home, HomeEmpty and ServerError.
+- **Owner: the Home tip stays an observation**, one line and dismissible. No recipe suggestions in the tip.
+- **Owner: Social posts through one green "+"** beside "Requests" ("Ask for something" → RequestComposer). "Post one" is gone. So that the screen never shows two plain pluses, the header button that opens Friends and groups becomes a person-plus icon (food-orch, applying the owner's "+ only": removing "Post one" had left the composer with no entry point).
+- **Owner: requests keep 280 characters**, and notes on the board clamp to 4 lines with "more".
+- **Out of scope:** chat between users, and tracking food wasted as its own metric.
+- **Impact and ImpactRange copy:** "carbon emissions" in words, never "CO₂e". Waste rate is stated alone, with no "vs previous" badge. A "This month vs last month" card compares food wasted. The split reads "19 used" / "4 donated" on two lines. This supersedes the round-2 "donated reads shared" rule for Impact; the Remove sheet keeps "Shared it".
+- **Layout and controls:**
+  - **Fridge:** no search button (BatchUndo too).
+  - **Remove sheet:** no "What happened to it?" heading. Given to shows the name only. One menu, opening above its row.
+  - **Waste reasons:** rows are 68 pt.
+  - **Photo review:** amounts are editable inline.
+  - **Auth:** the email form comes first, then "or", then Google at the bottom.
+  - **Recipe detail:** a bold "Ingredients" bullet list aligned with the Steps, plus a serving size in grams.
+  - **Friends and groups:** requests on top → Friends + Add friend → Groups → Create a group → Join a group (expands to the code).
+  - **Group detail:** more top space, with the invite code compact and lower.
+  - **Social Offer:** a small pill inside a 44 pt hit area.
+- **Design QA fixes:**
+  - **Dark Decline:** the friend-request "Decline" sits on lime with ink text, and carries the lime background explicitly so `mkdark.py` keeps it dark. A `transparent` background resets mkdark's lime scope.
+  - **Smaller fixes:** Impact and ImpactRange gained 16 px for Outfit's line height, the stepper buttons are 44 pt, and `{{n.long}}` is defined for every note.
+  - **Canvas layout:** rows below the Impact row moved down 282 px (266 + 16) so the taller boards don't overlap.
+
 ## 2026-10-11 — Donation recipient and UI-build endpoints (#74, #76)
 - **The client sends `recipient_id` only when the user explicitly picks someone in Given to.** The default ("claimer") is sent by omitting the key. An explicit `null` is sent only when "Someone not on BiteDown" is actually chosen, so a claimer the client can't see (e.g. on a group item) never loses the credit. Choosing a user for an item with no listing is validated but not stored (no recipient column), so it's accepted for v1 and noted as a follow-up.
 - **`recipient_id` on a donated removal:** omitted = the claimer (as before); explicit `null` = someone not on BiteDown (the listing is fulfilled with no recipient, even when claimed); a user id must be an accepted friend or fellow group member, else 404; yourself → 400 ("You can't give food to yourself"). `recipient_id` with `used` / `thrown_out` → 400, null included. Check order: body 400 → item 404/403 → 409 → recipient 404. `remove-batch` (donated) takes the same field. Impact is unchanged: donated is always saved.
