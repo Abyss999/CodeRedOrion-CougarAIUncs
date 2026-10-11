@@ -677,4 +677,6 @@ Contract: docs/API.md "Request board", "Groups" (leave), "Auth" (Google rule 2b 
 
 **Targeted run:** 401 passed. The files were oauth_google, requests_audiences, tips_observations, tips, migration_0006, migrations, oauth_migration_0005, wave2_migration_0004, social and wave2_account_delete.
 
-**Verdict:** PASS pending the full suite with coverage.
+**Full suite:** run by the coordinator on HEAD `2c1d361` (main merged into `3c2b245`), clean tree. `pytest -q --cov=app` gave 1533 passed and 1 skipped in 211 s, with total coverage 98%.
+
+**Verdict:** PASS.
