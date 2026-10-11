@@ -98,10 +98,10 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Fridge polish (IOS-19…29) | `feat/ios-fridge-polish` (from #81) | `wt/ios-fridge-polish` | Builder + QA in progress, with the round 3 RemoveSheet and BatchUndo changes; then PR |
+| Fridge polish (IOS-19…29) | `feat/ios-fridge-polish` (from #81) | `wt/ios-fridge-polish` | Builder + QA in progress, with the round 3 RemoveSheet and BatchUndo changes. It sits on `feat/ios-shared`, so merge `main` in before opening the PR |
 | Add 2a: photo (IOS-30…39) | `feat/ios-add-photo` (from 0329c6d) | `wt/ios-add-photo` | Builder + QA in progress, in parallel; includes the #79 enrichment follow-ups |
-| Home (IOS-40…49) | `feat/ios-home` (from 0329c6d) | `wt/ios-home` | Builder + QA in progress, in parallel |
-| Impact (IOS-50…59) | `feat/ios-impact` (from 0329c6d) | `wt/ios-impact` | Builder + QA in progress, in parallel |
+| Home (IOS-40…49) | `feat/ios-home` (from 0329c6d) | `wt/ios-home` | Builder + QA in progress, in parallel. Exposes `onOpenImpact`, `onOpenSettings` and `onOpenServerSettings` closures, wired when Impact and Settings land |
+| Impact (IOS-50…59) | `feat/ios-impact` (from 0329c6d) | `wt/ios-impact` | Builder + QA in progress, in parallel. Reachable through a debug launch flag until Home's `onOpenImpact` is wired |
 | Auth (IOS-60…69) | `feat/ios-auth` (from 0329c6d) | `wt/ios-auth` | Builder + QA in progress, in parallel |
 | Queued | - | - | Add 2b (text/barcode/receipt) after 2a; Recipes after Home; then Item detail → Social → Settings |
 | `docs/checkpoint-9` | this PR | `wt/checkpoint-9` (`food-orch`) | `food-main` reviews and merges |
