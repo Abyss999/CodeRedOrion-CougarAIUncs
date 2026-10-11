@@ -10,6 +10,7 @@ that iOS builds and QA tests against.
   - empty and error: native `ContentUnavailableView` with a retry action
   - loading: skeleton rows shaped like the final layout
 - Pushed screens keep the tab bar; the artboards omit it.
+- Animation for every screen is in [`MOTION.md`](MOTION.md).
 
 ## Navigation map
 ```
