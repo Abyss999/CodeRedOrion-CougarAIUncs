@@ -898,3 +898,40 @@ Independent QA of the uncommitted builder diff (`GEMINI_TIMEOUT_S`, recipe filte
 - **BE-25 VERIFIED FIXED.** `_default_timeout` and `create_app` now use `math.isfinite`. `inf`, `-inf` and `nan`, as config values and as env strings (`inf`, `-inf`, `nan`, `Infinity`), all fall back to 30 s (30000 ms on the client). The two strict xfails became normal asserts (`test_non_finite_timeout_config_falls_back`, `test_env_non_finite_falls_back_in_create_app`).
 - **Truncation VERIFIED FIXED.** `gemini.suggest_recipes` asks for `min(max_results + 2, 12)` and no longer slices; the route filters the full list, then cuts to `n`, then caches the cut list. Tests: `max_results` 1/3/9/10 ask Gemini for 3/5/11/12 (the prompt's `max_results`); a bad first recipe with `max_results=1` now returns the good second one; a Gemini that returns 12 recipes for `n=3` yields exactly 3, and the repeat call is a cache hit with the same 3; the cache key still uses `n` (not the over-request), so `n=2` then `n=3` misses and returns 3. `suggest_recipes` has no other caller, so dropping its slice affects nothing else. Residual (not a bug): if Gemini returns fewer valid recipes than `n` after filtering, the user gets fewer; the 2 spares make that rare.
 - **Runs (targeted, fwr_test on 5435):** `test_gemini_timeout`, `test_qa_gemini_timeout`, `test_gemini_retry`, `test_enrich_gemini`, `test_insights_wave2_gemini_shapes`, `test_insights_wave2_recipes`, `test_recipes_focus`, `test_macros`, `test_ai_endpoints`, `test_qa_pr79_*`, `test_gemini_usage`: **581 passed, 0 failed, 0 xfailed**. Full suite not run (orchestrator).
+
+## B1-B4 sweep verification (qa/page-sweep-2026-10-11)
+
+New tests: `backend/tests/test_qa_sweep_b1_b4.py` (60 tests, includes parametrized cases). No feature code was edited. No new bugs (no new ids; BE-23 to BE-25 were taken by fix/recipes-gemini-timeout); three low notes below.
+
+| Fix | Verdict | Evidence |
+|---|---|---|
+| B1 group items need current membership | **VERIFIED FIXED** | Ex-member who added the item: PATCH, remove and restore are `403 forbidden` and nothing is written (item, events and `/impact` unchanged). `remove-batch` and `restore-batch` are `404 not_found` for the ex-member item alone and mixed with a valid personal item, with nothing removed or restored. Current owner and a non-owner member still work, and rejoining restores access. |
+| B2 NUL in JSON | **VERIFIED FIXED** | `\u0000` in a value, a nested list or dict value, a dict key or a nested key returns `400 validation_error` on signup, login, friends, groups, join, items (create, PATCH, remove), parse-text, requests, remove-batch and share. The `DataError` handler returns 400, calls rollback, leaks no driver text, and the next request works. |
+| B3 caps | **VERIFIED FIXED** | Exactly at the limit is accepted and limit+1 is `400` for item name 200 (checked after strip), unit 32 (POST and PATCH), display_name 60, email 254 (signup, login, `POST /friends`), password 256 (signup and login), invite_code 64. A batch with one over-long name creates nothing. A failed PATCH does not half-apply. |
+| B4 path ids | **VERIFIED FIXED** | Malformed ids give `404 not_found` with "Group/User/Request/Listing/Item not found." on 12 routes. |
+
+**Notes (low, not fixed by QA):**
+- `POST /recipes/suggest` parses its own body and does not use `json_body`, so NUL in `dietary` is not rejected. It goes into the prompt only, not the database, so it is not a 500 (`test_recipes_suggest_nul_is_not_500`).
+- An ex-member's group items still count as "theirs" in `/recipes/suggest` and `/tips` (`Item.owner_id == uid` with no group filter, `routes/insights.py:230` and `:359`), and `GET /people/reachable?item_id=` still treats the owner as able to see the item (`routes/people.py:15`). These only read data the user added, and edits are blocked, but the item names stay visible to the ex-member.
+- Existence is consistent: the 403 for the ex-member owner only reveals an item the user already owned; single endpoints already returned 403 for other users' items, and batch returns 404.
+
+**Runs:** targeted 60 passed. Full suite (containerized runner, whole repo mounted): 2284 passed, 3 skipped, 1 failed on the first run (a wrong assertion in my own new recipes test, fixed); the targeted file then passed, so 2285 passed and 3 skipped in total. The earlier 8 env-only failures are gone.
+
+## Sweep follow-ups verification (qa/page-sweep-2026-10-11)
+
+New tests: `backend/tests/test_qa_sweep_followups.py` (18 tests). No feature code was edited. No new bugs (no new ids). This closes the two low notes in the B1-B4 entry above.
+
+| Change | Verdict | Evidence |
+|---|---|---|
+| `caller_active_items_filter` in `/recipes/suggest` | **VERIFIED FIXED** | While a member, the group item goes to Gemini and `item_ids` naming it works. After leaving, it is absent from the Gemini payload and from `uses_items`, `item_ids` naming it (alone or with a personal id) is `404 not_found` with no Gemini call, and a user whose only items are ex-group ones gets `{"recipes": []}` without a Gemini call. Rejoining restores access. The cache key follows the filtered item set, so a pre-leave result is not replayed. |
+| Same filter in `GET /tips` | **VERIFIED FIXED** | `past_expiry` and `expiring_soon` name the group items while a member and drop them after leaving; personal items stay. With only ex-member items, neither tip appears. |
+| `people._can_see_item` | **VERIFIED FIXED** | `GET /people/reachable?item_id=`: member 200, ex-member owner 404, own personal item 200, another current member still 200. |
+| History unchanged | **VERIFIED** | After leaving, `/impact?range=all`, `top_wasted_item` and `saved_recent` equal their pre-leave values (events-based). |
+| `/recipes/suggest` body | **VERIFIED FIXED** | NUL in a dietary entry, a nested value, a key or `item_ids` is `400` with no Gemini call. `dietary` with 10 entries and 40-char entries is `200`; 11 entries, a 41-char entry and a non-string entry are `400`. No body, empty body with a JSON content type, and `{}` are `200` (defaults n=3, dietary=[]). `[]`, `null`, malformed JSON, whitespace and a JSON body sent as `text/plain` are `400`. |
+
+**Review notes (no action):**
+- Other "caller's items" selectors checked: `GET /items` already restricts to `group_id IS NULL`; the batch endpoints use current group membership; share creation rejects group items; from-photo enrichment and the `/impact` queries use the caller's own events, not items. The recipe cache key is built from the filtered set, so it is correct.
+- A body of `null` or whitespace is a `400` (as before); only a truly empty body falls back to defaults.
+- The import tidy-up in `insights.py` (`social`, `check_len`) is used and clean.
+
+**Runs:** targeted 18 passed. Full suite (containerized runner): 2303 passed, 3 skipped, 0 failed.
