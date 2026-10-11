@@ -9,6 +9,20 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **Gemini returns numbers only, no free text.** The server validates every value (bounds, macro mass, kcal near 4P+4C+9F) and turns anything unusable into `null`. *Why:* free text from a model would reach the UI and the prompt path unchecked.
 - Enrichment is opt-in (`enrich=expiry,nutrition`) and never changes the HTTP status: any failure is a 200 with the table dates. Privacy: on Google's unpaid Gemini tier, submitted content may be used to improve products, so real users' photos need a billing-enabled key.
 
+## 2026-10-11 — Design feedback round 4 (teammate wedwqc, 11:25–11:46; canvas v54; UI/UX QA READY WITH FIXES, fixes applied)
+- **Add sheet:** "one item" joins the photo hero ("Snap a photo: your whole fridge, or just one item"). **Type it** and **Say it** become separate tiles, both opening the Type-or-say screen in their own mode.
+- **Impact:** no driving equivalent on the carbon line. **Waste rate** is a centred card with a 44 pt figure, "3.1 lb of 24.3 lb thrown out" and a meter. The demo figure is corrected to 12.8% (3.1 / 24.3 lb; 14.8% didn't match). On ImpactRange, "Food thrown out" folds into that card, with no chip, because the comparison card already states the change.
+- **Off-app hand-off of a claimed item** (food-orch, answering wedwqc's question; no new endpoint): the owner records it with the normal removal. ItemShared's primary **Given to <name>** opens the Remove sheet prefilled with Shared it + the claimer (`donated`, `recipient_id` omitted per #78). A secondary **Remove** opens it with nothing preselected.
+- **Item detail** never shows a claim. Unclaimed shared items read "Not claimed yet", and a claimed listing is the ItemShared screen.
+- **Friends and groups:** group rows carry a 36 pt icon circle and the friend rows' spacing.
+- **QA fixes:**
+  - Impact, ImpactRange, ItemShared and ConnectPending are taller (1271 / 1434 / 880 / 1056).
+  - The Item detail share switch is a focusable 44 pt control.
+  - Parallel example hints on Type it / Say it, and the meter's VoiceOver label carries the numbers.
+  - No hairline under the last group row.
+  - Canvas rows below the Impact row moved down 145 px.
+- **Not applied:** a helper caption under "Claimed by" (the no-helper-captions rule).
+
 ## 2026-10-11 — Design feedback round 3 (teammate wedwqc, 08:28–08:46; canvas v52–v53; design QA READY WITH FIXES, fixes applied)
 - **Owner: Home has a settings gear, never a profile picture** (44 pt, VoiceOver "Settings"), on Home, HomeEmpty and ServerError.
 - **Owner: the Home tip stays an observation**, one line and dismissible. No recipe suggestions in the tip.
