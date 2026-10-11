@@ -21,7 +21,7 @@ struct ListeningPulse: View {
                         .truncatingRemainder(dividingBy: Theme.Motion.pulsePeriod) / Theme.Motion.pulsePeriod
                     let grow = Theme.Motion.pulseGrowth * t
                     Circle()
-                        .stroke(color.opacity(Theme.Motion.pulsePeakOpacity * sin(.pi * t)), lineWidth: 2)
+                        .stroke(color.opacity(Theme.Motion.pulsePeakOpacity * sin(.pi * t)), lineWidth: Theme.Motion.pulseLineWidth)
                         .frame(width: diameter + grow * 2, height: diameter + grow * 2)
                 }
             }
@@ -29,6 +29,6 @@ struct ListeningPulse: View {
         .frame(width: diameter + Theme.Motion.pulseGrowth * 2, height: diameter + Theme.Motion.pulseGrowth * 2)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .accessibilityIdentifier("listening.pulse")
+        .accessibilityIdentifier(AccessibilityID.Listening.pulse)
     }
 }

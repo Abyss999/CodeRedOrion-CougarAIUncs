@@ -54,14 +54,19 @@ enum AccessibilityID {
         static let marker = "toast.undo.marker"
     }
 
+    enum Listening {
+        /// Pulse ring around the mic while listening (present only while shown).
+        static let pulse = "listening.pulse"
+    }
+
     /// Debug-only runtime API base URL entry point (long-press the version label).
     enum Debug {
-        static let versionLabel = "debug.versionLabel"
+        static let versionLabel = "debug.versionlabel"
         static let settingsSheet = "debug.settings"
-        static let baseURLField = "debug.baseURL.field"
-        static let baseURLSave = "debug.baseURL.save"
-        static let baseURLReset = "debug.baseURL.reset"
-        static let baseURLError = "debug.baseURL.error"
-        static let baseURLCurrent = "debug.baseURL.current"
+        static let baseURLField = "debug.baseurl.field"
+        static let baseURLSave = "debug.baseurl.save"
+        static let baseURLReset = "debug.baseurl.reset"
+        static let baseURLError = "debug.baseurl.error"
+        static let baseURLCurrent = "debug.baseurl.current"
     }
 }

@@ -39,7 +39,7 @@ extension FoodGroup {
 /// The bare glyph in the group's stroke colour (used in the Fridge group header, 16 pt).
 struct FoodGroupGlyph: View {
     let group: FoodGroup
-    var size: CGFloat = 22
+    var size: CGFloat = Theme.Size.groupHeaderIcon
 
     var body: some View {
         Group {
@@ -54,7 +54,8 @@ struct FoodGroupGlyph: View {
     }
 }
 
-/// 40 pt rounded tile in the group's colours with the glyph on it (ItemRow avatar).
+/// 40 pt rounded tile in the group's colours with a 22 pt glyph on it (ItemRow avatar).
+/// The glyph scales with `tile` if a caller passes a different tile size.
 struct FoodGroupIcon: View {
     let group: FoodGroup
     var tile: CGFloat = Theme.Size.avatar
@@ -63,7 +64,7 @@ struct FoodGroupIcon: View {
         RoundedRectangle(cornerRadius: Theme.Radius.avatar, style: .continuous)
             .fill(group.palette.tile)
             .frame(width: tile, height: tile)
-            .overlay { FoodGroupGlyph(group: group, size: tile * 0.55) }
+            .overlay { FoodGroupGlyph(group: group, size: Theme.Size.avatarGlyph * tile / Theme.Size.avatar) }
             .accessibilityHidden(true)
     }
 }

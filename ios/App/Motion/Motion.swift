@@ -27,11 +27,16 @@ extension Theme {
         static let pulseGrowth: CGFloat = 8
         static let pulsePeakOpacity: Double = 0.30
         static let pulsePeriod: Double = 1.6
+        /// Stroke width of the animated pulse ring.
+        static let pulseLineWidth: CGFloat = 2
         /// Reduce Motion: static ring, 4 pt at 25% opacity.
         static let pulseStaticWidth: CGFloat = 4
         static let pulseStaticOpacity: Double = 0.25
         /// Skeleton shimmer period (linear, repeating).
         static let shimmerDuration: Double = 1.2
+        /// Shimmer highlight: a `surface` band at this opacity, this fraction of the row wide.
+        static let shimmerHighlightOpacity: Double = 0.65
+        static let shimmerBandWidth: CGFloat = 0.6
         /// One-shot animations finish within this.
         static let oneShotLimit: Double = 0.5
 

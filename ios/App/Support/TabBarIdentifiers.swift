@@ -5,18 +5,26 @@ import UIKit
 /// intermittently on iOS 26 (IOS-4). This installs the same identifiers directly on the
 /// underlying `UITabBarItem`s, and re-applies them on a short schedule and whenever SwiftUI
 /// re-lays the bar out. Order must match the `TabView` order.
+///
+/// It also sets each item's `accessibilityLabel` to the tab title (IOS-10): SwiftUI's
+/// `.accessibilityHidden` on the tab image doesn't reach UIKit, so VoiceOver otherwise reads the
+/// SF Symbol's name ("house", "add") alongside the title.
 struct TabBarIdentifiers: UIViewRepresentable {
-    let ids: [String]
+    struct Entry: Equatable {
+        let id: String
+        let label: String
+    }
+    let entries: [Entry]
 
-    func makeUIView(context: Context) -> InstallerView { InstallerView(ids: ids) }
-    func updateUIView(_ uiView: InstallerView, context: Context) { uiView.ids = ids; uiView.apply() }
+    func makeUIView(context: Context) -> InstallerView { InstallerView(entries: entries) }
+    func updateUIView(_ uiView: InstallerView, context: Context) { uiView.entries = entries; uiView.apply() }
 
     final class InstallerView: UIView {
-        var ids: [String]
+        var entries: [Entry]
         private var tries = 0
 
-        init(ids: [String]) {
-            self.ids = ids
+        init(entries: [Entry]) {
+            self.entries = entries
             super.init(frame: .zero)
             isUserInteractionEnabled = false
             isAccessibilityElement = false
@@ -38,8 +46,12 @@ struct TabBarIdentifiers: UIViewRepresentable {
 
         func apply() {
             guard let root = window?.rootViewController, let bar = Self.findTabBar(root) else { return }
-            for (item, id) in zip(bar.tabBar.items ?? [], ids) where item.accessibilityIdentifier != id {
-                item.accessibilityIdentifier = id
+            for (item, entry) in zip(bar.tabBar.items ?? [], entries) {
+                if item.accessibilityIdentifier != entry.id { item.accessibilityIdentifier = entry.id }
+                if item.accessibilityLabel != entry.label { item.accessibilityLabel = entry.label }
+                // Drop the symbol's own description so it can't be read as part of the button.
+                if let image = item.image, image.accessibilityLabel != nil { image.accessibilityLabel = nil }
+                if let image = item.selectedImage, image.accessibilityLabel != nil { image.accessibilityLabel = nil }
             }
         }
 

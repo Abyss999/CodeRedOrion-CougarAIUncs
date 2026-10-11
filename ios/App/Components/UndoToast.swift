@@ -25,55 +25,66 @@ struct UndoToastView: View {
     @MotionReduced private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let item: UndoToastItem
     let dismiss: () -> Void
     @State private var progress: Double = 1
 
+    /// At accessibility text sizes the message gets the full width with Undo below it (IOS-11), so
+    /// it wraps on whole words instead of being squeezed beside the button.
+    private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
+    private var contentLayout: AnyLayout {
+        stacked
+            ? AnyLayout(VStackLayout(alignment: .trailing, spacing: Theme.Spacing.s))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+    }
+
     private var duration: Duration { (voiceOver || switchControl) ? UndoToastTiming.assistiveDuration : UndoToastTiming.duration }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: Theme.Spacing.sm) {
+            contentLayout {
                 Text(item.message)
                     .font(Theme.Fonts.rowTitle)
                     .foregroundStyle(Theme.Colors.onForest)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("toast.undo.message")
+                    .accessibilityIdentifier(AccessibilityID.Toast.message)
                 Button {
-                    Haptics.lightImpact()
                     item.onUndo()
                     dismiss()
                 } label: {
                     Text(item.actionTitle)
                         .font(Theme.Fonts.button)
+                        .fixedSize()   // "Undo" never wraps or truncates
                         .foregroundStyle(Theme.Colors.onForest)
                         .padding(.horizontal, Theme.Spacing.m)
                         .frame(minHeight: Theme.Size.minTouch)
-                        .background(Theme.Colors.onForest.opacity(0.18), in: Capsule())
+                        .background(Theme.Colors.onForest.opacity(Theme.Opacity.onForestFill), in: Capsule())
                         .contentShape(Capsule())
                 }
-                .accessibilityIdentifier("toast.undo.button")
+                .accessibilityIdentifier(AccessibilityID.Toast.button)
             }
             .padding(.leading, Theme.Spacing.m)
             .padding(.trailing, Theme.Spacing.s)
-            .padding(.vertical, Theme.Spacing.xs)
+            .padding(.vertical, stacked ? Theme.Spacing.s : Theme.Spacing.xs)
 
             GeometryReader { geo in
                 Rectangle().fill(Theme.Colors.onForestMuted)
-                    .frame(width: geo.size.width * progress, height: 3)
+                    .frame(width: geo.size.width * progress, height: Theme.Size.toastProgress)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 3)
+            .frame(height: Theme.Size.toastProgress)
             .accessibilityHidden(true)
-            .accessibilityIdentifier("toast.undo.progress")
+            .accessibilityIdentifier(AccessibilityID.Toast.progress)
         }
         .background(Theme.Colors.forest, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: Theme.Colors.scrim.opacity(0.25), radius: 12, y: 4)
+        .shadow(color: Theme.Colors.scrim.opacity(Theme.Shadow.toast.opacity), radius: Theme.Shadow.toast.radius, y: Theme.Shadow.toast.y)
         .padding(.horizontal, Theme.Spacing.gutter)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("toast.undo")
+        .accessibilityIdentifier(AccessibilityID.Toast.container)
         .accessibilityAction(named: item.actionTitle) { item.onUndo(); dismiss() }
         .task(id: item.id) { await run() }
         .onAppear {

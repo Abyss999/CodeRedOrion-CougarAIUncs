@@ -10,9 +10,9 @@ struct ShimmerModifier: ViewModifier {
             .overlay {
                 if !reduceMotion {
                     GeometryReader { geo in
-                        LinearGradient(colors: [.clear, Theme.Colors.surface.opacity(0.65), .clear],
+                        LinearGradient(colors: [.clear, Theme.Colors.surface.opacity(Theme.Motion.shimmerHighlightOpacity), .clear],
                                        startPoint: .leading, endPoint: .trailing)
-                            .frame(width: geo.size.width * 0.6)
+                            .frame(width: geo.size.width * Theme.Motion.shimmerBandWidth)
                             .offset(x: phase * geo.size.width)
                     }
                     .allowsHitTesting(false)
@@ -40,13 +40,13 @@ struct SkeletonRow: View {
         HStack(spacing: Theme.Spacing.sm) {
             RoundedRectangle(cornerRadius: Theme.Radius.avatar, style: .continuous).fill(fill)
                 .frame(width: Theme.Size.avatar, height: Theme.Size.avatar)
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: Theme.Radius.bar).fill(fill).frame(width: 140, height: 14)
-                RoundedRectangle(cornerRadius: Theme.Radius.bar).fill(fill).frame(width: 96, height: 11)
+            VStack(alignment: .leading, spacing: Theme.Spacing.stack) {
+                RoundedRectangle(cornerRadius: Theme.Radius.bar).fill(fill).frame(width: Theme.Size.skeletonTitle.width, height: Theme.Size.skeletonTitle.height)
+                RoundedRectangle(cornerRadius: Theme.Radius.bar).fill(fill).frame(width: Theme.Size.skeletonMeta.width, height: Theme.Size.skeletonMeta.height)
             }
             Spacer(minLength: 0)
             RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous).fill(fill)
-                .frame(width: 56, height: 24)
+                .frame(width: Theme.Size.skeletonBadge.width, height: Theme.Size.skeletonBadge.height)
         }
         .padding(.horizontal, Theme.Spacing.m)
         .padding(.vertical, Theme.Spacing.sm)

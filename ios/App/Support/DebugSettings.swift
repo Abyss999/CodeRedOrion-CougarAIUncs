@@ -37,34 +37,44 @@ struct DebugSettingsSheet: View {
     @State private var text = ""
     @State private var error: String?
     @State private var current = ""
+    /// Bumped on every failed save, so a repeated identical error still scrolls into view.
+    @State private var errorTick = 0
+    private static let errorRowID = "debug.baseurl.error.row"
 
     var body: some View {
         NavigationStack {
-            Form {
-                // Error first, so it is always on screen (even at AX5 on small phones with the keyboard up).
-                if let error {
+            ScrollViewReader { proxy in
+                Form {
+                    Section("API base URL") {
+                        TextField("https://example.trycloudflare.com", text: $text)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .accessibilityIdentifier(AccessibilityID.Debug.baseURLField)
+                        // Directly below the field (IOS-5), so it shows next to what's being typed,
+                        // and scrolled into view when it appears (AX5 on a small phone, keyboard up).
+                        if let error {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Theme.Colors.urgentInk)
+                                .accessibilityIdentifier(AccessibilityID.Debug.baseURLError)
+                                .id(Self.errorRowID)
+                        }
+                        Text("In use: \(current)").font(Theme.Fonts.meta).foregroundStyle(Theme.Colors.muted)
+                            .accessibilityIdentifier(AccessibilityID.Debug.baseURLCurrent)
+                    }
                     Section {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.Colors.urgentInk)
-                            .accessibilityIdentifier(AccessibilityID.Debug.baseURLError)
+                        Button("Save") { save() }.accessibilityIdentifier(AccessibilityID.Debug.baseURLSave)
+                        Button("Reset to default", role: .destructive) {
+                            baseURL.resetOverride(); error = nil; refresh()
+                        }.accessibilityIdentifier(AccessibilityID.Debug.baseURLReset)
+                    } footer: {
+                        Text("Overrides the Info.plist API_BASE_URL until reset. Must be http(s).")
                     }
                 }
-                Section("API base URL") {
-                    TextField("https://example.trycloudflare.com", text: $text)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .accessibilityIdentifier(AccessibilityID.Debug.baseURLField)
-                    Text("In use: \(current)").font(Theme.Fonts.meta).foregroundStyle(Theme.Colors.muted)
-                        .accessibilityIdentifier(AccessibilityID.Debug.baseURLCurrent)
-                }
-                Section {
-                    Button("Save") { save() }.accessibilityIdentifier(AccessibilityID.Debug.baseURLSave)
-                    Button("Reset to default", role: .destructive) {
-                        baseURL.resetOverride(); error = nil; refresh()
-                    }.accessibilityIdentifier(AccessibilityID.Debug.baseURLReset)
-                } footer: {
-                    Text("Overrides the Info.plist API_BASE_URL until reset. Must be http(s).")
+                .onChange(of: errorTick) {
+                    // After the row is inserted, bring it on screen above the keyboard. Not animated,
+                    // so it's the same with Reduce Motion on.
+                    DispatchQueue.main.async { proxy.scrollTo(Self.errorRowID, anchor: .center) }
                 }
             }
             .navigationTitle("Debug settings")
@@ -84,7 +94,9 @@ struct DebugSettingsSheet: View {
         if baseURL.setOverride(text) { error = nil; refresh() }
         else {
             error = "Enter a valid http:// or https:// URL."
-            AccessibilityNotification.Announcement("Enter a valid http or https URL.").post()
+            errorTick += 1
+            // VoiceOver hears the error even while focus stays on the field.
+            AccessibilityNotification.Announcement("Error: enter a valid http or https URL.").post()
         }
     }
 }

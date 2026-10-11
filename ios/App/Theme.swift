@@ -137,6 +137,10 @@ enum Theme {
         static let gutter: CGFloat = 20
         static let l: CGFloat = 24
         static let xl: CGFloat = 32
+        /// 6: title/meta text stack inside a row, and the group header icon-to-label gap (artboards).
+        static let stack: CGFloat = 6
+        /// 10: horizontal padding inside a badge pill (vertical is `xs`).
+        static let badgeHorizontal: CGFloat = 10
     }
 
     enum Radius {
@@ -160,6 +164,32 @@ enum Theme {
         static let primaryButton: CGFloat = 56
         static let removalOption: CGFloat = 68
         static let avatar: CGFloat = 40
+        /// Food-group glyph on the 40 pt avatar tile (Fridge artboard: 22 pt).
+        static let avatarGlyph: CGFloat = 22
+        /// Food-group glyph in the Fridge group header (Fridge artboard: 16 pt).
+        static let groupHeaderIcon: CGFloat = 16
+        /// Undo toast countdown bar height.
+        static let toastProgress: CGFloat = 3
+        /// Skeleton placeholders, shaped like an `ItemRow`'s title, meta line and `ExpiryBadge`.
+        static let skeletonTitle = CGSize(width: 140, height: 14)
+        static let skeletonMeta = CGSize(width: 96, height: 11)
+        static let skeletonBadge = CGSize(width: 56, height: 24)
+    }
+
+    enum Opacity {
+        /// Fill behind a button sitting on a forest surface (Undo on the toast), tinted `onForest`.
+        static let onForestFill: Double = 0.18
+    }
+
+    /// Drop shadows. Colour is always `Theme.Colors.scrim` at `opacity`.
+    enum Shadow {
+        struct Style {
+            let opacity: Double
+            let radius: CGFloat
+            let y: CGFloat
+        }
+        /// Floating toast above content.
+        static let toast = Style(opacity: 0.25, radius: 12, y: 4)
     }
 }
 

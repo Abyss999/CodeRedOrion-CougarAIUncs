@@ -49,7 +49,7 @@ struct ExpiryBadge: View {
         Text(model.text)
             .font(Theme.Fonts.badge)
             .foregroundStyle(ink)
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .padding(.horizontal, Theme.Spacing.badgeHorizontal).padding(.vertical, Theme.Spacing.xs)
             .background(bg, in: RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous))
             .fixedSize()
             .accessibilityLabel(model.accessibilityText)

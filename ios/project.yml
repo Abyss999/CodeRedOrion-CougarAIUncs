@@ -33,7 +33,7 @@ targets:
       path: App/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleDisplayName: Food Waste Reducer
+        CFBundleDisplayName: BiteDown
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         API_BASE_URL: $(API_BASE_URL)
