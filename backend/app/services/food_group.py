@@ -45,6 +45,17 @@ ABBREVIATIONS = {
     "sasg": "sausage", "froz": "frozen", "frzn": "frozen", "frz": "frozen", "spag": "spaghetti",
     "oatml": "oatmeal", "crm": "cream",
     "strwb": "strawberry", "bnna": "banana", "avo": "avocado", "lettuc": "lettuce", "brocc": "broccoli", "spnch": "spinach", "crrt": "carrot",
+    # receipt abbreviations also used by the pipeline (moved from pipeline/category_cleanup/abbreviations.json)
+    "mlk": "milk", "skm": "skim", "whl": "whole", "grk": "greek", "brst": "breast", "stk": "steak",
+    "prk": "pork", "saus": "sausage", "ched": "cheddar", "parm": "parmesan", "bttr": "butter",
+    "bred": "bread", "tort": "tortilla", "tom": "tomato", "tmto": "tomato", "onin": "onion",
+    "ltc": "lettuce", "lett": "lettuce", "broc": "broccoli", "caul": "cauliflower", "crt": "carrot",
+    "crts": "carrots", "cuc": "cucumber", "cuke": "cucumber", "strawb": "strawberry",
+    "grps": "grapes", "grp": "grapes", "avoc": "avocado", "appl": "apple", "aple": "apple",
+    "orng": "orange", "lmn": "lemon", "lme": "lime", "mshrm": "mushroom", "mush": "mushroom",
+    "shrms": "mushrooms", "pepr": "pepper", "zuc": "zucchini", "zucc": "zucchini",
+    "papya": "papaya", "pnapl": "pineapple", "pinapl": "pineapple", "jce": "juice", "oj": "juice",
+    "rce": "rice", "slmn": "salmon",
 }
 
 # Checked in this order; the first group with a matching token wins. Fruit sits after the

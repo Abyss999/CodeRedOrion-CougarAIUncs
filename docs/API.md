@@ -78,7 +78,7 @@ from the new category + current name (this overwrites a previous manual choice);
 change does **not** re-derive (the user's grouping is left alone); `name` + `category` re-derives. Sending `"food_group": null` returns `400` (to clear a manual group, send `category` again so it re-derives).
 Receipt lines (`from-receipt`) have no category, so `food_group` comes from a deterministic keyword
 match on whole, case-insensitive name tokens (with receipt abbreviations such as `CHKN`, `GRND BF`,
-`YGRT`, `BRD`, `FROZ` expanded): frozen, then pantry modifiers (juice, sauce, broth, soup, peanut
+`YGRT`, `BRD`, `FROZ`, `MLK`, `OJ`, `TOM`, `SLMN` expanded): frozen, then pantry modifiers (juice, sauce, broth, soup, peanut
 butter...), dairy, protein, grains, fruit, common vegetables, other pantry staples; no match -> `other`.
 No Gemini call is involved. Tables: `backend/app/services/food_group.py`.
 Candidates use the ML service's `food_group` when present, else Gemini's (validated), else the heuristic.
