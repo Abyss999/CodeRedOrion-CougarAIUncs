@@ -54,6 +54,8 @@ final class FridgeModel {
     /// Ids removed locally and not undone, so a refresh racing a removal doesn't bring them back.
     private var locallyRemoved: Set<String> = []
     private let api: APIClient
+    /// Bumped when the signed-in user changes, so a load started for the previous identity is dropped.
+    private var generation = 0
 
     init(api: APIClient) { self.api = api }
 
@@ -79,9 +81,38 @@ final class FridgeModel {
 
     func refresh() async { await load(storage, isRefresh: true) }
 
+    /// The session changed (sign-in, sign-out, 401, different user). A different user (or none)
+    /// drops every per-storage cache, toast and banner; signed out shows the unauthorized error
+    /// instead of stale items. Same user with a new token only clears errors and keeps items.
+    /// Then the visible storage reloads; the others load lazily when selected.
+    func sessionChanged(from old: User?, to new: User?) async {
+        if old?.id == new?.id {
+            guard new != nil else { return }
+            errors = [:]
+            await loadIfNeeded(storage)
+            return
+        }
+        generation += 1
+        sections = [:]
+        errors = [:]
+        everLoaded = []
+        pendingRemovals = [:]
+        locallyRemoved = []
+        pendingToast = nil
+        toast = nil
+        banner = nil
+        guard new != nil else {
+            for s in Storage.allCases { errors[s] = APIError.unauthorized }
+            return
+        }
+        await load(storage, isRefresh: false)
+    }
+
     private func load(_ storage: Storage, isRefresh: Bool) async {
+        let gen = generation
         do {
             let listing = try await api.listItems(storage: storage, groupBy: .foodGroup)
+            guard gen == generation else { return }
             let fresh = Self.grouped(listing).compactMap { section -> ItemSection? in
                 var s = section
                 s.items.removeAll { locallyRemoved.contains($0.id) }
@@ -100,6 +131,7 @@ final class FridgeModel {
             return
         } catch {
             if (error as? URLError)?.code == .cancelled { return }
+            guard gen == generation else { return }
             if sections[storage] == nil {
                 errors[storage] = error
             } else if isRefresh {
@@ -143,6 +175,7 @@ final class FridgeModel {
             pendingToast = undoToast
         }
         let api = self.api
+        let gen = generation
         pendingRemovals[item.id] = Task { [weak self] in
             do {
                 _ = try await api.removeItem(id: item.id, outcome: choice.outcome,
@@ -152,7 +185,8 @@ final class FridgeModel {
                 // The server already removed it (409 already_removed), or answered 2xx with a body
                 // we couldn't read: the removal stands.
                 if error.removeStands { return true }
-                self?.removeFailed(item, location: location, choice: choice, error: error, reduceMotion: reduceMotion)
+                guard let self, self.generation == gen else { return false }
+                self.removeFailed(item, location: location, choice: choice, error: error, reduceMotion: reduceMotion)
                 return false
             }
         }
@@ -187,13 +221,17 @@ final class FridgeModel {
         withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { insert(item, at: location) }
         let pending = pendingRemovals.removeValue(forKey: item.id)
         let api = self.api
+        let gen = generation
         Task { [weak self] in
             // If the removal never reached the server, there is nothing to restore.
             if let pending, await pending.value == false { return }
+            if self?.generation != gen { return }
             do {
                 let restored = try await api.restoreItem(id: item.id)
+                guard self?.generation == gen else { return }
                 self?.replace(restored)
             } catch {
+                guard self?.generation == gen else { return }
                 self?.restoreFailed(item, location: location, error: error, reduceMotion: reduceMotion)
             }
         }
