@@ -776,3 +776,75 @@ Four additive gaps, stacked on `feat/donation-recipient`: G1 `GET /requests?mine
 **Full suite:** run by the coordinator on HEAD `446c2ca` (with #74 merged in). `pytest -q --cov=app` gave 1708 passed and 3 skipped in 336 s, with total coverage 98%. Merging main afterwards (`06cf7fa`) changed nothing under `backend/`.
 
 **Verdict: PASS (final).** No open bugs.
+
+
+## PR #79 independent QA (food-orch)
+
+Gemini photo enrichment (`enrich=expiry,nutrition` on `POST /items/from-photo`), `items.nutrition` (migration 0007) and `item_ids` on `POST /recipes/suggest`. Branch `feat/recipes-focus` with `origin/main` merged in. The builder's own tests were not trusted; everything below is backed by the QA files listed here, or by a one-off measurement named as such.
+
+**Verdict: PASS WITH OPEN BUGS.** Four low-severity bugs (BE-19 to BE-22), none on the demo path (photo add, expiry, remove, Impact), because every new field is opt-in and the default responses only gain `nutrition: null`. None is a blocker, but BE-19 and BE-20 are cheap to fix before the iOS work starts.
+
+**New files:** `tests/test_qa_pr79_gemini.py`, `test_qa_pr79_crops.py`, `test_qa_pr79_migration.py`, `test_qa_pr79_contract.py` (197 tests). No existing file was edited. No feature code was edited.
+
+**Environment:** the shared venv had no Pillow, so `pillow==12.3.0` (the exact pin) was installed into it. Every other package already matched `requirements.txt`. google-genai 1.2.0 uses `requests`, not httpx.
+
+**Full suite** (shared heavy lock held, released at once): `pytest -q --cov=app` gave **2199 passed, 3 skipped, 1 xfailed** in 359 s, **total coverage 98%** (`crops.py`, `enrich.py` and `nutrition.py` 100%, `gemini.py` 98%). The one xfail is the strict BE-19 test; the 3 skips are pre-existing. Bug IDs: highest before this was BE-18 only as "next free" text (BE-17 is the last used); no other open PR carries `docs/qa/backend.md` changes (only #79 is open). So the first new ID is BE-19.
+
+### Checklist
+
+**1. Migration 0007** (`test_qa_pr79_migration.py`, 6 tests)
+- One alembic head, `0007_items_nutrition`, linear chain from `0006_request_audiences`, no merge tuples.
+- On a db downgraded to 0006 and seeded with 5 items (one removed, with `add` events), upgrade ran with no error. All 5 rows get SQL NULL (not JSON `null`), every other column and every event is identical before and after, and `alembic_version` is 0007.
+- Downgrade with 3 rows holding nutrition drops the column and `ck_items_nutrition_object` cleanly. The items survive, and new items can be inserted at 0006. Two full up/down cycles on a populated db do not raise.
+- `compare_metadata` shows no autogenerate drift for `nutrition` (model, CHECK and migration agree).
+- The real API serves `nutrition: null` for a row written before the migration.
+
+**2. Gemini cost and latency** (`test_qa_pr79_gemini.py`, 69 tests, real route + `enrich` + `_generate` with a fake `genai.Client`)
+- **Calls:** with `enrich` absent, empty, blank or `","` there are zero Gemini calls, on both detectors, and the response has no `enrichment` key. With `enrich`, exactly one call at n = 1, 3, 12, 15 and 40 detections; the prompt carries min(n, 12) items. An unknown facet is a 400 before any call.
+- **Caching:** none. The same photo twice is two calls. That is fine for a per-photo call, but worth knowing.
+- **Usage log:** exactly one `gemini_usage ... purpose=enrich ... status=ok` line, with no food name and no key. The `app.enrich` line carries counts only.
+- **Failures:** 20 variants all return 200 with the table date, `expiry_source: default` and an `enrichment.status` of `failed`. They are a raised exception, a timeout, malformed JSON, non-JSON text, `null`, a scalar, a string, an object without the list, `items` not a list, a list of scalars or nulls, an empty list, an out-of-range or boolean `index`, string/float/NaN/Infinity/bool/1e999 days. Reasons are `upstream_error` or `unusable_response`. `not_configured`, `time_budget` and an exception inside `apply` (`unexpected_error`) are also 200s.
+- **Out-of-bounds values:** days of 1e9 or 1e12 are clamped to `min(3650, 2 x table + 3)` and a negative to today (`expiry_source: gemini`). Twelve bad nutrition shapes become `nutrition: null` while the expiry still applies. A missing row gives `partial`.
+- **BE-13 / `timeout_s`:** a scalar response is an `UpstreamError` with one `status=error` usage line for every purpose (generate, recipes, detect, enrich). `timeout_s` defaults to `None`: `parse_text`, `suggest_recipes`, `detect_from_image` and `estimate_shelf_life` all build the client with no `http_options`. Only enrich passes `HttpOptions(timeout=25000)` (the SDK wants milliseconds). The real SDK was run against a local socket that never answers (not Google): it gave up in about the configured second.
+- **Timeouts retried:** see BE-20.
+
+**3. Contract** (`test_qa_pr79_contract.py`, 49 tests, plus doc and iOS read-through)
+- Every documented field matches the code. `items.nutrition` is on create, list, `group_by`, PATCH, remove, restore, both batches and the group pantry. PATCH with `nutrition` (a value or `null`) is a 400. `item_ids`: 1-10 distinct uuids; malformed, empty, non-list, duplicates or more than 10 give 400, which wins over 404; `null` means not given; uuid spellings are accepted. An unknown, removed or someone else's id is a 404 with a body identical in every case (no oracle for another user's ids), even on an empty fridge, and with no Gemini call.
+- Extra edges: NaN and Infinity literals, booleans in numeric fields, `basis` null or upper-case give 400 with nothing written. Water, salt and oil boundary values are accepted. `estimated` is forced to true, unknown keys are dropped, and `null` is stored as SQL NULL.
+- **Backward compatibility:** the item key set is exactly the main-branch set plus `nutrition`. `from-photo` without `enrich` returns exactly `{candidates, source}` with the old candidate keys. `enrich=expiry` adds no `nutrition` key; `enrich=nutrition` puts `nutrition` on every candidate, null where skipped. The recipe response keys are unchanged with `item_ids`, and `missing_items` passes through untouched. A candidate posts straight back through `POST /items`.
+- **iOS decode check (read only, `wt/ios-shared`, nothing edited or built):** the decoder (`APICoding.decoder`, snake-case conversion) ignores unknown keys, so `nutrition` on items and candidates and `enrichment` on the from-photo response cannot break decoding. `Item.expirySource` and `Candidate.expirySource` are `String?`, and the strict enum `ExpirySource` (`default|gemini|ml|user`) is used only when posting back, where `gemini` is already a member. `NewItem(candidate:)` does not copy `nutrition`, so it would be silently dropped on add.
+
+**4. Dependencies and crops** (`test_qa_pr79_crops.py`, 73 tests)
+- `pillow==12.3.0` is exact-pinned (and equals `ml/serve`). `Image.MAX_IMAGE_PIXELS` is untouched (89,478,485). The 50 MP ceiling is checked from the header before any pixel decode (asserted), so Pillow's own warning band is never reached. A 400 MP 1-bit PNG, which trips Pillow's own limit inside `Image.open`, is None with no warning leaking. A 36 MP image is fine and bounded to 512 px.
+- Garbage, empty, truncated JPEG or PNG, corrupt EXIF: all None, no raise. RGBA, LA, P, L, CMYK, 1-bit, I;16 PNG, GIF, BMP and WEBP all give a valid RGB JPEG. Twenty-two bad boxes (empty, wrong length, NaN, inf, strings, nested, zero-area, reversed, entirely or mostly outside, under 32 px, 1e308) give None or a valid crop, never an exception. Order and length are preserved, one failing box does not cost the others, and nothing is upscaled.
+- EXIF orientation 1-8: a full-frame crop equals Pillow's `ImageOps.exif_transpose`, and sub-box crops are the right pixels. `ML_BBOX_FRAME=upright` works.
+- EXIF, GPS, camera make, ICC and XMP are absent from the output bytes (marker check). PNG text chunks do not carry over. Nothing touches the filesystem (save only to `BytesIO`, `tempfile` forbidden, temp and cwd listings unchanged).
+- Two observations (no test fails on them): a 16-bit PNG converts to pure white (measured: 20000/65535 gives 255,255,255), so such a crop is blank, harmless but useless; iPhone uploads are JPEG. A JPEG comment survives: BE-19. Memory: BE-22.
+
+**5. Scope**
+- **Cache key:** with `item_ids` absent or empty, `make_key` equals an independent copy of the pre-PR formula (hash compared). Seven different sets (none, singles, pairs, triples, all) each get their own key; the same set in another order or another uuid spelling shares one. The cache is **one slot per user**, so alternating between a focus and a no-focus request always misses (a cost note, by design; an evicted set misses rather than mis-hits). Another user's cache is untouched, and `max_results` and `dietary` still split keys.
+- **Conflict with "Only what I have"** (client filter on empty `missing_items`): the server never changes the shape or content of `missing_items`. But `must_use` only forces the chosen items into every recipe; nothing tells Gemini to avoid extra ingredients, so a "Cook with this" result can have non-empty `missing_items` and the default filter can empty the list. iOS should fall back to the existing "Show recipes that need a few things" state, or turn the chip off for a focus request.
+- **Payload:** 10 focus items among 30 are all sent, the total is capped at 20, and soonest-first order is kept. The prompt adds the must_use hint and the `"must_use": true` marker only when focus is given.
+- See BE-21 for what "every recipe must use one" really guarantees.
+
+**6. `.gitattributes`:** one line, `*.sh text eol=lf`. It matches two tracked files (`backend/entrypoint.sh`, `scripts/demo_tunnel.sh`), both already `i/lf w/lf` in `git ls-files --eol`. No file in the repo has CRLF or mixed endings in the index, so nothing renormalises.
+
+**7. Standard backend QA** (`test_qa_pr79_contract.py`)
+- **Impact:** two users with the same adds and a thrown-out removal, one with nutrition and one without, get identical `/impact`. An add with nutrition does not move impact and writes exactly one `add` event (food_events has no nutrition column). Remove then restore returns impact exactly to the original and keeps the nutrition.
+- **N+1:** `GET /items` and `group_by=food_group` use the same number of queries at 1 and 40 items with nutrition. `POST /items` is the same query count with or without nutrition (5 items).
+- **Rollback:** a forced failure on the second `add` event of a 3-item batch with nutrition gives a JSON 500 `internal_error` and zero items and zero events; a following create works.
+- **Auth and visibility:** from-photo with `enrich`, `/recipes/suggest` with `item_ids` and `POST /items` with nutrition are all 401 without a token. Enrich validation runs before the missing-image check but after auth. A group item's nutrition is visible to members' pantry and a non-member gets 403/404. Another user's items and nutrition never appear in my list.
+
+### Bugs
+- **BE-19 (low, privacy and docs):** a JPEG COM (comment) segment in the uploaded photo survives into the crop sent to Gemini; Pillow copies `info["comment"]` through `convert`, `crop` and `save`. `docs/API.md` says the re-encode "drops EXIF and GPS" and the PR says metadata is dropped. EXIF, GPS, ICC and XMP are in fact gone. Repro: `Image.new("RGB",(300,300)).save(buf,"JPEG",comment=b"secret")`, run `crops.make`, and the bytes contain the text. Test: `test_jpeg_comment_segment_is_stripped` (strict xfail; it flips to a failure when fixed). `backend/app/services/crops.py:284` (`crop.save(...)`). Fix: clear `crop.info` (or pass `comment=b""`) before saving.
+- **BE-20 (low, latency):** the shared retry loop re-sends the enrich call on 429, 503, 504 or DEADLINE_EXCEEDED. So "one call, 25 s timeout" is up to two requests, 2 x 25 s + 1.5 s, and added on top of detection (up to the 30 s skip threshold) the worst case is about 80 s. `docs/API.md` tells iOS to allow "at least 60 s", and the iOS session currently has `timeoutIntervalForRequest = 30` (`LiveAPIClient.swift`, wt/ios-shared). A plain read timeout is not retried (tested). Repro: `test_transient_504_is_retried_so_worst_case_is_two_timeouts`. `backend/app/services/gemini.py:106-112` and `backend/app/services/gemini.py:550`. Fix: no retry for `enrich`, or a 12 s per-attempt timeout, or document at least 90 s.
+- **BE-21 (low, contract wording):** "every recipe must use at least one" focus item is a prompt instruction only. The server does not check it: a recipe that ignores the focus item is still returned (`test_server_does_not_verify_that_a_recipe_uses_a_focus_item`). Also `uses_items` maps names back soonest-first, so with two items of the same name the focus one can be reported as its twin (`test_focus_item_with_a_same_name_twin_can_be_mapped_to_the_twin`). `backend/app/routes/insights.py:355-405` (suggest) and `:307-326` (`match_uses_items`). Fix: soften the wording in `docs/API.md` (best effort), or filter or flag recipes with no focus item in `uses_items`, and prefer focus ids when mapping names.
+- **BE-22 (low, resource):** a 204 KB PNG of 49.9 MP RGBA passes the 50 MP ceiling and raised peak RSS from 68 MB to 468 MB while decoding (measured, one request; one-off script, not a test). Authenticated users only, YOLO path with a bbox, and `enrich` set, but several concurrent requests multiply it. `backend/app/services/crops.py:224` (`MAX_PIXELS`) and `:262-263` (`img.load()`, `convert`). Fix: lower `ENRICH_MAX_PIXELS` (for example 25 MP), or use `img.draft()` / `reduce` for JPEG, or crop before converting.
+
+### iOS follow-ups (none are backend work)
+- Add `nutrition: NutritionPer100g?` (`kcal` Int, `protein_g`, `carbs_g`, `fat_g`, `fiber_g?`, `sugar_g?`, `sodium_mg?`, `estimated`, `basis`) to `Item`, `Candidate` and `NewItem`, and copy it in `NewItem(candidate:)`, otherwise it is dropped on add. Decoding works as is (unknown keys are ignored).
+- Send `enrich=expiry,nutrition` in the multipart form from the photo review step. Add `enrichment: {status, requested, enriched, total, reason}?` to `CandidatesResponse` and show a quiet "estimated from the photo" note, or nothing, for `skipped` and `failed`. Do not treat any enrichment status as an error.
+- Raise the from-photo request timeout to 60 s or more (see BE-20; 90 s is safer). The session default is 30 s.
+- Keep `expirySource` a `String?` (or add an unknown-case fallback); `gemini` is already a valid value on post-back, but a strict enum on read would be fragile.
+- Item detail: a Nutrition section reading the per-100 g object, with the "estimated" flag always shown. Not editable (PATCH is 400).
+- Recipes: for "Cook with this", send `item_ids` (1-10 ids, from the caller's active items; any 404 means refresh the list), keep each response the same shape, and handle the empty "Only what I have" state by falling back to the "needs a few things" state, or by turning the chip off for a focus request. Remember the recipe cache is one slot per user.
