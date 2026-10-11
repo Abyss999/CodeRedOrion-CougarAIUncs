@@ -604,4 +604,7 @@ No Python changes. The builder's audit says the module-level caches are already 
 ### Bugs
 None found. The latest ID is still BE-16.
 
-**Verdict: PASS pending the full suite** (the orchestrator runs it).
+**Interim verdict: PASS pending the full suite** (the orchestrator runs it).
+
+### Final verdict for chore/gunicorn-gthread (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `chore/gunicorn-gthread` at HEAD a9b6a11 (clean tree): `pytest -q --cov=app` = **1421 passed, 1 skipped in 154 s, total coverage 98%**. No gunicorn processes were left afterwards. **No open bugs** (the latest ID is still BE-16). This supersedes the interim verdict above.
