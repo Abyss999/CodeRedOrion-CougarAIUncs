@@ -340,3 +340,40 @@ On the 17 Pro, the first full run had one unit failure. It came from my own edit
 - The bar is still a 3 pt strip flush with the toast's bottom edge.
 - `Theme.Size.toastProgress` plus `.clipped()` and the card's rounded clip hide the system track's rounded ends, so it looks the same as the old flat bar: `onForestMuted` in light, dark forest on lime in dark. It is low-key but visible.
 - No artboard draws the toast (MOTION.md only names a 5 s progress bar), so this is **Design delta 20**: the bar is a system `ProgressView`, clipped to a 3 pt strip. No defect.
+
+### 2026-10-11 CI flake 2: #64 run 38121714294 (head 63619fa). Test flake, not an app bug. Verdict stays PASS
+`testFullUndoWindowAfterSheetDismisses` failed with "toast gone 3.2 s after the sheet". That version used a 4 s window and bounds of 2.5 s and 3.3 s. Those bounds sit inside CI's observation lag: noticing the sheet is gone takes about 1 s of polling, and each query takes 1–1.5 s. So the test could not measure what it claimed to.
+
+**(a) Is the app at fault? No.**
+- The toast is handed over only in `.sheet(item: $removing, onDismiss: { model.showPendingToast() })` (`FridgeView.swift:40`). SwiftUI calls this after the dismissal finishes.
+- Every way out of the sheet sets `removing = nil` or is a native dismissal. That covers Used and Gave away (`close()` after the 200 ms hold), the reason step (`close()`), Cancel, and an interactive drag.
+- Reduce Motion doesn't change the sheet path. There is no early or skipped `onDismiss`.
+- Cancel and drag leave `pendingToast` nil, so no toast appears. A remove that fails before dismissal clears `pendingToast`, which is intended.
+
+**Test change** (test files only):
+- The undo window is now 12 s (`-UITestUndoWindow 12`).
+- The toast must still exist 10 s after XCUITest noticed the sheet was gone. That allows about 2 s of observation lag.
+- If the snapshot lands more than 11 s after that point, the run is inconclusive (an attachment), not a failure.
+- The timeout and persistence checks stay.
+- A timing attachment `undo-window: present=… lookedAt=…` is always written.
+
+**Throttled reproduction** (17 Pro, under the heavy lock):
+- **Load:** 10 `yes > /dev/null` processes on the 12 cores, with their PIDs recorded and killed afterwards. The load average reached about 16.
+- **New test, 5 iterations:** **5/5 pass**, `lookedAt` = 10.03–10.05 s, and every run was conclusive.
+- **Old test (4 s window), 5 iterations:** **1/5 failed** with "toast gone 2.69 s after the sheet". That reproduces the CI flake under load.
+  - This run was accidental. `test-without-building` reused the simulator's *stale installed* UI-test runner from an earlier run.
+  - Lesson: uninstall `com.coderedorion.FoodWasteReducerUITests.xctrunner` before `test-without-building`, which is now done.
+- **Old app behaviour:** a scratch copy outside the repo, deleted afterwards, called `showPendingToast()` at the tap, so the countdown ran under the sheet. With the new test it **passed 5/5** (`lookedAt` = 10.04 s). Here the countdown lost only about 1.5 s under the sheet (from the tap to the sheet being seen gone), which is under the 2 s allowance.
+  - So this UI test guards only against a loss of more than about 2 s, such as a slow or stuck dismissal. It cannot catch a 1–2 s loss without becoming flaky on CI.
+  - The exact rule, "no toast until the sheet dismisses", is pinned at model level by `FridgeModelTests.testRemoveIsImmediateAndShowsToast`, which asserts `toast == nil` before `showPendingToast()`.
+  - The view wiring (`onDismiss`) is verified by code review only.
+  - An exact UI check would need a DEBUG probe. One option: a `debug.toast.shownAt` timestamp set in `showPendingToast`, compared with the sheet's dismissal callback. I am offering this as an optional request, not filing it as a bug.
+
+**Re-runs** (under the lock; the runner was uninstalled first):
+
+| Device | Fridge + Remove UI suites |
+|---|---|
+| iPhone 17 Pro, light | **27 run, 0 failed** |
+| iPhone SE QA, AX5 | **27 run, 0 failed** |
+
+The SE was reset to `large` and shut down.
