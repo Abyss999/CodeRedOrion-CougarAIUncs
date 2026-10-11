@@ -1,4 +1,4 @@
-# BiteUp — product idea
+# BiteDown — product idea
 
 > Built from the project brief. The original brainstorm doc hasn't been added yet — merge it in
 > here when it is, and note any changes in `DECISIONS.md`.

@@ -1,6 +1,6 @@
 # Handoff
 
-_The app is **BiteUp** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
+_The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
 _Last updated: 2026-10-10 (checkpoint 4d). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
