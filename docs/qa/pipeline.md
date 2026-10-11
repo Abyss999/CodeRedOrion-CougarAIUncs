@@ -135,3 +135,40 @@ Real downloads (builder fetch running), real `unrar-cffi` decompression, real Me
 - Prepare skip tests: hvk7g is skipped even with a real root; an enabled yolo source with an empty root now exits with `no data.yaml` (new test); pending-only `main` does not crash.
 - Notebook Roboflow loop: excludes `food_hvk7g`, includes `food_spoilage_status`.
 Results: `qa_new_sources.py` 95 passed + 1 strict xfail (PL-5); whole `pipeline/tests` 163 passed. Verdict unchanged: PASS. PL-5 still open.
+
+---
+
+# 2026-10-11: Independent QA (food-main-mac) for #62
+
+**This section supersedes the author's self-signed pipeline QA sign-off above for the merge gate.** The sections above are kept as his record. No git, no feature code edited. Files written: `pipeline/tests/qa_pr62_pl5.py`, plus two edits to the QA-owned `pipeline/tests/qa_new_sources.py` (PL-8, and the ML-61 regex).
+
+## Verdict: **PASS** (PL-5 accepted as won't-fix; PL-8 fixed)
+
+## Real data (fetched with the PR's own commands into `mldata/raw/`, staged into `mldata/pipeline_data/staged/`)
+| Source | Command | Result |
+|---|---|---|
+| MeatScan | `fetch-meatscan --per-class 450`, then `ingest-dataset --adapter meatscan --max-per-cell 300` | 249 MB raw / 166 MB staged; 600 staged. Network: about 2.2 GB of range reads (index 1.05 MB, 10,564 entries), never the 25.4 GB RAR |
+| DaFiF | `fetch-dafif --max-per-cell 300`, then `ingest-dataset --adapter dafif --max-per-cell 300` | 171 MB; 600 images (300/300). Network about 2.3 GB of 8.15 GB |
+| food_spoilage_status | Roboflow v1 yolov8 (notebook loop) | 6.4 MB, 276 images |
+
+Total disk for the new data plus the full build: about 2.9 GB (raw 426 MB, staged 337 MB, `full62` 2.1 GB). Free space stayed at 17 GB or more.
+
+## Suites (scratch venv: pipeline requirements + flask, pinned pillow 12.3.0, numpy 2.5.4, PyYAML 6.0.3, pytest 9.1.1, Flask 3.1.3, unrar-cffi 0.2.2)
+| Run | Result |
+|---|---|
+| `pytest pipeline/tests` (default collection) | 163 passed |
+| `qa_new_sources.py` + `qa_pipeline.py` + `qa_pr62_pl5.py` | 116 passed, 2 skipped (2-class tests, by design now that semi_fresh is in the taxonomy), 3 strict xfail (PL-5, accepted) |
+
+## PL-5: **accepted (won't fix)**, not fixed
+- The real CSV has minute resolution: all 6,995 `Time_Captured` values end in `:00`.
+- All originals chain into 3 units (one per day). The sampled 600 give 5 units, both by the plan and on the **actually staged** images (`qa_pr62_pl5.py`).
+- The builder showed that no timestamp-sound key gives more than 3 units: the two markets shoot in the same minute, and hour boundaries are 60 s apart. Splitting would put photos 1 minute apart into train and held-out, which breaks ML-21.
+- Beef stays train-only (ML-52). The strict xfails (mine and the author's) now carry the reason "PL-5 accepted (won't fix): minute-resolution, continuous per-day stream; beef train-only (ML-52)". They document the limitation.
+
+## Bugs
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| PL-5 | medium | `prepare_dataset.assign_sessions` + MeatScan minute times | The sampled MeatScan forms 5 split units (≥ 12 needed) | **accepted (won't fix)**, orchestrator to record |
+| PL-8 | low | `pipeline/tests/qa_new_sources.py:31` | `REAL_CSV = REPO.parent / "mldata"` resolves to `wt/mldata` from a worktree, so the real-CSV tests and the PL-5 xfail **silently skipped** in every #62 run ("2 skipped") | **fixed**: ancestor search; the real-CSV tests now run and pass |
+
+Also: the ML-61 notebook fix broke the earlier QA test `test_notebook_cell1_pins_unrar` (it matched `pip install ... unrar`). I updated it to `pip("unrar-cffi==0.2.2")`.

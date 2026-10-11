@@ -28,7 +28,17 @@ import prepare_dataset as PD  # noqa: E402
 REPO = Path(__file__).resolve().parents[2]
 SOURCES = REPO / "ml" / "yolo" / "sources.json"
 NOTEBOOK = REPO / "ml" / "yolo" / "train_colab.ipynb"
-REAL_CSV = REPO.parent / "mldata" / "raw" / "meatscan" / "MeatScan_Metadata.csv"
+
+
+def _find_mldata(rel: str) -> Path:
+    """PL-8: mldata/ sits beside the main checkout, not beside a worktree (wt/<name>/), so search every ancestor."""
+    for p in Path(__file__).resolve().parents:
+        if (p / "mldata" / rel).exists():
+            return p / "mldata" / rel
+    return REPO.parent / "mldata" / rel
+
+
+REAL_CSV = _find_mldata("raw/meatscan/MeatScan_Metadata.csv")
 
 
 def _noise(path: Path, seed: int, size=(96, 72)):
@@ -313,7 +323,7 @@ def test_real_csv_parses_all_6995_with_timestamps():
     assert set(fetch.meatscan_originals(REAL_CSV.read_text(encoding="utf-8-sig"))) == set(rows)
 
 
-@pytest.mark.xfail(strict=True, reason="PL-5: the 300 s chained session rule collapses the sampled MeatScan into ~4-5 split units")
+@pytest.mark.xfail(strict=True, reason="PL-5 accepted (won't fix): minute-resolution, continuous per-day stream; beef train-only (ML-52)")
 @pytest.mark.skipif(not REAL_CSV.exists(), reason="real MeatScan CSV not downloaded")
 def test_real_csv_sampled_set_has_enough_split_units():
     rows = meatscan.load_metadata(REAL_CSV)
@@ -625,7 +635,8 @@ def test_notebook_cell_syntax():
 
 
 def test_notebook_cell1_pins_unrar():
-    assert re.search(r"pip install[^\n]*unrar-cffi==0\.2\.2", _cells()[1])
+    # ML-61 (4973397): installs now go through pip(...) = subprocess.run([... "pip", "install" ...], check=True)
+    assert re.search(r"^pip\([^\n]*\"unrar-cffi==0\.2\.2\"", _cells()[1], re.M)
 
 
 def test_notebook_data_ver_derived_from_sources_and_used_in_cache_dir():

@@ -846,3 +846,92 @@ Splits: train 11,777 / val 1,241 / held-out 1,532 images, 23 active classes, `sp
 **Verdict:** ML-57 **fixed, PASS**. Full eight-source dataset **PASS** on every gate. PR #62 **FAIL until ML-58 is fixed**: the notebook would stop in cell 4 on any build that includes meatscan.
 
 **ML-58 re-check (2026-10-11): fixed.** The only new notebook hunk is cell 4's print, now `v.get(x)`; both asserts are unchanged. Replaying the loop on `mldata/repro_full/qa_leak/leakage.json` runs through all 8 sources (meatscan prints `phash_near_dup: None`, and every `criterion` assert passes). Tests: `ml/yolo/tests` 64 passed; `ml/eval/tests` 224 passed (including the ML-58 test); `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped. **Final verdict for PR #62: PASS** (ML-57 and ML-58 fixed, every gate on the eight-source build passes; ML-51, ML-52 and ML-55 remain labelled risks).
+
+# 2026-10-11: Independent QA (food-main-mac) for #62
+
+**This section supersedes the author's self-signed ML QA sign-off above for the merge gate.** The sections above are kept as his record. I'm an independent QA agent: no git, no training, no feature code edited. I wrote only `ml/eval/tests/qa_pr62_*.py` and this section. The dataset `mldata/full62` was built by the orchestrator with the branch's own `prepare_dataset.py` (sources.json, all 8 active sources, food_hvk7g pending). The gates were run on it with my commands. Outputs are in `mldata/full62_qa/` (`exits.txt`, `leakage.*`, `strat_merge*.txt`, `strat_nomerge*.txt`, `sibling.txt`, `merge_evidence.*`).
+
+## Verdict: **PASS** on the CPU suites, the fixes, and the full 8-source gates (owner ruling: pHash pairs are warning-only)
+The named risks stay labelled: ML-51, ML-52, ML-55, and ML-62 (below).
+
+## CPU suites (worktree head, after the ML-59/60/61 fixes)
+| Suite | Venv | Result |
+|---|---|---|
+| `ml/serve` | `.venv-ml` | 14 passed |
+| `ml/ocr` | `.venv-ml` | 89 passed |
+| `ml/yolo` | `.venv-ml` | 64 passed |
+| `ml/eval` (default collection) | `.venv-ml` | 215 passed, 1 skipped. Skipped: `test_variant_dup_check.py` needs `imagehash`, which `.venv-ml` lacks. It passes in `mldata/.venv-train` |
+| `qa_pr62_strat_merge.py` | `.venv-train` (imagehash) | 11 passed |
+| `qa_pr62_ml57.py` | `.venv-ml` | 7 passed |
+
+Nothing needed weights, a GPU or the network.
+
+## Full 8-source gates (`mldata/full62`: train 11,762 / val 1,263 / held-out 1,526; 23 classes; `split_grouping` session)
+| Gate | Exit | Result |
+|---|---|---|
+| `leakage_check.py` | 0 | **ML-21 PASS**. 0 within 60 s and 300 s for every source. Identity pHash: agrifreshnet **3 / 751 = 0.40%**, every other source 0 (fresh_stale 0/228, fridge_objects 0/114, hien_fridge 0/183, vegqual 0/137, dafif 0/88, food_spoilage_status 0/25). meatscan has 0 held-out (train-only) |
+| `stratification_check.py` (pHash merge, default) | 0 (`strat_merge_v2`) | **PASS**. 0 timestamped sessions span splits. 1 cross-split pHash pair inside a merged unit, now a warning. 3 oversized components left unmerged |
+| `stratification_check.py --no-phash-merge` | 1 (`strat_nomerge_v2`) | FAIL, only `beef/fresh` and `beef/spoiled`: "not measurable but I count 5 sessions". 0 spans |
+| `parent_sibling_check.py all` | 0 | 0 parents straddle splits, 0 held-out siblings, all 8 sources |
+
+### Held-out spoiled per source (images with at least one spoiled box; from `merge_evidence.json`)
+| Source | held-out spoiled | classes | train / val spoiled |
+|---|---|---|---|
+| agrifreshnet | **338 (68%)** | tomato 66, banana 64, bitter_melon 63, papaya 57, orange 39, pineapple 21, cucumber 16, eggplant 12 | 1,001 / 220 |
+| fresh_stale_fruits_veg | 101 (20%) | bell_pepper 44, tomato 32, apple 25 | 963 / 175 |
+| dafif | 48 (10%) | fish 48 (one unseen tuna batch, ML-51) | 204 / 48 |
+| food_spoilage_status | 8 (2%) | potato 8 | 90 / 22 |
+| **vegqual** | **0** | none | 1,232 / 3 |
+| meatscan | 0 (train-only, ML-52) | none | 300 / 0 |
+
+- **The pooled spoiled-recall gate does not rest on a single source** (495 held-out spoiled images, 4 sources). This differs from the author's new3-only subset, where only tuna had held-out spoiled examples. It is, however, **dominated by AgriFreshNET (68%)**.
+- **Single-source spoiled classes** (the check's `spoiled_single_source`): pineapple, papaya, cucumber (agrifreshnet only); fish (dafif); beef (meatscan, train-only); onion (vegqual, not measurable).
+- **Held-out spoiled comes from one source only, for these classes:**
+  - potato: only food_spoilage_status, 8 images. VegQual's 210 potato/spoiled images are all in train.
+  - eggplant: only agrifreshnet, 12 images.
+- **ML-62 (medium, named risk, new):** VegQual has **0 held-out spoiled images** (1,232 train, 3 val). Its "defected" vegetables are the only real-defect source for potato and onion, and they cannot be evaluated. In #27, VegQual gave potato 77 held-out spoiled. The cause is that VegQual has only 12 split units (largest 588 images), and the new source mix changes the split assignment. This is not a leak, and every coverage rule passes, because other sources fill the cells. VegQual spoiled recall must be reported as **N/A**. Spoiled recall on potato is 8 web product shots. Owner/builder: consider pinning one VegQual defect series to held-out, or accept and label.
+
+## pHash session-merge ruling (`stratification_check.py`, default merge vs `--no-phash-merge`)
+**Ruling: keep the merge as the default for the measurability count, as fixed in a2d88f5 plus the owner's warning-only change.** It does **not** hide a leak on this data, and `--no-phash-merge` fails only where the merge is known to be right.
+
+### Evidence
+| Source | units, no merge → merge | timestamped sessions spanning splits (both modes) | cross-split identity pHash pairs, all splits |
+|---|---|---|---|
+| meatscan | 5 → **1** | 0 | 0 |
+| agrifreshnet | 961 → 908 | 0 | heldout–train 3, train–val 5 |
+| hien_fridge | 155 → 127 | 0 | 0 |
+| dafif | 600 → 584 | 0 | 0 |
+| food_spoilage_status | 65 → 56 | 0 | 0 |
+| fridge_objects | 787 → 770 | 0 | 0 |
+| fresh_stale_fruits_veg | 27 → 26 | 0 | train–val 1 |
+| vegqual | 12 → 11 | 0 | 0 |
+
+**`--no-phash-merge`.** Its only failure is beef: 5 timestamp sessions, against prepare's single pHash unit. That single unit was eyeballed as one cut, re-shot across 3 days (ML-52, earlier in this log), so this failure is a false alarm. The merge also shifts other cells' unit counts by a few (for example apple/fresh 37 → 35, milk/fresh 65 → 56), but no decision changes.
+
+**Could the merge hide a real leak? Not on this data.** Every cross-split near-duplicate is still counted by the independent leakage gate, which is unaffected by the merge.
+- Of the 9 cross-split pHash pairs, the strat check sees only 1 inside a merged unit. The other 8 sit in components over the 600-image cap, which stay unmerged.
+- I eyeballed 6 agrifreshnet pairs (`scratchpad/qa62/agri_pairs.jpg`):
+  - **Same specimen, same cloth:** the orange `IMG-20251115-WA0004` (train) vs `WA0006` (held-out), d = 6. This is the pair the strat check reports. A banana train/val pair is also likely the same specimen.
+  - **Different objects (pHash false positives):** a bitter-melon pair, cucumber vs banana, and a gourd vs bitter melon.
+- So a small residual cross-stage specimen overlap exists in AgriFreshNET, at 0.40% of held-out. That is within the ≤ 1% gate and is the already-labelled "cross-stage specimen overlap possible".
+
+**Before the fixes (a168253), the merge could hide a span structurally:**
+- **ML-59:** the span rule never fired.
+- **ML-60:** the union relabelled a timestamped session as a stem group, merged cross-split near-duplicates into one info-only unit, and had no cap.
+
+Both are now pinned by tests.
+
+## ML-57, ML-61
+- **ML-57 fixed (verified independently).**
+  - Notebook cell 5 was run against the **real** `train.py`, made to crash before any training (an interpreter without ultralytics, with the exact cell-5 argv). It raises `CalledProcessError` rc 1, in both dry and real mode.
+  - The stale `export/` is removed, and `det/cls` checkpoints are kept.
+  - No `!` call in any cell runs train, prepare, the pipeline or a gate.
+- **ML-61 fixed (4973397).** Cell 1's three `!pip install` lines became `pip()` = `subprocess.run([sys.executable, "-m", "pip", "install", "-q", ...], check=True)`. There is no `!pip`/`%pip` left. Executing the real helper with a failing run raises with the expected argv.
+
+## Bugs (this review)
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-59 | medium | `ml/eval/stratification_check.py:229` (a168253) | The "timestamped session spans splits" rule was dead code: it searched for `"/t"` in `"t<n>"`, so it never fired, on any dataset | **fixed** (a2d88f5: explicit per-session timestamp flag, rule on unmerged sessions); `qa_pr62_strat_merge.py` |
+| ML-60 | medium | `stratification_check.py` `_merge_by_phash` (a168253) | The merge relabelled timestamped sessions as `/s:` stem groups, hid cross-split near-duplicates as info, and chained with no cap (prepare caps at 600) | **fixed** (a2d88f5). Owner ruling: a cross-split pair is a warning (`info.phash_cross_split_pair_examples`); leakage_check's ≤ 1% stays the gate; `qa_pr62_strat_merge.py` (cap read from `dataset_report`, default 600) |
+| ML-61 | low | `train_colab.ipynb` cell 1 | `!pip install` swallowed failures | **fixed** (4973397); `qa_pr62_ml57.py` |
+| ML-62 | medium | data / split assignment | VegQual has 0 held-out spoiled images (above) | **open: named risk**, report VegQual spoiled N/A |
