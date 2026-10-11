@@ -631,3 +631,23 @@ Scope: the notebook changes (AgriFreshNET download + ingest, `DRY_RUN`, `make_su
 - Items 1, 2, 4, 5, 6 **PASS**; Part 2 (ML-40 reporting, semi_fresh CIs) **done and tested**.
 - Item 3 **FAIL: ML-42.** The dry run cannot start from a clean Colab VM until the download sends a User-Agent. Everything downstream of the download (ingest flags, subset, 3-class training, threshold plumbing, export) works on real data locally.
 - **Overall: NOT READY TO MERGE; PASS conditional on ML-42** (a few-line fix; re-run item 3 after it: the notebook cell can be tested for the API + Range request without downloading the full file). ML-43 and ML-44 are low and can ride along.
+
+---
+
+## 2026-10-10 - Gemini receipt structuring (`feat/receipt-gemini-link`)
+
+**Tests:** `ml/eval/tests/test_gemini_structuring.py` (62 cases; `urlopen` always monkeypatched, no real API call). Covers `_to_num` (numbers, `"3.48"`, `"$3.48"`, `"1,29"`, bools/garbage -> None), `clean_structured` (floats, nameless/non-dict lines dropped, quantity <= 0 -> None, non-dict / non-list `lines` -> None), `gemini_structure` (no key = no network; model = argument > `GEMINI_MODEL` > `gemini-flash-latest`, empty env falls back, never `gemini-2.5-flash`; key only in header; garbage bodies, HTTP/network errors -> None), and `/ocr` with `structure_with_gemini=True` (string answers become floats, fallback to deterministic parser on garbage / empty / error, request URL uses env model and the alias).
+
+**Results:** `ml/eval/tests` 202 passed, 1 skipped, 3 xfailed (the bugs below, strict xfail so they flip when fixed). Builder suites: serve 14, ocr 89, yolo 63, all passed.
+
+**Bugs**
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-45 | low | `_to_num("1,299.50")` returns 1.299 (comma treated as decimal; thousands separator not handled). Real receipts over $999 are rare, but the price silently shrinks 1000x. | open (builder) |
+| ML-46 | low | `_to_num(float("nan"))` / `"nan"` / `"inf"` return non-finite floats; Flask `jsonify` would emit invalid JSON (`NaN`) to the backend. Reject with `math.isfinite`. | open (builder) |
+| ML-47 | medium | `/ocr` and `receipt_from_image` use `g.get("total", parsed["total"])`; `clean_structured` always sets `total`, so when Gemini returns `total: null` the deterministic parser's total (7.77 in the test) is discarded and the response total is null. Use `g.get("total") if g.get("total") is not None else parsed["total"]`. | open (builder) |
+
+**Verdict: PASS with caveats.** The change under test (model env/alias, numeric coercion, garbage fallback) behaves as specified; ML-47 is a real, small regression-in-waiting in the merge logic (outside the changed functions) and should be fixed before relying on totals; ML-45/46 are low.
+
+### 2026-10-10 re-verification: ML-45, ML-46, ML-47 **fixed / verified**
+xfail markers removed (now plain assertions) plus one added test for `"1,29"` and `"-1,299.50"`. `ml/eval/tests` 206 passed, 1 skipped; serve 14, ocr 89, yolo 63 passed. ML-45 (thousands separator), ML-46 (non-finite -> None) and ML-47 (Gemini null total keeps parser total) all closed. Note: `receipt_from_image` total merge was not separately tested (it needs a real OCR engine); the `/ocr` route is. **Verdict: PASS.**
