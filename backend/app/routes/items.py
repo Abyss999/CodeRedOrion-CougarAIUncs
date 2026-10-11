@@ -8,7 +8,7 @@ from ..errors import ApiError, not_found, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (CATEGORIES, EXPIRY_SOURCES, FOOD_GROUPS, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
                       ShareListing, User)
-from ..services import barcode, candidates, expiry, food_group, gemini, impact, ml, social
+from ..services import barcode, candidates, expiry, food_group, gemini, impact, ml, nutrition, social
 from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item,
                     share_summaries)
 
@@ -77,6 +77,14 @@ def _check_food_group(value):
     if not isinstance(value, str) or value not in FOOD_GROUPS:
         raise validation_error(f"food_group must be one of {', '.join(FOOD_GROUPS)}.")
     return value
+
+
+def _check_nutrition(value):
+    cleaned = nutrition.clean_nutrition(value)
+    if cleaned is None:
+        raise validation_error("nutrition must be an object with kcal, protein_g, carbs_g and fat_g "
+                               "per 100 g (basis per_100g), within plausible limits.")
+    return cleaned
 
 
 @bp.get("")
@@ -150,6 +158,8 @@ def _validate_new(raw: dict) -> dict:
     if raw.get("freshness") is not None:
         out["freshness"] = _check_freshness(raw["freshness"])
         out["freshness_checked_at"] = datetime.now(timezone.utc)
+    if raw.get("nutrition") is not None:  # candidate round trip: stored once, not editable (like confidence)
+        out["nutrition"] = _check_nutrition(raw["nutrition"])
     return out
 
 

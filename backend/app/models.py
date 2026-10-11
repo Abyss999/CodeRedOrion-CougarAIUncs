@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import CheckConstraint, Index, text
-from sqlalchemy.dialects.postgresql import CITEXT, UUID
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
 from sqlalchemy.sql import func
 
 from .extensions import db
@@ -81,6 +81,8 @@ class Item(db.Model):
     freshness = db.Column(db.Text, nullable=True)
     freshness_checked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     confidence = db.Column(db.Float, nullable=True)
+    # Per-100 g nutrition (services/nutrition.py). none_as_null: Python None is SQL NULL, never JSON 'null'.
+    nutrition = db.Column(JSONB(none_as_null=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint("freshness IS NULL OR freshness IN ('fresh','semi_fresh','spoiled')",
@@ -94,6 +96,8 @@ class Item(db.Model):
                         name="ck_items_reason_iff_thrown_out"),
         CheckConstraint("food_group IS NULL OR food_group IN ('protein','veggies','fruit','dairy',"
                         "'grains','pantry','leftovers','frozen','other')", name="ck_items_food_group"),
+        CheckConstraint("nutrition IS NULL OR jsonb_typeof(nutrition) = 'object'",
+                        name="ck_items_nutrition_object"),
         Index("ix_items_owner_removed_expiry", "owner_id", "removed_at", "predicted_expiry"),
     )
 

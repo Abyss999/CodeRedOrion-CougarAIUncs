@@ -95,6 +95,7 @@ def test_downgrade_to_0004_and_back_with_data(app, at_head):
         assert "user_identities" in _tables() and _pw_nullable() == "YES"
         assert _q("SELECT count(*) FROM users").scalar() == 2
         assert _q("SELECT count(*) FROM user_identities").scalar() == 0
+        # upgrade() goes to head, which is a later revision once other migrations land (as in the 0004 test)
         assert _q("SELECT version_num FROM alembic_version").scalar() == ScriptDirectory(MIG).get_heads()[0]
         del pw
 

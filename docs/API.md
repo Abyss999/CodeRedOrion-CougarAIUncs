@@ -80,7 +80,7 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 ## Items
 An **item** is `{id, owner_id, group_id, name, category, storage, quantity, unit, est_weight_kg,
 est_price, source, added_at, predicted_expiry (date), expiry_source, removed_at, outcome,
-waste_reason, removed_after_expiry, freshness, freshness_checked_at, confidence, share}`
+waste_reason, removed_after_expiry, freshness, freshness_checked_at, confidence, nutrition, share}`
 (`expiry_source` ∈ `default|gemini|ml|user`). `category` ∈ `produce_leafy, produce_hardy, dairy, meat,
 seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fridge|pantry|freezer`;
 `source` ∈ `photo|single_photo|text|barcode|receipt|manual`.
@@ -93,6 +93,15 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   `fresh` with a WARNING, a non-string is `400`); `freshness_checked_at` = now. `confidence` is the
   detector's 0..1 score (create only; `400` outside 0..1), null for manual items. All three are on
   every item response.
+- `nutrition` (`object|null`): a per-100 g nutrition estimate,
+  `{basis: "per_100g", kcal (int), protein_g, carbs_g, fat_g, fiber_g?, sugar_g?, sodium_mg?, estimated: true}`.
+  The four core keys match the recipe `macros` object, which is per serving. Stored when a create payload
+  carries it (the candidate round trip), validated by `services/nutrition.py`: kcal 0..900, grams 0..100,
+  sodium 0..40,000 mg, protein + carbs + fat <= 105 g, and kcal within max(40 %, 30 kcal) of 4P + 4C + 9F.
+  Anything else (not an object, another `basis`, a missing or non-numeric core key, an invalid optional key,
+  an implausible mix) → `400 validation_error`, nothing written. `estimated` is always stored as `true`,
+  unknown keys are dropped, and an explicit `null` means "none". On every item response; `null` when unknown.
+  Not editable (`PATCH` → `400`).
 - `share` is present on the **owner's own** items (`GET /items`, also with `group_by`; create, `PATCH`,
   `remove`, `restore` responses) and is `{id, status (open|fulfilled), claimed_by: {id, name} | null}` for
   the item's most recent **non-cancelled** listing, else `null`. Loaded with a single query for the whole
@@ -112,10 +121,10 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   client-driven and the server trusts the enum: the client sends `expiry_source: "user"` (or omits the
   field, which defaults to `user`) once the person changed the date. Invalid value → `400`; a
   `expiry_source` sent without `predicted_expiry` is ignored (the backend predicts and sets it).
-  `freshness` and `confidence` from the candidate are stored (see above).
+  `freshness`, `confidence` and `nutrition` from the candidate are stored (see above).
 - ✅ `PATCH /items/:id` — body may contain `name, quantity, unit, storage, category, food_group,
-  predicted_expiry, est_price, est_weight_kg, freshness` (unknown fields → 400, so `confidence` is not
-  editable). `freshness` set → stored and `freshness_checked_at` = now; `freshness: null` clears **both**
+  predicted_expiry, est_price, est_weight_kg, freshness` (unknown fields → 400, so `confidence` and
+  `nutrition` are not editable). `freshness` set → stored and `freshness_checked_at` = now; `freshness: null` clears **both**
   (null means "never assessed"). Changing the expiry sets
   `expiry_source=user`. Changing quantity/unit/category re-estimates `est_weight_kg` unless sent.
   → `200 {item}`; `403` other user's item; `404` unknown or already removed.
