@@ -961,3 +961,18 @@ New tests: `backend/tests/test_qa_sweep_followups.py` (18 tests). No feature cod
 - The import tidy-up in `insights.py` (`social`, `check_len`) is used and clean.
 
 **Runs:** targeted 18 passed. Full suite (containerized runner): 2303 passed, 3 skipped, 0 failed.
+
+## PR #104 — independent QA
+
+Verdict: **PASS WITH OPEN BUGS** (1 low-severity bug, BE-40; not demo-path). Reviewed head `1c6aa54` (includes `b9ee991`, main merged). No feature code edited. New tests: `backend/tests/test_qa_pr104_independent.py` (134 passed, 4 strict xfail for BE-40).
+
+**Contract review.** Every behaviour change is documented in `docs/API.md` (input limits, NUL, path-id messages, ex-member rules). Nothing weakens visibility: ex-member loses access to their old group items (PATCH/remove/restore 403, batch 404, excluded from recipes/tips/reachable). Status changes: ex-member owner remove/restore 403 (was 200), malformed id messages, over-long/NUL strings 400 (was 500). iOS `LiveAPIClient` handles all non-2xx generically as `APIError.server(status, code, message)` with no per-status branching, so none break the client. Doc nit (no action): the `/items/:id/remove` paragraph still says "any member of that group can remove" and "non-members get 403", consistent with the new rule, but does not say the owner needs current membership; the new "Input limits" section does.
+
+**Coverage.** Group membership: non-member 403 vs unknown 404 on get/pantry/leave, double leave, rejoin restores access, heir promotion, last member leaves, current non-owner member removes/restores an ex-member's item but cannot PATCH, mixed batch with an ex-member item is 404 with nothing written and impact unchanged, `/people/reachable`. Path ids: 12 routes x 8 malformed forms never 500, messages name the resource, 401 precedes id parsing. Bounds: char (not byte) caps, strip-before-count, signup/login/friends/join caps, numeric overflow -> 400 with rollback and a usable session, one bad item in a create batch creates none, NUL in nested keys/values and query strings, dietary caps. Query counts: `/tips`, `/recipes/suggest`, group pantry, `/people/reachable` do not grow with item count. Rollback: forced failure mid `remove-batch` leaves no removed rows or events.
+
+**Bugs.**
+- **BE-40 (low): a lone UTF-16 surrogate in any JSON string returns 500.** Repro: `POST /groups` with raw body `{"name": "a\ud800"}` (also signup `display_name`, `POST /items` `name`, login `email`). Python's JSON parser accepts the lone surrogate, psycopg raises `UnicodeEncodeError` (not `DataError`), so the `DataError` handler (`backend/app/errors.py`) misses it and the catch-all returns 500. Same class as the NUL bug the PR fixes. Suggested fix: in `_has_nul` (`backend/app/routes/_util.py`) also reject strings that fail `s.encode("utf-8")`, or handle `UnicodeEncodeError` alongside `DataError`. Tests: 4 strict xfails (`test_lone_surrogate_*`); flip to normal asserts when fixed.
+
+**Notes (no id).** `check_len` on `POST /friends` email and `invite_code` runs on the unstripped value, so whitespace padding can push a valid value over the cap (signup strips first). Trivial.
+
+**Runs.** Full suite at `b9ee991`-equivalent: see result line below.
