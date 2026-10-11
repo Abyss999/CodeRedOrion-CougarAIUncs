@@ -16,10 +16,38 @@ actor SpyAPIClient: APIClient {
     func listItems(storage: Storage?, groupBy: ItemGrouping?) async throws -> ItemListing { lists += 1; return try await inner.listItems(storage: storage, groupBy: groupBy) }
     func createItems(_ items: [NewItem]) async throws -> [Item] { try await inner.createItems(items) }
     func patchItem(id: String, _ patch: ItemPatch) async throws -> Item { try await inner.patchItem(id: id, patch) }
-    func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipientId: String?) async throws -> Item {
-        removes.append(.init(id: id, outcome: outcome, reason: wasteReason, recipient: recipientId))
-        return try await inner.removeItem(id: id, outcome: outcome, wasteReason: wasteReason, recipientId: recipientId)
+    func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipient: RecipientChoice) async throws -> Item {
+        removes.append(.init(id: id, outcome: outcome, reason: wasteReason, recipient: recipient.userId))
+        return try await inner.removeItem(id: id, outcome: outcome, wasteReason: wasteReason, recipient: recipient)
     }
+    func health() async throws -> Bool { try await inner.health() }
+    func me() async throws -> Me { try await inner.me() }
+    func googleSignIn(idToken: String) async throws -> GoogleAuthResult { try await inner.googleSignIn(idToken: idToken) }
+    func removeBatch(ids: [String], outcome: RemoveOutcome, recipient: RecipientChoice) async throws -> [Item] { try await inner.removeBatch(ids: ids, outcome: outcome, recipient: recipient) }
+    func restoreBatch(ids: [String]) async throws -> [Item] { try await inner.restoreBatch(ids: ids) }
+    func fromReceipt(imageData: Data) async throws -> ReceiptResponse { try await inner.fromReceipt(imageData: imageData) }
+    func barcode(_ code: String) async throws -> BarcodeResult { try await inner.barcode(code) }
+    func listShares() async throws -> [PantryListing] { try await inner.listShares() }
+    func createShare(itemId: String, groupId: String?) async throws -> Listing { try await inner.createShare(itemId: itemId, groupId: groupId) }
+    func cancelShare(id: String) async throws -> Listing { try await inner.cancelShare(id: id) }
+    func claimShare(id: String) async throws -> Listing { try await inner.claimShare(id: id) }
+    func listRequests() async throws -> [HelpRequest] { try await inner.listRequests() }
+    func listMyRequests() async throws -> [HelpRequest] { try await inner.listMyRequests() }
+    func createRequest(text: String, friends: Bool, groupIds: [String]) async throws -> HelpRequest { try await inner.createRequest(text: text, friends: friends, groupIds: groupIds) }
+    func fulfilRequest(id: String) async throws -> HelpRequest { try await inner.fulfilRequest(id: id) }
+    func cancelRequest(id: String) async throws -> HelpRequest { try await inner.cancelRequest(id: id) }
+    func listFriends() async throws -> FriendsResponse { try await inner.listFriends() }
+    func requestFriend(email: String) async throws -> Friend { try await inner.requestFriend(email: email) }
+    func acceptFriend(userId: String) async throws -> Friend { try await inner.acceptFriend(userId: userId) }
+    func declineFriend(userId: String) async throws { try await inner.declineFriend(userId: userId) }
+    func removeFriend(userId: String) async throws { try await inner.removeFriend(userId: userId) }
+    func listGroups() async throws -> [SharingGroup] { try await inner.listGroups() }
+    func createGroup(name: String) async throws -> SharingGroup { try await inner.createGroup(name: name) }
+    func joinGroup(inviteCode: String) async throws -> SharingGroup { try await inner.joinGroup(inviteCode: inviteCode) }
+    func leaveGroup(id: String) async throws { try await inner.leaveGroup(id: id) }
+    func groupDetail(id: String) async throws -> GroupDetail { try await inner.groupDetail(id: id) }
+    func groupPantry(id: String) async throws -> [PantryItem] { try await inner.groupPantry(id: id) }
+    func reachablePeople() async throws -> [Person] { try await inner.reachablePeople() }
     func restoreItem(id: String) async throws -> Item { restores.append(id); return try await inner.restoreItem(id: id) }
     func fromPhoto(imageData: Data, mode: PhotoMode) async throws -> CandidatesResponse { try await inner.fromPhoto(imageData: imageData, mode: mode) }
     func parseText(_ text: String) async throws -> [Candidate] { try await inner.parseText(text) }
