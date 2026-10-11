@@ -10,6 +10,11 @@ options:
 configs:
   Debug: debug
   Release: release
+packages:
+  # Google Sign-In. Pinned exactly. Needs no capability, so the free Personal Team can sign it.
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: 9.2.0
 configFiles:
   Debug: Config/Debug.xcconfig
   Release: Config/Release.xcconfig
@@ -40,11 +45,24 @@ targets:
         NSCameraUsageDescription: Take photos of your fridge, food and receipts to add items.
         NSMicrophoneUsageDescription: Speak the food you want to add, like "two bananas and a loaf of bread".
         NSSpeechRecognitionUsageDescription: Turn what you say into a list of food items to add.
+        # Google Sign-In. Both values come from the gitignored Local.xcconfig (see Local.xcconfig.example).
+        # Unset = empty client id, which keeps the Google button hidden (GoogleSignInConfig.isEnabled).
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: GoogleSignIn
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID:default=com.coderedorion.googlesignin.unset)
         UIAppFonts:
           - Outfit-Medium.ttf
           - Outfit-SemiBold.ttf
     # NSAppTransportSecurity > NSAllowsLocalNetworking is added to the plist for Debug only and
     # removed for Release (XcodeGen can't vary Info.plist per configuration).
+    dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
     preBuildScripts:
       - name: ATS local networking (Debug only)
         basedOnDependencyAnalysis: false

@@ -16,6 +16,8 @@ enum Theme {
         static let forest = Color(light: 0x1F4D2B, dark: 0xB9D871)
         static let forestMid = Color(light: 0x3B7046, dark: 0x8FB45A)
         static let forestChip = Color(light: 0x2F6B3C, dark: 0x2C4A26)
+        /// Text on `forestChip`.
+        static let onForestChip = Color(light: 0xF4F8E8, dark: 0xE8F0DA)
         static let ink = Color(light: 0x13261A, dark: 0xE8F0DA)
         static let inkSecondary = Color(light: 0x2B3D30, dark: 0xC9D6BC)
         static let muted = Color(light: 0x45584A, dark: 0x9DB09F)
@@ -48,6 +50,7 @@ enum Theme {
             "forest": (0x1F4D2B, 0xB9D871, 1),
             "forestMid": (0x3B7046, 0x8FB45A, 1),
             "forestChip": (0x2F6B3C, 0x2C4A26, 1),
+            "onForestChip": (0xF4F8E8, 0xE8F0DA, 1),
             "ink": (0x13261A, 0xE8F0DA, 1),
             "inkSecondary": (0x2B3D30, 0xC9D6BC, 1),
             "muted": (0x45584A, 0x9DB09F, 1),

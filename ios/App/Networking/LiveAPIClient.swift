@@ -5,7 +5,7 @@ import Foundation
 final class LiveAPIClient: APIClient {
     private let baseURL: BaseURLProvider
     private let session: URLSession
-    private let auth: AuthStore
+    let auth: AuthStore
 
     init(baseURL: BaseURLProvider = BaseURLProvider(),
          auth: AuthStore,
@@ -61,33 +61,26 @@ final class LiveAPIClient: APIClient {
     }
 
     func patchItem(id: String, _ patch: ItemPatch) async throws -> Item {
-        let r: ItemResponse = try await send("PATCH", "/items/\(id)", body: patch)
+        let r: ItemResponse = try await send("PATCH", "/items/\(Self.ids(id))", body: patch)
         return r.item
     }
 
-    func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipientId: String?) async throws -> Item {
-        let r: ItemResponse = try await send("POST", "/items/\(id)/remove",
-                                             body: RemoveRequest(outcome: outcome, wasteReason: wasteReason, recipientId: recipientId))
+    func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipient: RecipientChoice) async throws -> Item {
+        let r: ItemResponse = try await send("POST", "/items/\(Self.ids(id))/remove",
+                                             body: RemoveBody(outcome: outcome, wasteReason: wasteReason, recipient: recipient))
         return r.item
     }
 
     func restoreItem(id: String) async throws -> Item {
-        let r: ItemResponse = try await send("POST", "/items/\(id)/restore", body: Optional<Empty>.none)
+        let r: ItemResponse = try await send("POST", "/items/\(Self.ids(id))/restore", body: Optional<Empty>.none)
         return r.item
     }
 
     // MARK: Adding food
 
     func fromPhoto(imageData: Data, mode: PhotoMode) async throws -> CandidatesResponse {
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var body = Data()
-        func add(_ s: String) { body.append(Data(s.utf8)) }
-        add("--\(boundary)\r\nContent-Disposition: form-data; name=\"mode\"\r\n\r\n\(mode.rawValue)\r\n")
-        add("--\(boundary)\r\nContent-Disposition: form-data; name=\"image\"; filename=\"photo.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n")
-        body.append(imageData)
-        add("\r\n--\(boundary)--\r\n")
-        return try await perform("POST", "/items/from-photo", query: [], rawBody: body,
-                                 contentType: "multipart/form-data; boundary=\(boundary)", authenticated: true)
+        let (body, contentType) = LiveAPIClient.multipart(fields: [("mode", mode.rawValue)], imageData: imageData)
+        return try await perform("POST", "/items/from-photo", query: [], rawBody: body, contentType: contentType, authenticated: true)
     }
 
     func parseText(_ text: String) async throws -> [Candidate] {
@@ -114,21 +107,21 @@ final class LiveAPIClient: APIClient {
 
     // MARK: Transport
 
-    private struct Empty: Codable {}
+    struct Empty: Codable {}
     private struct Credentials: Encodable { let email: String; let password: String; let displayName: String? }
 
-    private func send<T: Decodable, B: Encodable>(_ method: String, _ path: String,
+    func send<T: Decodable, B: Encodable>(_ method: String, _ path: String,
                                                   query: [URLQueryItem] = [], body: B?,
                                                   authenticated: Bool = true) async throws -> T {
         let raw = try body.map { try APICoding.encoder.encode($0) }
         return try await perform(method, path, query: query, rawBody: raw, contentType: "application/json", authenticated: authenticated)
     }
 
-    private func perform<T: Decodable>(_ method: String, _ path: String, query: [URLQueryItem],
+    func perform<T: Decodable>(_ method: String, _ path: String, query: [URLQueryItem],
                                        rawBody: Data?, contentType: String, authenticated: Bool) async throws -> T {
         let base = baseURL.current
         guard var comps = URLComponents(url: base, resolvingAgainstBaseURL: false) else { throw APIError.invalidRequest("Bad API URL") }
-        comps.path += path
+        comps.percentEncodedPath += path
         comps.queryItems = query.isEmpty ? nil : query
         guard let url = comps.url else { throw APIError.invalidRequest("Bad API URL") }
 

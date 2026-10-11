@@ -36,7 +36,7 @@ enum AppTab: Hashable {
 
 /// Placeholder tab shell (screens come later from docs/design/). Uses the system `TabView`
 /// (Liquid Glass on iOS 26). **Add is a tab that presents a sheet and leaves the selection
-/// unchanged**: selecting it shows `AddSheetPlaceholder` and `selection` never becomes `.add`.
+/// unchanged**: selecting it shows `AddSheetView` and `selection` never becomes `.add`.
 struct RootTabView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var selection: AppTab = .home
@@ -45,15 +45,15 @@ struct RootTabView: View {
 
     var body: some View {
         TabView(selection: tabSelection) {
-            tab(.home) { HomePlaceholderView() }
-            tab(.recipes) { placeholder("Recipes") }
-            tab(.add) { placeholder("Add") }
+            tab(.home) { HomeView() }
+            tab(.recipes) { RecipesView() }
+            tab(.add) { Color.clear }  // never shown: selecting Add presents `AddSheetView`
             tab(.fridge) { FridgeView(api: env.api) }
-            tab(.social) { placeholder("Social") }
+            tab(.social) { SocialView() }
         }
         .tint(Theme.Colors.forest)
         .background(TabBarIdentifiers(entries: tabOrder.map { .init(id: $0.accessibilityID, label: $0.title) }))
-        .sheet(isPresented: $showAdd) { AddSheetPlaceholder() }
+        .sheet(isPresented: $showAdd) { AddSheetView() }
     }
 
     /// Selecting Add presents the sheet and never writes `.add` to `selection`, so the bar keeps
@@ -87,23 +87,5 @@ struct RootTabView: View {
             .accessibilityLabel(Text(t.title))
             .accessibilityIdentifier(t.accessibilityID)
         }
-    }
-
-    private func placeholder(_ title: String) -> some View {
-        Text(title)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-    }
-}
-
-/// Empty placeholder until the Add sheet is built.
-struct AddSheetPlaceholder: View {
-    var body: some View {
-        Text("Add")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .presentationDetents([.medium, .large])
-            .presentationCornerRadius(Theme.Radius.sheet)
-            .accessibilityIdentifier(AccessibilityID.Add.sheet)
     }
 }
