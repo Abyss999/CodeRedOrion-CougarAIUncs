@@ -36,9 +36,12 @@ a{color:#1F4D2B}a:hover{color:#13261A}
         <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
           <span style="font-size: 16px; font-weight: 600">{{l.name}}</span>
           <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px"><span style="font-size: 13px; color: #45584A">{{l.meta}}</span><span style="{{l.badgeStyle}}">{{l.when}}</span></span>
+          <sc-if value="{{l.pickupSet}}" hint-placeholder-val="{{ true }}">
+            <span style="display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 13px; color: #45584A"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg>Pickup spot set</span>
+          </sc-if>
         </span>
         <sc-if value="{{l.claimed}}" hint-placeholder-val="{{ false }}">
-          <span style="font-size: 13px; font-weight: 600; color: #1F4D2B">Claimed</span>
+          <a href="ClaimedItem.dc.html" aria-label="Claimed by you: view pickup" style="min-height: 44px; display: flex; align-items: center; gap: 2px; text-decoration: none; font-size: 13px; font-weight: 600; color: #1F4D2B">Claimed<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
         </sc-if>
         <sc-if value="{{l.open}}" hint-placeholder-val="{{ true }}">
           <button style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #1F4D2B; color: #F4F8E8; font-size: 14px; font-weight: 600">Claim</button>
@@ -60,11 +63,11 @@ const soon = 'font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius
 const urgent = 'font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap';
 return {
 listings: [
-{ name: 'Sourdough, half loaf', meta: 'Theo Nguyen', when: '2–3 days', badgeStyle: soon, icon: G, stroke: '#8A6414', tile: tile('#F5EBCD'), open: false, claimed: true },
-{ name: 'Basil', meta: 'Moody Hall 4F', when: 'Tomorrow', badgeStyle: urgent, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false },
-{ name: 'Eggs, 6', meta: 'Jordan K.', when: '2–3 weeks', badgeStyle: soon, icon: P, stroke: '#B0412E', tile: tile('#FBE4DE'), open: true, claimed: false },
-{ name: 'Jasmine rice, 2 lb', meta: 'CougarCS Kitchen', when: '3+ weeks', badgeStyle: soon, icon: J, stroke: '#6A4FA3', tile: tile('#ECE5F7'), open: true, claimed: false },
-{ name: 'Bell peppers, 3', meta: 'Moody Hall 4F', when: '4–5 days', badgeStyle: soon, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false }
+{ name: 'Sourdough, half loaf', meta: 'Theo Nguyen', when: '2–3 days', badgeStyle: soon, icon: G, stroke: '#8A6414', tile: tile('#F5EBCD'), open: false, claimed: true, pickupSet: true },
+{ name: 'Basil', meta: 'Moody Hall 4F', when: 'Tomorrow', badgeStyle: urgent, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false, pickupSet: true },
+{ name: 'Eggs, 6', meta: 'Jordan K.', when: '2–3 weeks', badgeStyle: soon, icon: P, stroke: '#B0412E', tile: tile('#FBE4DE'), open: true, claimed: false, pickupSet: false },
+{ name: 'Jasmine rice, 2 lb', meta: 'CougarCS Kitchen', when: '3+ weeks', badgeStyle: soon, icon: J, stroke: '#6A4FA3', tile: tile('#ECE5F7'), open: true, claimed: false, pickupSet: true },
+{ name: 'Bell peppers, 3', meta: 'Moody Hall 4F', when: '4–5 days', badgeStyle: soon, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false, pickupSet: false }
 ]
 };
 }
