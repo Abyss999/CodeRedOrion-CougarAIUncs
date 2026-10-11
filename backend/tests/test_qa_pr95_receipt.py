@@ -71,17 +71,17 @@ def test_to_num_documented_cases(v, want):
     assert got == want
 
 
-@pytest.mark.xfail(strict=True, reason="BE-27: European 1.234,56 mis-parsed as 1.23456")
+@pytest.mark.xfail(strict=True, reason="BE-30: European 1.234,56 mis-parsed as 1.23456")
 def test_to_num_european_thousands():
     assert _to_num("1.234,56") == 1234.56
 
 
-@pytest.mark.xfail(strict=True, reason="BE-27: '1,234' (thousands) parsed as 1.234")
+@pytest.mark.xfail(strict=True, reason="BE-30: '1,234' (thousands) parsed as 1.234")
 def test_to_num_comma_thousands_only():
     assert _to_num("1,234") == 1234.0
 
 
-@pytest.mark.xfail(strict=True, reason="BE-27: unicode minus dropped, refund becomes positive")
+@pytest.mark.xfail(strict=True, reason="BE-30: unicode minus dropped, refund becomes positive")
 def test_to_num_unicode_minus_keeps_sign():
     assert _to_num("−3.48") == -3.48
 
@@ -111,7 +111,7 @@ def test_receipt_call_args(gen):
     gen.reply = {"lines": [], "total": None}
     assert gemini.receipt_from_image(b"\xff\xd8x", "image/jpeg") == {"lines": [], "total": None}
     assert gen.kw["timeout_s"] == 45.0 and gen.kw["as_object"] and gen.kw["purpose"] == "receipt_read"
-    assert gen.kw["retry"] is True  # worst case 2x45+1.5 s on top of the ML 60 s: see BE-28
+    assert gen.kw["retry"] is True  # worst case 2x45+1.5 s on top of the ML 60 s: see BE-31
 
 
 @pytest.mark.parametrize("reply", [[], "x", 5, None, {"lines": "x"}, {"lines": None}, {}, {"total": 1}])
