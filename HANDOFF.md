@@ -1,11 +1,11 @@
 # Handoff
 
-_Last updated: 2026-10-10 (checkpoint 4c). **`food-main` (VPS) is the orchestrator**: it plans, rules,
-reviews and merges. `mobile-food` and the first Mac builder session `food-waste` have handed off because
-their context was full. **Mac-only work** (Xcode, simulators, the Mac's Docker stack, MPS, the Colab
-`export.zip` gate, and pushing `.github/workflows`, which the VPS token can't do) needs **a fresh Mac
-builder session**. That session starts from the "In flight on the Mac" table below and reports to
-`food-main`. Backend-only PRs can also be built on the VPS. Rules: [`CLAUDE.md`](CLAUDE.md)._
+_Last updated: 2026-10-10 (checkpoint 4d). **`food-main` (VPS) only orchestrates**: it plans, rules,
+reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
+building** (owner decision): builder + QA sub-agents, Xcode and simulators, Docker and every test run,
+backend included, plus any `.github/workflows` push (the VPS token can't). It starts from the "In flight on
+the Mac" table below and reports to `food-main`. Nothing is built or tested on the VPS. `mobile-food` and
+`food-waste` are retired. Rules: [`CLAUDE.md`](CLAUDE.md)._
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
@@ -16,7 +16,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 |---|---|---|
 | Backend on `main`: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | 523 tests, 96% coverage |
 | Backend PR 1 `feat/items-wave2`: stored freshness and confidence, share on items, `POST /items/:id/restore`, `DELETE /auth/me` | **merged (#50)** | 680 passed / 97%; BE-8 fixed. BE-9 (low: a huge `est_price` gives a 500) is xfail-tracked and ruled non-blocking. **Fix it in PR 2** |
-| Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **next: unblocked**; can be built on the VPS. Includes the BE-9 fix | (none yet) |
+| Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **next: unblocked**, built on the Mac. Includes the BE-9 fix | (none yet) |
 | Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | unblocked, after PR 2 | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **draft #47**; final iOS QA re-verify pending | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
@@ -32,7 +32,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    - further `ml/yolo`, `ml/eval` or pipeline data work
 
    What's merged stays as it is. The photo flow uses the Gemini fallback.
-2. **Mac (fresh session):** the iOS foundation (#47) re-verify, then merge. Then build the screens in this order, one PR each with iOS QA, screenshots, a motion recording and a Design delta:
+2. **Mac (`food-main-mac`):** the iOS foundation (#47) re-verify, then merge. Then build the screens in this order, one PR each with iOS QA, screenshots, a motion recording and a Design delta:
    1. Fridge + removal (+ Undo)
    2. Add + photo review + text / barcode / receipt
    3. Item detail
@@ -42,7 +42,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    7. Social (pantry, composer, connect, group)
    8. Auth (email + Google)
    9. Settings
-3. **VPS or Mac:** backend PR 2 (plus the BE-9 fix), then PR 3. **Owner:** the Google OAuth client.
+3. **Mac:** backend PR 2 (plus the BE-9 fix), then PR 3. **Owner:** the Google OAuth client.
 4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
@@ -69,8 +69,9 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
   - Backend QA: impact before and after for every mutation, query-count N+1 checks, and rollback on forced failure.
 
 ## Orchestrator handoff (to `food-main`)
-**Your job:** plan, rule, review and merge, and own the canvas and the orchestrator docs. Builds happen in builder sessions (a fresh Mac session for iOS and anything Mac-only), each running builder + QA sub-agent pairs.
+**Your job:** plan, rule, review and merge, and own the canvas and the orchestrator docs. **You never build or run tests.** All building happens in `food-main-mac` (the Mac), which runs builder + QA sub-agent pairs.
 
+- **Reach the builder:** `SendMessage` to `food-main-mac` (over Remote Control). Delivery is unconfirmed, so check `gh pr list` if a report is late. Tell it when a PR merges.
 - **Retired sessions:** `food-waste` and `mobile-food` are retired. Everything is in this file, `docs/` and the open PRs. CI workflow edits must be pushed from the Mac session.
 - **Merge routine** for each PR:
   1. `gh pr view` to check mergeable, CI and files.
