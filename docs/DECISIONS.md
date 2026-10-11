@@ -6,6 +6,18 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **Datasets and licences, verified on each source page:** fridge_objects (Roboflow, wajeeha workspace), hien_fridge (Roboflow, gracelearning) and VegQual (figshare 30596084) are all **CC BY 4.0**, which requires attribution (see `docs/ML.md` "Attributions" and the README). The fresh/stale fruit set is **raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle, CC0)**.
 - **Dropped `sriramr/fruits-fresh-and-rotten-for-classification`.** The Kaggle API reports its licence as "Unknown", so we can't confirm our use is allowed. `muhammad0subhan/fruit-and-vegetable-disease-healthy-vs-rotten` (CC0) was also rejected: at 5.2 GB it breaks the 8 GB disk budget on the Mac.
 
+## 2026-10-10 — Sign-in and screen set
+- **Sign-in is email + Google only.** Sign in with Apple was removed: the capability can't be
+  signed without a paid Apple Developer team, and passkeys need associated domains (also paid).
+  SMS and magic links were rejected because they need paid or unbuilt email/SMS sending.
+  `user_identities.provider` stays generic so a provider can be added later.
+- **The screen set is complete for the idea: 22 screens** (`docs/design/SCREENS.md`), after an
+  audit against `IDEA.md`. Preferences (units, default storage, currency) are stored on the device
+  for v1. Forgot-password, onboarding, widgets, reminders, grocery list and dietary restrictions
+  are deferred.
+- **"I made this" on a recipe** marks its fridge ingredients as `used`, which closes the loop from
+  recipes to Impact.
+
 ## 2026-10-10 — Wave 2 (iOS) decisions
 - **Minimum iOS 18, built with Xcode 26 / the iOS 26 SDK.** iOS 26 gets the Liquid Glass tab bar, and iOS 18 gets the standard one. Xcode is pinned in `ios.yml`.
 - **No TestFlight.** The owner doesn't have the paid Apple Developer Program. Development and QA use the **Simulator**. The demo runs on the **owner's iPhone, signed with a free Personal Team** (builds last 7 days). The team id and bundle id live in a gitignored `ios/Local.xcconfig`. Capabilities a free team can't sign are avoided: push, iCloud and App Groups, so **widgets are deferred**.
