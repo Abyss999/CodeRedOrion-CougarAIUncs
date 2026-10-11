@@ -38,6 +38,7 @@ enum AppTab: Hashable {
 /// (Liquid Glass on iOS 26). **Add is a tab that presents a sheet and leaves the selection
 /// unchanged**: selecting it shows `AddSheetPlaceholder` and `selection` never becomes `.add`.
 struct RootTabView: View {
+    @Environment(AppEnvironment.self) private var env
     @State private var selection: AppTab = .home
     @State private var showAdd = false
     private let tabOrder: [AppTab] = [.home, .recipes, .add, .fridge, .social]
@@ -47,7 +48,7 @@ struct RootTabView: View {
             tab(.home) { HomePlaceholderView() }
             tab(.recipes) { placeholder("Recipes") }
             tab(.add) { placeholder("Add") }
-            tab(.fridge) { placeholder("Fridge / Pantry") }
+            tab(.fridge) { FridgeView(api: env.api) }
             tab(.social) { placeholder("Social") }
         }
         .tint(Theme.Colors.forest)

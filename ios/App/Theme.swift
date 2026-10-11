@@ -120,6 +120,15 @@ enum Theme {
         static let body = Font.body
         static let meta = Font.footnote
         static let badge = Font.footnote.weight(.semibold)
+        /// Remove sheet outcome tile title: Outfit 18 / 600 (RemoveSheet artboard).
+        static let tileTitle = Fonts.display(18, relativeTo: .headline)
+        /// Sheet subtitle under the sheet title (artboards: 14 pt, nearest text style).
+        static let sheetMeta = Font.subheadline
+        /// Storage segmented control (Fridge artboard: 15 pt, 600 selected / 500 unselected).
+        static let segment = Font.subheadline.weight(.medium)
+        static let segmentSelected = Font.subheadline.weight(.semibold)
+        /// Info callout body (RemoveReason artboard: 14 pt).
+        static let callout = Font.subheadline
     }
 
     enum Tracking {
@@ -130,6 +139,8 @@ enum Theme {
     }
 
     enum Spacing {
+        /// 2: title-to-subtitle gap in tiles and sheet headers (artboards).
+        static let xxs: CGFloat = 2
         static let xs: CGFloat = 4
         static let s: CGFloat = 8
         static let sm: CGFloat = 12
@@ -141,6 +152,12 @@ enum Theme {
         static let stack: CGFloat = 6
         /// 10: horizontal padding inside a badge pill (vertical is `xs`).
         static let badgeHorizontal: CGFloat = 10
+        /// 10: gap between removal tiles and between reason tiles (Remove artboards).
+        static let tileGap: CGFloat = 10
+        /// 14: icon-to-text gap inside an outcome tile, and reason tile padding (Remove artboards).
+        static let tileInner: CGFloat = 14
+        /// 18: vertical gap between blocks of a removal sheet (Remove artboards).
+        static let sheetSection: CGFloat = 18
     }
 
     enum Radius {
@@ -174,11 +191,35 @@ enum Theme {
         static let skeletonTitle = CGSize(width: 140, height: 14)
         static let skeletonMeta = CGSize(width: 96, height: 11)
         static let skeletonBadge = CGSize(width: 56, height: 24)
+        /// Storage segmented control: 36 pt segments in a 4 pt-padded track (44 pt total target).
+        static let segment: CGFloat = 36
+        /// Remove sheet header tile (48 pt) for the item's food group.
+        static let sheetHeaderTile: CGFloat = 48
+        /// Waste-reason tile minimum height (RemoveReason artboard).
+        static let reasonTile: CGFloat = 96
+        /// Text button at the bottom of a sheet (Cancel).
+        static let sheetTextButton: CGFloat = 48
+        /// Checkmark that scales in on the tapped removal tile.
+        static let tileCheckmark: CGFloat = 24
+        /// First-guess height of the Remove sheet before its content is measured.
+        static let removeSheetEstimate: CGFloat = 560
+        /// DEBUG-only invisible probe elements read by UI tests.
+        static let debugProbe: CGFloat = 1
+    }
+
+    /// Stroke widths.
+    enum Stroke {
+        /// Outlined tiles and inputs (`border`).
+        static let hairline: CGFloat = 1
+        /// Selected tile / focus ring (`forest`).
+        static let selected: CGFloat = 2
     }
 
     enum Opacity {
         /// Fill behind a button sitting on a forest surface (Undo on the toast), tinted `onForest`.
         static let onForestFill: Double = 0.18
+        /// DEBUG-only probe elements: visually invisible but still in the accessibility tree.
+        static let debugProbe: Double = 0.01
     }
 
     /// Drop shadows. Colour is always `Theme.Colors.scrim` at `opacity`.
