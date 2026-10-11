@@ -32,5 +32,24 @@ services:
       db:
         condition: service_healthy
 
+  # Optional YOLO detection service (ml/serve, docs/ML.md section 6). Off by default:
+  #   docker compose --profile ml up -d --build   and set ML_SERVICE_URL=http://ml:8000 in .env.
+  # No host port: only containers on this network (the api) can reach it. Weights are mounted read-only
+  # from ML_MODELS_DIR (detector.pt + freshness.pt). Receipt OCR stays off (/ocr -> 503, the api returns its 502).
+  ml:
+    profiles: ["ml"]
+    build:
+      context: ./ml
+      dockerfile: serve/Dockerfile
+    environment:
+      DETECTOR_BACKEND: yolo
+      YOLO_WEIGHTS: /models/detector.pt
+      FRESHNESS_WEIGHTS: /models/freshness.pt
+      YOLO_DEVICE: ${YOLO_DEVICE:-cpu}
+      OCR_BACKEND: "off"
+      YOLO_CONFIG_DIR: /tmp/ultralytics
+    volumes:
+      - ${ML_MODELS_DIR:-../mldata/models/current}:/models:ro
+
 volumes:
   db-data:

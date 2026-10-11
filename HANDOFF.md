@@ -27,6 +27,10 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 | Gemini photo enrichment: `enrich=expiry,nutrition` on from-photo, `items.nutrition` (migration 0007), `item_ids` on `/recipes/suggest` (Truc) | merged (#79) | independent QA PASS WITH OPEN BUGS; BE-19/20/22 verified fixed, BE-21 accepted as documented (#84) |
 | iOS foundation (#47), **Fridge + removal + Undo** (#64) and **PR0 shared foundation** (#81) | merged | Fridge: 17 Pro + SE AX5 unit 146 / UI 51; IOS-12 fixed; IOS-13 open (low); two CI flakes fixed in tests. PR0: 17 Pro unit 354 / UI 51, SE AX5 34/34, IOS-14–18 fixed |
 | ML data, 8 sources (#62), Colab unrar build fix (#73, Jose) | merged | independent QA PASS on both; ML-64 (low) + ML-65 (info) open for Jose |
+| ML Colab FAST profile (~45–50 min run: capped detector set, yolo26n 512 px), #87 (Jose) | merged | ML QA PASS (`docs/qa/ml.md`); ML-66 fixed; ML-67 (low), ML-68 (info) open |
+| ML-69 fix: classifier RAM cache OOM-killed Colab (#88, Jose) | **open, CI green, QA PASS** | needed before a fresh Colab FAST run from `main` |
+| **First trained model** `fwr_20261011` (FAST: detector 30 ep ≈ 26 min, classifier 10 ep ≈ 17 min on a T4) | trained, **not scored** | weights: Drive `fwr_runs/fwr_20261011/data_a4729025_fast/export/`, local `../mldata/models/fwr_fast_20261011` (`current` →). The Drive `predictions.jsonl` was truncated by Drive sync; score from `export.zip` |
+| Compose `ml` service (opt-in profile, no host port, CPU, OCR off) + `OCR_BACKEND=off` (Jose) | this PR, `feat/ml-compose-service` | photo → YOLO → Gemini enrichment → `POST /items` verified end to end on 2026-10-11 |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22's track**; Colab can run | don't schedule agents for it unless the owner asks |
 | Design | 38 screens (22 + the gap audit's 16, incl. FulfilConfirm) + dark artboards; canvas v53 (round 3), mirrored in #82 | `docs/design/`; design QA READY WITH FIXES, fixes applied |
 
@@ -35,7 +39,10 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 2. **The parallel group (Add 2a, Home, Impact and Auth have started; see In flight):** Add (2a photo, 2b text/barcode/receipt), Home, Impact, Auth; Recipes after Home. **Then sequential:** Item detail → Social (7a pantry + requests, 7b connect + groups) → Settings. One PR each, with iOS QA, light/dark screenshots against the artboards, a motion clip and a Design delta.
 3. **wedwqc's canvas threads** (round 3) are applied but still open on the canvas: they weren't sent to Claude, so a person with edit access must resolve them.
 4. **Owner:** create the Google OAuth iOS client (`docs/SETUP.md`).
-5. **Teammate (LemurTech22):** Colab on the 8-source data. ML-64 and ML-65 go to Jose via `food-main`.
+5. **Teammate (LemurTech22):** merge #88 (ML-69) and the compose `ml` PR; ML QA scores `fwr_20261011` on the held-out split
+   (`ml/eval/detection_metrics.py` + `check_thresholds.py` on the `export.zip` predictions) before photos switch from the Gemini
+   fallback to YOLO in the demo. Early spot check: names right, some fresh items called spoiled (they then skip Gemini enrichment
+   and land in Toss/Keep). ML-64, ML-65, ML-67 and ML-68 go to Jose via `food-main`.
 6. **Wave 4**, integration QA on the full stack and phone; **Wave 5**, the UI review.
 
 ## Screen build notes (carry into each brief)
@@ -105,8 +112,15 @@ merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs
 | Auth (IOS-60…69) | `feat/ios-auth` (from 0329c6d) | `wt/ios-auth` | Builder + QA in progress, in parallel |
 | Queued | - | - | Add 2b (text/barcode/receipt) after 2a; Recipes after Home; then Item detail → Social → Settings |
 | `docs/checkpoint-9` | this PR | `wt/checkpoint-9` (`food-orch`) | `food-main` reviews and merges |
+| ML-69 classifier cache fix | #88 `fix/ml69-cls-cache` | `wt/fast-train` (Jose's Linux box) | `food-main` reviews and merges |
+| Compose `ml` service + docs | `feat/ml-compose-service` | `wt/ml-compose` (Jose's Linux box) | ML QA, then `food-main` reviews and merges |
 
 Each screen PR numbers its iOS bugs inside its own block (above), so parallel branches can't collide.
+
+**Jose's Linux box notes (2026-10-11):**
+- `.env` had the `GEMINI_MODEL` placeholder, so every Gemini call failed with 400; now `gemini-3.8-flash` (`docs/DECISIONS.md`). Check yours.
+- The local dev DB `fwr` is stamped with migration `0004_item_freshness`, which `main` doesn't have (a branch's migration), so the
+  compose `api` can't run `db upgrade` against it. Re-stamp or rebuild that DB before starting the compose API there.
 
 **Mac notes:**
 - **Worktrees** are in `../wt/<name>` next to the main checkout. Remove merged ones with `git worktree remove`, and only the ones this project created. The owner kept `api-migrate`, `fg-followups`, `food-group`, `colab`, `semi-data` and `pr21`: their ignored files (`.env` variants, YOLO runs) exist nowhere else.
@@ -183,7 +197,7 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
 
 ## QA status
 - **Backend:** PASS on `main` after #79 (2199 passed, 98%). BE-8 … BE-22 resolved (BE-21 accepted as documented; #84 re-verified BE-19–22). Open: BE-7 (info). Follow-up only if memory gets tight: lower `ENRICH_MAX_PIXELS` to about 25 MP.
-- **ML / pipeline:** the 8-source dataset (#62) and #73 are independent PASSes. ML-57/59/60/61/63 and PL-8 fixed; PL-5 won't-fix; ML-51/52/55/62 named risks. Open: ML-11–14, ML-28, ML-32, ML-40, ML-64 (low), ML-65 (info). YOLO not evaluated yet.
+- **ML / pipeline:** the 8-source dataset (#62) and #73 are independent PASSes; the FAST profile (#87) and ML-69 (#88) are ML QA PASSes. ML-57/59/60/61/63/66/69 and PL-8 fixed; PL-5 won't-fix; ML-51/52/55/62 named risks. Open: ML-11–14, ML-28, ML-32, ML-40, ML-64 (low), ML-65 (info), ML-67 (low), ML-68 (info). First model trained (`fwr_20261011`), **not evaluated yet**.
 - **Design:** the full-canvas UI/UX gate passed with fixes (v51). Round 3 is READY WITH FIXES, with the fixes applied (v53, #82).
 - **iOS:** the foundation (#47), Fridge (#64) and PR0 (#81) PASS; IOS-14–18 fixed. IOS-13 open (low).
 - **Integration:** not run yet.
@@ -199,6 +213,7 @@ docker compose up -d --build && curl 127.0.0.1:5055/health   # migrations run on
 docker compose exec db psql -U fwr -d fwr -c 'CREATE DATABASE fwr_test'
 (cd backend && ../.venv/bin/pytest -q --cov=app)
 (cd ios && xcodegen generate && open FoodWasteReducer.xcodeproj)
+docker compose --profile ml up -d --build              # optional: YOLO service (weights in ../mldata/models/current, ML_SERVICE_URL=http://ml:8000)
 scripts/demo_tunnel.sh                                  # phone demo URL
 docker compose logs api | python3 scripts/gemini_cost.py     # Gemini spend
 ```

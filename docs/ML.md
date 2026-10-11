@@ -337,9 +337,20 @@ decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (def
 - **Time is an estimate, not measured on a T4**: ~4.9k images/epoch, CPU-bound at roughly 120-150 img/s with RAM cache -> ~35-40 s per
   epoch -> ~20 min detector, ~5 min classifier, ~3 min export. The Ultralytics progress bar shows the real s/epoch; record it here after the
   first run.
+- **Drive sync can truncate the export (seen 2026-10-11).** `train.py` writes `export/` straight into the Drive mount. On the first
+  FAST run Drive uploaded `predictions.jsonl` while it was still being written: the Drive copy had 582 KB of NUL bytes and 3,184 of
+  5,205 rows (the `.pt` files were intact, zip CRC OK). Score from `export.zip` (cell 6 reads the complete local copy) or run
+  `from google.colab import drive; drive.flush_and_unmount()` before reading the export from Drive.
 - Don't train on `pipeline augment-lighting` output in FAST mode: it multiplies the train images (and see `docs/PIPELINE.md` for the lighting sign-off rule).
 
 ## 6. Running the service on a GPU box
+**On the same machine as the API (compose, CPU is fine for the yolo26n FAST model):** put `detector.pt` and
+`freshness.pt` in `../mldata/models/current/` (or set `ML_MODELS_DIR`), set `ML_SERVICE_URL=http://ml:8000` in `.env`, then
+`docker compose --profile ml up -d --build`. The `ml` service publishes no host port (only the api container reaches it),
+runs with `OCR_BACKEND=off` and `YOLO_DEVICE=${YOLO_DEVICE:-cpu}`. Verified 2026-10-11 with the first FAST export
+(`fwr_20261011`): photo -> `/items/from-photo` (`source: "yolo"`) -> Gemini enrichment of the crops -> `POST /items`.
+
+**On a separate GPU box:**
 ```
 cd ml
 pip install -r serve/requirements.txt        # torch CUDA build first
@@ -349,8 +360,8 @@ gunicorn -w 1 --threads 4 -t 120 -b 127.0.0.1:8000 serve.wsgi:app
 # or: docker build -f serve/Dockerfile -t fwr-ml ml/ && docker run --gpus all -p 127.0.0.1:8000:8000 -v /models:/models --env-file .env fwr-ml
 ```
 Backend env: `ML_SERVICE_URL=http://<gpu-host>:8000` (tunnel/VPN; the service has **no auth** - never expose publicly).
-Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm`
-(default fake), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
+Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm|off`
+(default fake; `off` = `/ocr` answers 503 `ocr_not_configured`, so no canned receipt is ever served as real), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
 (optional; enables Gemini structuring of OCR text, else the deterministic parser alone), `GEMINI_MODEL` (the same
 value as the backend's, see `docs/DECISIONS.md`; unset falls back to Google's `gemini-flash-latest` alias, never a
 pinned old id), `MAX_UPLOAD_MB` (12). Gemini's structured answer is validated by `clean_structured()` before it is
@@ -363,7 +374,8 @@ should treat as "fall back to Gemini vision" (docs/ARCHITECTURE.md).
 Contract: `POST /detect` (multipart `image`, form `mode`=fridge|single; default fridge) ->
 `{"candidates":[{name,category,food_group,confidence,freshness: fresh|semi_fresh|spoiled,bbox|null}],"model"}` (single = top-1 only; an empty list means
 nothing detected); `POST /ocr` -> `{"lines":[{name,quantity,price}],"total","raw_text"}`; `GET /health`.
-Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 500 `inference_failed`.
+Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 500 `inference_failed`,
+503 `ocr_not_configured` (`OCR_BACKEND=off`).
 
 ## 7. Receipt OCR
 GLM-OCR (`zai-org/GLM-OCR`, MIT; pipeline also uses Apache-2.0 PP-DocLayoutV3 in the official SDK, not used here)

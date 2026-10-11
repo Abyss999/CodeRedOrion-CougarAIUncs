@@ -87,5 +87,9 @@ def detector_from_env():
 
 
 def ocr_from_env():
+    """fake (default, dev) | glm | off. off: /ocr answers 503 ocr_not_configured, so a deployment without OCR never
+    returns FakeOCR's canned receipt as if it were real (the backend maps the error to its own 502)."""
     kind = os.environ.get("OCR_BACKEND", "fake")
+    if kind == "off":
+        return None
     return GlmOcr() if kind == "glm" else FakeOCR()

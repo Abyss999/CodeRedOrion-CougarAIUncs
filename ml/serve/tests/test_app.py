@@ -119,3 +119,12 @@ def test_detect_new_classes_food_group():
             {"name": "pineapple", "confidence": 0.8, "freshness": "fresh", "bbox": None}]
     r = post(create_app(FakeDetector(dets), FakeOCR()).test_client(), "/detect", png())
     assert {c["name"]: c["food_group"] for c in r.json["candidates"]} == {"bitter_melon": "veggies", "pineapple": "fruit"}
+
+
+def test_ocr_off_is_503_and_health_says_off(monkeypatch):
+    monkeypatch.setenv("OCR_BACKEND", "off")
+    c = create_app(FakeDetector(), structure_with_gemini=False).test_client()
+    r = post(c, "/ocr", png())
+    assert r.status_code == 503 and r.json["error"]["code"] == "ocr_not_configured"
+    assert c.get("/health").json["ocr"] == "off"
+    assert post(c, "/detect", png()).status_code == 200      # detection unaffected
