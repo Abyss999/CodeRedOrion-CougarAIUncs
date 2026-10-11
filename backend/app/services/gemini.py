@@ -25,7 +25,13 @@ def _tok(usage, attr):
     return v if isinstance(v, int) else None
 
 
-def _log_usage(model, purpose, started, status, resp=None):
+def _http_code(e):
+    """Upstream HTTP status of a google-genai APIError/ClientError/ServerError (`.code`), else None."""
+    c = getattr(e, "code", None)
+    return c if isinstance(c, int) and not isinstance(c, bool) else None
+
+
+def _log_usage(model, purpose, started, status, resp=None, code=None):
     """One INFO line per Gemini call: key=value, no prompt/response text, no user data, no key."""
     try:
         usage = getattr(resp, "usage_metadata", None)
@@ -36,8 +42,8 @@ def _log_usage(model, purpose, started, status, resp=None):
             tout += think
         f = lambda v: "null" if v is None else v  # noqa: E731
         usage_log.info("gemini_usage model=%s purpose=%s input_tokens=%s output_tokens=%s "
-                       "total_tokens=%s latency_ms=%d status=%s", model, purpose, f(tin), f(tout),
-                       f(ttl), int((time.monotonic() - started) * 1000), status)
+                       "total_tokens=%s latency_ms=%d status=%s code=%s", model, purpose, f(tin), f(tout),
+                       f(ttl), int((time.monotonic() - started) * 1000), status, f(code))
     except Exception:  # logging must never break a request
         pass
 
@@ -128,9 +134,9 @@ def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "
                 time.sleep(delay)
         data = _as_list(json.loads(resp.text), list_key)
     except Exception as e:  # SDK/network/JSON errors all mean "upstream failed"
-        _log_usage(model, purpose, started, "error", resp)
+        _log_usage(model, purpose, started, "error", resp, _http_code(e))
         raise UpstreamError(f"Gemini request failed: {type(e).__name__}") from e
-    _log_usage(model, purpose, started, "ok", resp)
+    _log_usage(model, purpose, started, "ok", resp, 200)
     return data
 
 

@@ -420,6 +420,45 @@ IOS-14 to IOS-18 are fixed and each has a passing test. IOS-18 note: `barcode()`
 
 ### Verdict: PASS. No open bugs.
 
+## 2026-10-11: Home (feat/ios-home), artboards Home, HomeEmpty, ServerError
+Mac: Apple M4 Pro, Xcode 26.6. Simulators: iPhone 17 Pro, iPhone SE QA (iOS 26.5). Bug block IOS-40 to IOS-49. Mock API via launch flags (`-UITestSeed empty`, `-UITestServerDown`, `-UITestFailListOnce`, `-UITestLoadingForever`, `-UITestRecipes502`).
+
+### Tests added (`ios/Tests`)
+| File | Tests | What it covers |
+|---|---|---|
+| `UnitTests/HomeModelTests.swift` | 23 | Loading to content, soonest-3 and removed items, month pill, tip, recipe `usesItems`, eyebrow and detail text, HomeEmpty (no tip, no recipe call), item-list failure is the error state, retry, impact / tips / recipes failures degrade quietly, refresh failure keeps stale content + banner |
+| `UnitTests/HomeRequestShapeTests.swift` | 4 | Live client: `GET /impact?range=month` exactly once, only the 4 documented calls, flat list, recipe request, no recipe call for an empty fridge |
+| `UnitTests/HomeAccessibilityTests.swift` | 19 | Gear label / closure / 44 pt, no profile control, pill closure, pill in lb or kg via WeightFormatter with spoken words, pill below greeting at AX5 (320 pt), tip dismiss closure and 44 pt, error card Try again and Change closures, banner retry, row and cook card as one VoiceOver stop |
+| `UITests/HomeUITests.swift` | 29 + 5 AX5 + 1 narrow | Every state in the real UI, tip position / dismissal / persistence, retry from banner and card, Add food opens the sheet, See all opens Fridge, skeleton is one element, 44 pt targets, AX5 reachability |
+
+### Results
+| Run | Result |
+|---|---|
+| iPhone 17 Pro, full suite (unit + UI) | Unit 400 run, 0 failures. UI 85 run, 1 skipped (`HomeNarrowUITests`, only meaningful on a 375 pt phone), 1 failure: `FridgeUITests.testRetryAfterOneFailureLoads` (IOS-42, caused by Home) |
+| iPhone SE QA, `HomeUITests` + `HomeAX5UITests` + `HomeAccessibilityTests` | 19 unit + 5 AX5 + 28 UI run, 0 failures (the tip-dismiss test skips when the tip was already dismissed on that install) |
+| iPhone SE QA, `HomeNarrowUITests` | 1 run, 1 failure: IOS-43 pill width 93 pt (wrapped) |
+
+### Bugs
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| IOS-40 | medium | `home.server.change` was not queryable: `.accessibilityIdentifier(home.server)` on the row container replaced the Change button's id (`HomeErrorCard.serverRow`). Tests: `testErrorCardTryAgainAndChangeFireTheirClosures`, `testErrorCardTargetsHoldAtAX5`, `testErrorCardChangeIsLabelledForVoiceOver` | fixed (row is `children: .contain`), verified |
+| IOS-41 | low | `MockAPIClient.impact` ignores the fixture, so `-UITestSeed empty` still shows "23.2 lb saved" instead of the artboard's "0 lb saved" (SCREENS #26). Cross-PR: the Impact PR fixes the mock. Tests (`testEmptySeedReportsZeroSavedSoThePillReadsZero`, UI pill check) use a non-strict `XCTExpectFailure` and will flag it when fixed | open, cross-PR |
+| IOS-42 | low | `-UITestFailListOnce` fails the FIRST `listItems` call. Home now loads at launch and consumes it, so `FridgeUITests.testRetryAfterOneFailureLoads` never sees its error (`FridgeUITests.swift:128`). No app bug; `FridgeUITests.testRetryAfterOneFailureLoads` now tolerates either Home or Fridge taking the failure and recovers through Try again | fixed (test), verified on the SE |
+| IOS-43 | low | At the default text size on a 375 pt phone (iPhone SE) the Impact pill label wraps to two lines ("23.2 lb / saved"). Fix: `lineLimit(1)` plus `minimumScaleFactor`, or let the greeting shrink. Test `HomeNarrowUITests.testImpactPillStaysOnOneLineOnANarrowPhone`. Builder fix: `lineLimit(1)` + `fixedSize(horizontal: true)` + `layoutPriority(1)` | fixed, verified on the SE |
+
+### Design differences
+- The Impact pill reads "23.2 lb saved" (mock data), the artboard "21.2 lb saved"; HomeEmpty shows it non-zero (IOS-41).
+- The strawberries row badge reads "Check" (artboard family says "Looks off" after the Fridge polish PR).
+- Tip is below the header, as in v53. The mock tip wraps to three lines at 17 Pro width (allowed by SCREENS #4).
+- ServerError names the host in use (`127.0.0.1` on the mock) where the artboard shows a tunnel URL.
+- Gear and "Change" are wired to no-op closures in `RootTabView` until the Settings PR (stub, not a bug).
+
+Screenshots: `scratchpad/home-shots/qa-{home,empty,servererror,loading,ax5}-{light,dark}.png` (17 Pro) and `se-{home,servererror,empty}-light.png` (SE).
+
+### Re-run after fixes (iPhone SE QA, own DerivedData, one invocation)
+`HomeNarrowUITests` 1, `HomeUITests` 28, `HomeAX5UITests` 5, `FridgeUITests.testRetryAfterOneFailureLoads` 1: **35 run, 0 failures, 0 skipped.** This follows the 17 Pro full run (unit 400 pass; UI 85, the only failure being IOS-42, now fixed) and the earlier SE run of `HomeAccessibilityTests` (19 pass).
+
+Verdict: **PASS**. IOS-40, IOS-42 and IOS-43 are fixed and verified. IOS-41 (mock impact ignores the empty seed) stays open, low, cross-PR (Impact PR); it does not block Home.
 
 ## 2026-10-11: Page-sweep fixes review (qa/page-sweep-2026-10-11)
 Mac: Apple M4 Pro, Xcode 26.6. Simulator: a throwaway iPhone 17 Pro (iOS 26.3), created for the run and deleted after (the orchestrator's booted sim could not be cloned while running). Scope: A1 button tint, A2 `RequestSourceInfo`, A3 `reachablePeople(itemId:)`, A4 stale-token 401, D debug Account section, F1 retry toast, F2 remove-outcome classification, F3 `submitted` flag and hidden back button.

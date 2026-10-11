@@ -157,7 +157,9 @@ def test_yolo_path_sends_crops_and_applies_expiry_and_nutrition(app, client, use
 def test_an_undecodable_upload_is_enriched_text_only(app, client, user, monkeypatch, gemini_on):
     use_yolo(app, monkeypatch, det("Apple"))
     e = stub(monkeypatch)
-    r = photo(client, user, enrich="expiry", data=b"\xff\xd8fakejpeg")
+    # uploads must now be real images, so "cannot be cropped" is forced with a pixel ceiling below the photo's size
+    monkeypatch.setitem(app.config, "ENRICH_MAX_PIXELS", 100)
+    r = photo(client, user, enrich="expiry")
     assert r.status_code == 200 and r.get_json()["enrichment"]["status"] == "ok"
     assert e.calls[0]["crops"] == [None]
 

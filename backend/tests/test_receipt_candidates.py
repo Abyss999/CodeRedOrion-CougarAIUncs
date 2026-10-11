@@ -7,12 +7,22 @@ import pytest
 from app.models import CATEGORIES, FOOD_GROUPS
 from app.services import candidates, gemini, ml
 
+
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
 FULL = {"name", "category", "food_group", "storage", "quantity", "unit", "est_price",
         "predicted_expiry", "expiry_source", "price", "receipt_text"}
 
 
 def img():
-    return {"image": (io.BytesIO(b"\xff\xd8fakejpeg"), "r.jpg", "image/jpeg")}
+    return {"image": (io.BytesIO(TINY_JPEG), "r.jpg", "image/jpeg")}
 
 
 @pytest.fixture

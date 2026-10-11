@@ -15,6 +15,16 @@ import pytest
 
 from conftest import items_of
 
+
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
 LOGGER = "app.gemini.usage"
 SCALARS = ["null", '"oops"', '""', "42", "0", "3.5", "-1", "true", "false"]
 KEYS = {"parse_text": "items", "detect": "candidates", "recipes": "recipes", "shelf_life": "days"}
@@ -89,7 +99,7 @@ def call_parse(client, user, make_item):
 
 
 def call_detect(client, user, make_item):
-    return client.post("/items/from-photo", data={"image": (io.BytesIO(b"\xff\xd8fakejpeg"), "a.jpg")},
+    return client.post("/items/from-photo", data={"image": (io.BytesIO(TINY_JPEG), "a.jpg")},
                        content_type="multipart/form-data", headers=user["headers"])
 
 

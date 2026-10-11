@@ -41,11 +41,22 @@ struct RootTabView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var selection: AppTab = .home
     @State private var showAdd = false
+    /// `-UITestOpenImpact` (DEBUG): ImpactView is presented on launch until Home links to it.
+    @State private var showImpact = false
     private let tabOrder: [AppTab] = [.home, .recipes, .add, .fridge, .social]
 
     var body: some View {
         TabView(selection: tabSelection) {
-            tab(.home) { HomeView() }
+            tab(.home) {
+                HomeView(api: env.api,
+                         onOpenSettings: {},        // Settings screen: later PR
+                         onOpenImpact: {},          // Impact screen: later PR
+                         onOpenRecipe: { _ in },    // Recipe detail: later PR
+                         onOpenItem: { _ in },      // Item detail: later PR
+                         onOpenServerSettings: {},  // Settings › Debug "Server address": later PR
+                         onSeeAllFood: { selection = .fridge },
+                         onAddFood: { showAdd = true })
+            }
             tab(.recipes) { RecipesView() }
             tab(.add) { Color.clear }  // never shown: selecting Add presents `AddSheetView`
             tab(.fridge) { FridgeView(api: env.api) }
@@ -54,6 +65,12 @@ struct RootTabView: View {
         .tint(Theme.Colors.forest)
         .background(TabBarIdentifiers(entries: tabOrder.map { .init(id: $0.accessibilityID, label: $0.title) }))
         .sheet(isPresented: $showAdd) { AddSheetView() }
+        .fullScreenCover(isPresented: $showImpact) { ImpactView(api: env.api) }
+        .task {
+            #if DEBUG
+            if env.launch.openImpact { showImpact = true }
+            #endif
+        }
     }
 
     /// Selecting Add presents the sheet and never writes `.add` to `selection`, so the bar keeps
