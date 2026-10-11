@@ -313,8 +313,8 @@ def test_jwks_concurrent_unknown_kids_refetch_at_most_once_per_window(app, jw):
 # ============================================================================================ Gemini usage
 USAGE_LINE = re.compile(
     r"^app\.gemini\.usage gemini_usage model=gemini-test-model purpose=t\d+ "
-    r"(input_tokens=120 output_tokens=45 total_tokens=165 latency_ms=\d+ status=ok"
-    r"|input_tokens=null output_tokens=null total_tokens=null latency_ms=\d+ status=error)$")
+    r"(input_tokens=120 output_tokens=45 total_tokens=165 latency_ms=\d+ status=ok code=200"
+    r"|input_tokens=null output_tokens=null total_tokens=null latency_ms=\d+ status=error code=null)$")
 
 
 def test_concurrent_generate_one_intact_usage_line_per_call(app, monkeypatch):

@@ -36,11 +36,15 @@ def ttl_seconds() -> int:
     return int(current_app.config.get("RECIPE_CACHE_TTL_SECONDS", DEFAULT_TTL_SECONDS))
 
 
-def make_key(items, max_results: int, dietary: list) -> str:
-    """Hash of every active item (id, name, category, quantity, unit, expiry) + the options."""
+def make_key(items, max_results: int, dietary: list, focus=()) -> str:
+    """Hash of every active item (id, name, category, quantity, unit, expiry) + the options. `focus` (ids of
+    the items to cook now) joins the hash only when given, so keys without it are unchanged."""
     rows = sorted([str(i.id), i.name, i.category, str(i.quantity), i.unit,
                    i.predicted_expiry.isoformat()] for i in items)
-    blob = json.dumps({"items": rows, "n": max_results, "dietary": sorted(dietary)}, sort_keys=True)
+    payload = {"items": rows, "n": max_results, "dietary": sorted(dietary)}
+    if focus:
+        payload["focus"] = sorted(str(f) for f in focus)
+    blob = json.dumps(payload, sort_keys=True)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 

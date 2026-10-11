@@ -39,7 +39,7 @@ def expected(data, ep, cls_ep, thr, run_dir):
             "--resume", "--semi-fresh-threshold", str(thr), "--project", run_dir]
 
 
-def run_cell5(tmp_path, monkeypatch, dry, exit_code=0):
+def run_cell5(tmp_path, monkeypatch, dry, exit_code=0, fast=False):
     work = tmp_path / "yolo"
     work.mkdir()
     (work / "train.py").write_text(STUB)
@@ -56,8 +56,11 @@ def run_cell5(tmp_path, monkeypatch, dry, exit_code=0):
     subset_calls = []
     monkeypatch.setitem(sys.modules, "make_subset",
                         types.SimpleNamespace(make_subset=lambda *a, **k: subset_calls.append((a, k)) or "subset"))
+    monkeypatch.setitem(sys.modules, "cap_detector", types.SimpleNamespace(cap_detector=lambda *a, **k: {
+        "train_images": 1, "train_images_full": 2, "boxes_by_freshness": {}}))
     import shutil
-    ns = {"os": os, "shutil": shutil, "subprocess": subprocess, "sys": sys, "RUN_DIR": str(run_dir), "DRY_RUN": dry}
+    ns = {"os": os, "shutil": shutil, "subprocess": subprocess, "sys": sys, "RUN_DIR": str(run_dir), "DRY_RUN": dry,
+          "FAST": fast}   # FAST=False: the full profile keeps the old command exactly (FAST=True: qa_fast_profile.py)
     err = None
     try:
         exec(compile(cell("# 5."), "cell5", "exec"), ns)

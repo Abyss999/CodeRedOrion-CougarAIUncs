@@ -5,11 +5,11 @@ from flask import Blueprint, g, jsonify, request
 from sqlalchemy import text
 
 from ..auth import require_auth
-from ..errors import upstream_unavailable, validation_error
+from ..errors import not_found, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import WASTE_REASONS, Item
 from ..services import gemini, recipe_cache
-from ._util import json_body
+from ._util import json_body, parse_uuid
 
 bp = Blueprint("insights", __name__)
 
@@ -300,6 +300,18 @@ def clean_servings(v):
     return int(v) if 1 <= v <= 20 else None
 
 
+def clean_minutes(v):
+    """Integer 1-600, else None (the caller drops the recipe: the iOS client needs a non-null Int)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    v = int(round(v))
+    return v if 1 <= v <= 600 else None
+
+
+def clean_str_list(v) -> list:
+    return [x for x in v if isinstance(x, str)] if isinstance(v, list) else []
+
+
 def _norm(name) -> str:
     return " ".join(str(name).lower().split())
 
@@ -326,6 +338,23 @@ def match_uses_items(names, items) -> list:
     return out
 
 
+MAX_FOCUS = 10
+MAX_PAYLOAD_ITEMS = 20  # the soonest-expiring items sent to Gemini
+
+
+def _focus_ids(body) -> list:
+    """`item_ids`: the items the person wants to cook now. 1-10 distinct uuids, or [] when not given."""
+    raw = body.get("item_ids")
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_FOCUS:
+        raise validation_error(f"item_ids must be a list of 1-{MAX_FOCUS} item ids.")
+    ids = [parse_uuid(v) for v in raw]
+    if len(set(ids)) != len(ids):
+        raise validation_error("item_ids must not contain duplicates.")
+    return ids
+
+
 @bp.post("/recipes/suggest")
 @require_auth
 def suggest_recipes():
@@ -338,17 +367,28 @@ def suggest_recipes():
     dietary = body.get("dietary", [])
     if not isinstance(dietary, list) or not all(isinstance(d, str) for d in dietary):
         raise validation_error("dietary must be a list of strings.")
+    focus_ids = _focus_ids(body)
     active = (Item.query.filter(Item.owner_id == g.user.id, Item.removed_at.is_(None))
               .order_by(Item.predicted_expiry, Item.added_at, Item.id).all())
+    mine = {i.id for i in active}
+    if any(f not in mine for f in focus_ids):  # unknown, removed or someone else's: 404, as in the batch endpoints
+        raise not_found("Item not found.")
     if not active:
         return jsonify(recipes=[])
-    key = recipe_cache.make_key(active, n, dietary)
+    key = recipe_cache.make_key(active, n, dietary, focus_ids)
     cached = recipe_cache.get(g.user.id, key)
     if cached is not None:
         return jsonify(recipes=cached)
-    items = active[:20]  # the 20 soonest-expiring go to Gemini
+    focus = set(focus_ids)
+    if focus:  # the focus items always go to Gemini, even beyond the 20 soonest; the order stays soonest first
+        rest = [i for i in active if i.id not in focus][: MAX_PAYLOAD_ITEMS - len(focus)]
+        items = sorted([i for i in active if i.id in focus] + rest,
+                       key=lambda i: (i.predicted_expiry, i.added_at, i.id))
+    else:
+        items = active[:MAX_PAYLOAD_ITEMS]  # the 20 soonest-expiring go to Gemini
     payload = [{"name": i.name, "category": i.category, "quantity": float(i.quantity),
-                "unit": i.unit, "expires": i.predicted_expiry.isoformat()} for i in items]
+                "unit": i.unit, "expires": i.predicted_expiry.isoformat()}
+               | ({"must_use": True} if i.id in focus else {}) for i in items]
     try:
         recipes = gemini.suggest_recipes(payload, n, dietary)
     except gemini.UpstreamError as e:
@@ -358,10 +398,17 @@ def suggest_recipes():
         if not isinstance(r, dict):
             continue
         r = dict(r)
+        title, minutes = r.get("title"), clean_minutes(r.get("minutes"))
+        if not isinstance(title, str) or not title.strip() or minutes is None:
+            continue  # the iOS client decodes title: String and minutes: Int, so one bad recipe would break the list
+        r["title"], r["minutes"] = title.strip(), minutes
+        r["steps"] = clean_str_list(r.get("steps"))
+        r["missing_items"] = clean_str_list(r.get("missing_items"))
         r["servings"] = clean_servings(r.get("servings"))
         r["uses_items"] = match_uses_items(r.get("uses_items"), items)
         r["macros"] = clean_macros(r.get("macros"))
         r["macros_estimated"] = True
         out.append(r)
+    out = out[:n]  # Gemini was asked for a few spares; cut to the caller's max_results after filtering
     recipe_cache.put(g.user.id, key, out)
     return jsonify(recipes=out)
