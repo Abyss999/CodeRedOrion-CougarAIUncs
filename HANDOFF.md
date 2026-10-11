@@ -22,7 +22,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **merged (#60)**; 1411 passed / 98% | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **merged (#47)** | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
-| New data sources: **MeatScan** (cow meat), **DaFiF** (fish), **Food Spoilage Status** (Roboflow); food-hvk7g pending | `feat/datasets-spoilage-meat-fish` (PR open) | Pipeline QA PASS (PL-5 open), ML QA PASS with named risks (ML-51/52/55); see "Data / ML track" |
+| New data sources: **MeatScan** (cow meat), **DaFiF** (fish), **Food Spoilage Status** (Roboflow); food-hvk7g pending | `feat/datasets-spoilage-meat-fish`, **#62** | Pipeline QA PASS (PL-5 open), ML QA PASS with named risks (ML-51/52/55); see "Data / ML track" |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22 owns it** (owner, 2026-10-10). Other sessions don't schedule it unless the owner asks | notebook ready; the next Colab run picks up the new sources |
 | Receipts → full candidates (#54, Jose / LemurTech22) | **merged (#54)**; BE-11–14 fixed | ML check PASS (independent) |
 | Design | 22 screens approved; canvas is the source (renamed BiteDown) | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
@@ -55,7 +55,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Item | Branch / PR | State | Next action |
 |---|---|---|---|
 | Receipt candidates + Gemini guide/retry | `feat/receipt-gemini-link`, **#54** | **merged** | `food-main`: record the receipt-categorisation ruling in `DECISIONS.md` if not done |
-| MeatScan + DaFiF + Food Spoilage Status sources | `feat/datasets-spoilage-meat-fish` (PR open) | Pipeline QA PASS; ML QA PASS (gates on real data), named risks ML-51/52/55 kept by the data owner | `food-main`: review, merge, record the data owner's keep-with-risks ruling in `DECISIONS.md`. The PR also edits `CLAUDE.md` (data rules) and this file at the data owner's request |
+| MeatScan + DaFiF + Food Spoilage Status sources | `feat/datasets-spoilage-meat-fish`, **#62** | Pipeline QA PASS; ML QA PASS (gates on real data), named risks ML-51/52/55 kept by the data owner | `food-main`: review, merge, record the data owner's keep-with-risks ruling in `DECISIONS.md`. The PR also edits `CLAUDE.md` (data rules) and this file at the data owner's request |
 | Roboflow `food-spoilage-status` | enabled (v1) | done | the private key in `.env` works (2026-10-10); use the same key as the Colab secret |
 | Roboflow `food-hvk7g` | `pending` in `sources.json` | blocked | 0 generated versions and no freshness labels: fork it into our workspace and generate a version, or drop it |
 | Colab training run | `ml/yolo/train_colab.ipynb` | waiting | **data owner, in the browser:** T4, Secrets `ROBOFLOW_API_KEY` (private) + `KAGGLE_API_TOKEN`, DRY_RUN then the real run with the same RUN_ID. The Drive cache is now keyed by a `sources.json` hash (`fwr_runs/<RUN_ID>/data_<DATA_VER>/`), so the new sources are always used. Hand `export.zip` to ML QA for the YOLO gate |
