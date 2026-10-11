@@ -35,7 +35,7 @@ def _ser(r, author, audiences, me, my_groups, friends_with_author, fulfiller=Non
 
 def _visible_request(request_id):
     """(request, its audiences) or 404 if the caller cannot see it."""
-    r = db.session.execute(db.select(HelpRequest).where(HelpRequest.id == path_uuid(request_id))
+    r = db.session.execute(db.select(HelpRequest).where(HelpRequest.id == path_uuid(request_id, "Request"))
                            .with_for_update()).scalar_one_or_none()
     if r is None:
         raise not_found("Request not found.")

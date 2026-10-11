@@ -7,7 +7,7 @@ from ..errors import ApiError, not_found, validation_error
 from ..extensions import db
 from ..models import Friendship, User
 from ..services import social
-from ._util import iso, json_body, path_uuid
+from ._util import check_len, iso, json_body, path_uuid
 
 bp = Blueprint("friends", __name__, url_prefix="/friends")
 
@@ -66,6 +66,7 @@ def send_request():
         return _add_by_code(code.strip())
     if not isinstance(email, str) or not email.strip():
         raise validation_error("email is required.")
+    check_len(email, "email", 254)
     target = User.query.filter_by(email=email.strip().lower()).first()
     if target is None:
         raise not_found("No user with that email.")
@@ -89,7 +90,7 @@ def send_request():
 @bp.post("/<user_id>/accept")
 @require_auth
 def accept(user_id):
-    other_id = path_uuid(user_id)
+    other_id = path_uuid(user_id, "User")
     row = Friendship.query.filter_by(user_id=other_id, friend_id=g.user.id, status="pending").first()
     if row is None:
         raise not_found("No pending friend request from that user.")
@@ -118,7 +119,7 @@ def list_friends():
 @bp.delete("/<user_id>")
 @require_auth
 def remove(user_id):
-    row = social.friendship_between(g.user.id, path_uuid(user_id))
+    row = social.friendship_between(g.user.id, path_uuid(user_id, "User"))
     if row is None:
         raise not_found("No friendship or request with that user.")
     db.session.delete(row)
