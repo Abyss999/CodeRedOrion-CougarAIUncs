@@ -6,7 +6,7 @@ import logging
 import math
 import time
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 from ..models import CATEGORIES, FOOD_GROUPS
 
@@ -88,6 +88,8 @@ def _default_timeout() -> float:
     """HTTP timeout for every Gemini call except enrichment (which has ENRICH_TIMEOUT_S). Worst case one
     call holds a request thread for 2 attempts x GEMINI_TIMEOUT_S + RETRY_DELAYS_S (30 s default: 61.5 s),
     under gunicorn's 120 s --timeout (backend/entrypoint.sh)."""
+    if not has_app_context():  # prompt-building helpers are also called outside a request (tests, scripts)
+        return 30.0
     try:
         v = float(current_app.config.get("GEMINI_TIMEOUT_S", 30))
     except (TypeError, ValueError):
