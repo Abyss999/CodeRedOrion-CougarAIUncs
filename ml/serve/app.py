@@ -98,7 +98,7 @@ def create_app(detector=None, ocr=None, structure_with_gemini: bool | None = Non
 
     @app.get("/health")
     def health():
-        return jsonify(status="ok", detector=type(det).__name__, ocr=type(eng).__name__)
+        return jsonify(status="ok", detector=type(det).__name__, ocr=type(eng).__name__ if eng is not None else "off")
 
     @app.post("/detect")
     def detect():
@@ -115,6 +115,8 @@ def create_app(detector=None, ocr=None, structure_with_gemini: bool | None = Non
 
     @app.post("/ocr")
     def ocr_route():
+        if eng is None:
+            raise ApiError(503, "ocr_not_configured", "receipt OCR is off on this service (OCR_BACKEND=off)")
         img = _load_image()
         raw = eng.image_to_text(img)
         parsed = parse_receipt_text(raw)

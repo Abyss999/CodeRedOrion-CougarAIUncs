@@ -40,7 +40,7 @@ This is an active hackathon prototype. The backend is ahead of the iOS interface
 | Impact | Timestamped food events, outcome totals, weekly trends, and waste tips | Build the dashboard UI and validate the integrated flow |
 | iOS | Foundation merged: design tokens and fonts, `APIClient` with Live and Mock clients, Keychain, glass tab bar, motion and test conventions (display name BiteDown) | Implement functional screens (Fridge is in review) and API connectivity |
 | Guided onboarding | Idea only (deferred for v1) | Food catalog, checklist UI, and completion/resume state |
-| Vision and receipts | Training pipeline, inference service, receipt-text parser, and evaluation tools | Validate trained models and real image-to-text performance |
+| Vision and receipts | Training pipeline, a first trained model (FAST profile, 2026-10-11), the inference service as an opt-in Docker service, receipt-text parser, and evaluation tools | Score the model on the held-out split (ML QA) and validate real image-to-text performance |
 
 Current test counts and QA verdicts live in the [QA log](docs/QA.md), and the work in progress is
 in the [handoff](HANDOFF.md). The [area QA reports](docs/qa/) distinguish component checks from full
@@ -66,7 +66,7 @@ product verification. YOLO accuracy and the complete phone demo still need valid
 | AI | Google Gemini | Photo fallback, text parsing, recipe suggestions, and shelf-life estimates |
 | Vision | Ultralytics YOLO pipeline | Experimental food detection and freshness classification |
 | Receipts | GLM-OCR integration and a deterministic parser | Receipt image extraction and line-item parsing |
-| Local runtime | Docker Compose | API and database |
+| Local runtime | Docker Compose | API, database and (opt-in `ml` profile) the YOLO service |
 
 ## Run locally
 
@@ -81,7 +81,8 @@ cp .env.example .env
 ```
 
 Edit `.env`: set the database credentials and a strong `JWT_SECRET`; configure
-`GEMINI_API_KEY` and a model available to your account for AI features. For Google sign-in set `GOOGLE_IOS_CLIENT_IDS` (steps in the [setup guide](docs/SETUP.md)). Keep database passwords
+`GEMINI_API_KEY` and `GEMINI_MODEL` (the id ruled in [DECISIONS.md](docs/DECISIONS.md), currently `gemini-3.8-flash`;
+the `.env.example` placeholder makes every Gemini call fail) for AI features. For Google sign-in set `GOOGLE_IOS_CLIENT_IDS` (steps in the [setup guide](docs/SETUP.md)). Keep database passwords
 consistent with the database URLs. Keep real credentials out of commits.
 
 ```bash
@@ -97,6 +98,34 @@ to `127.0.0.1:5433`; a phone needs a separately configured route to the API.
 Leave `ML_SERVICE_URL` empty to use Gemini for photos. Receipts require a configured OCR
 service. The standalone ML service defaults to fake backends for development; configure real
 backends before presenting its output as live recognition. See [ML setup](docs/ML.md).
+
+### Photo detection with the trained YOLO model (optional)
+
+The `ml` compose service serves the detector and freshness classifier next to the API. It's off unless you ask for
+it, publishes no host port (only the API container reaches it) and runs on CPU by default.
+
+1. Download `detector.pt` and `freshness.pt` from the Colab export (`MyDrive/fwr_runs/<RUN_ID>/data_<VER>_fast/export/`,
+   or the `export.zip` the notebook downloads) into `../mldata/models/current/` (outside the repo), or set
+   `ML_MODELS_DIR` in `.env` to their folder.
+2. Set `ML_SERVICE_URL=http://ml:8000` in `.env`.
+3. Start the stack with the profile:
+
+```bash
+docker compose --profile ml up -d --build
+docker compose --profile ml ps
+```
+
+A photo then goes YOLO (`source: "yolo"`) → Gemini enrichment of each detected item (expiry, nutrition) → the review
+list in the app. If the `ml` service is down or errors, `/items/from-photo` falls back to Gemini vision. Receipt OCR
+stays off in this service (`/ocr` answers 503 and the API returns its usual 502). Plain `docker compose up -d` leaves
+`ml` off. Until ML QA scores the model, treat its freshness calls as unverified.
+
+### Train the model (Colab)
+
+Open `ml/yolo/train_colab.ipynb` in Colab on a T4 GPU, add the `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` secrets, and
+Runtime → Run all with `DRY_RUN` ticked (about 15 min), then untick it and Run all again with the same `RUN_ID`. With
+`FAST` ticked (default) the real run takes about 45–50 min on a free T4 (detector ~26 min measured, classifier ~17 min,
+export); untick `FAST` for the full 4–5 h run. Step-by-step: [ML.md](docs/ML.md) sections 0 and 5d.
 
 ### iOS
 
@@ -137,7 +166,9 @@ Contributors and coding agents should start with [CLAUDE.md](CLAUDE.md) and [HAN
 ## Data and models
 
 Food detection and freshness (`fresh`, `semi_fresh` shown as "Use soon", `spoiled`) are YOLO26 models trained on
-Colab from `ml/yolo/train_colab.ipynb`; until a trained model is served, photos use the Gemini fallback. The data
+Colab from `ml/yolo/train_colab.ipynb`. The first model (FAST profile: `yolo26n` detector at 512 px + `yolo26n-cls`
+freshness classifier) was trained on 2026-10-11 and can be served with the compose `ml` profile (above); until it is
+served, photos use the Gemini fallback. The data
 pipeline (`python -m pipeline`, see [PIPELINE.md](docs/PIPELINE.md)) fetches and stages each source, and
 `ml/yolo/prepare_dataset.py` merges them into one leakage-checked dataset. Sources and class maps are in
 [`ml/yolo/sources.json`](ml/yolo/sources.json); training steps are in [ML.md](docs/ML.md) section 0.

@@ -48,7 +48,8 @@ For the host venv (and for tests) run it by hand: `cd backend && ../.venv/bin/fl
 | `JWT_SECRET` | API | long random string |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | API | model recorded in `docs/DECISIONS.md` |
 | `GOOGLE_IOS_CLIENT_IDS` | API | comma-separated iOS OAuth client IDs; unset makes `POST /auth/oauth/google` return `503 oauth_not_configured` |
-| `ML_SERVICE_URL` | API | empty = Gemini-vision fallback for photos; receipts need it |
+| `ML_SERVICE_URL` | API | empty = Gemini-vision fallback for photos; receipts need it. `http://ml:8000` with the compose `ml` profile |
+| `ML_MODELS_DIR`, `YOLO_DEVICE` | `ml` (compose profile) | weights folder (`detector.pt`, `freshness.pt`; default `../mldata/models/current`) and `cpu` (default) or `0` |
 | `ROBOFLOW_API_KEY`, `KAGGLE_API_TOKEN` | dataset prep, Colab | never commit |
 | `PIPELINE_DATA`, `OCR_TIMEOUT_S`, `PIPELINE_MAX_EXTRACT_GB` | `pipeline/` | optional, see `docs/PIPELINE.md` |
 | `GUNICORN_THREADS` | `backend/entrypoint.sh` | optional, default 4. The container runs one `gthread` worker (`--timeout 120`), so a slow Gemini call does not block other requests and the in-process recipe cache stays shared. It is not in `.env.example`; add it to `.env` to change it |
@@ -151,6 +152,13 @@ python3.12 -m venv .venv-ml && .venv-ml/bin/pip install pytest flask pillow nump
 Training and heavy inference run on a GPU (Colab or a teammate's machine), **not** on a shared
 server. See `ml/README.md` and `docs/ML.md` (created by the ML builder). Point the backend at the
 inference service with `ML_SERVICE_URL`; leave it empty to use the Gemini-vision fallback.
+
+**Serving YOLO next to the API** (opt-in compose profile, no host port, OCR off): copy `detector.pt` and `freshness.pt` from the
+Colab export into `../mldata/models/current/`, set `ML_SERVICE_URL=http://ml:8000` in `.env`, then
+```bash
+docker compose --profile ml up -d --build
+```
+Plain `docker compose up -d` leaves `ml` off. Details: `docs/ML.md` section 6.
 
 ## 6. Claude Code: plugins, skills, MCP servers
 Install these **before** starting the matching work, then **restart Claude Code** — new MCP
