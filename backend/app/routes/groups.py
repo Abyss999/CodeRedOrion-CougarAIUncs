@@ -6,7 +6,7 @@ from ..errors import ApiError, not_found, validation_error
 from ..extensions import db
 from ..models import (Group, GroupMember, HelpRequest, Item, RequestAudience, ShareListing, User)
 from ..services import social
-from ._util import iso, json_body, path_uuid, serialize_item
+from ._util import check_len, iso, json_body, path_uuid, serialize_item
 
 bp = Blueprint("groups", __name__, url_prefix="/groups")
 
@@ -52,6 +52,7 @@ def join():
     code = json_body().get("invite_code")
     if not isinstance(code, str) or not code.strip():
         raise validation_error("invite_code is required.")
+    check_len(code, "invite_code", 64)
     group = Group.query.filter_by(invite_code=social.normalize_code(code)).first()
     if group is None:
         raise not_found("No group with that invite code.")
@@ -65,7 +66,7 @@ def join():
 @bp.get("/<group_id>")
 @require_auth
 def get_group(group_id):
-    gid = path_uuid(group_id)
+    gid = path_uuid(group_id, "Group")
     group = social.require_member(gid, g.user.id)
     members = (db.session.query(User, GroupMember).join(GroupMember, GroupMember.user_id == User.id)
                .filter(GroupMember.group_id == gid).order_by(GroupMember.joined_at).all())
@@ -79,7 +80,7 @@ def get_group(group_id):
 @bp.post("/<group_id>/leave")
 @require_auth
 def leave(group_id):
-    gid = path_uuid(group_id)
+    gid = path_uuid(group_id, "Group")
     social.require_member(gid, g.user.id)
     me = social.membership(gid, g.user.id)
     was_owner = me.role == "owner"
@@ -117,7 +118,7 @@ def leave(group_id):
 @bp.get("/<group_id>/pantry")
 @require_auth
 def pantry(group_id):
-    gid = path_uuid(group_id)
+    gid = path_uuid(group_id, "Group")
     social.require_member(gid, g.user.id)
     rows = (db.session.query(Item, User.display_name).join(User, User.id == Item.owner_id)
             .filter(Item.group_id == gid, Item.removed_at.is_(None))

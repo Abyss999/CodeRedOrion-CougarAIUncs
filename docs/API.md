@@ -8,8 +8,8 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 
 | Status | `code` values | Meaning |
 |---|---|---|
-| 400 | `validation_error` | Bad/missing fields, e.g. `waste_reason` on a non-`thrown_out` removal |
-| 401 | `unauthorized`, `invalid_credentials`, `invalid_token` | Missing/invalid/expired token; bad login; rejected Google ID token |
+| 400 | `validation_error` | Bad/missing fields, any string containing a NUL (`\u0000`) anywhere in a JSON body, over-long strings (limits below), e.g. `waste_reason` on a non-`thrown_out` removal |
+| 401 | `unauthorized`, `invalid_credentials`, `invalid_token` | `unauthorized`: missing/invalid/expired bearer token (the only code the auth guard emits); `invalid_credentials`: bad login; `invalid_token`: rejected Google ID token (`POST /auth/google` only) |
 | 403 | `forbidden`, `email_not_verified` | Authenticated but not your item / not a member of that group / not the owner or author; Google account email not verified |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
 | 405 | `method_not_allowed` | |
@@ -19,11 +19,19 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 | 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts / Google JWKS unavailable or not configured |
 | 503 | `oauth_not_configured` | `POST /auth/oauth/google` while `GOOGLE_IOS_CLIENT_IDS` is unset |
 
+### Input limits and path ids
+
+String caps (over-limit -> `400 validation_error`): item `name` 200, item `unit` 32, `display_name` 60, `email` 254 (signup, login, `POST /friends`), `password` 256 (signup min 8; login max 256), group `name` 60, `invite_code` 64, request `text` 280. A malformed path id is `404 not_found` naming the resource ("Item/Group/User/Request/Listing not found.").
+
+`POST /recipes/suggest`: the body goes through the same JSON-object check as every endpoint (any `\u0000` in any string -> `400 validation_error`); `dietary` has at most 10 entries of at most 40 characters each (`400` otherwise).
+
+Group pantry items: editing (`PATCH`), removing and restoring them (single and batch) needs CURRENT group membership, including for the user who added them. Ex-member: single endpoints `403 forbidden`; batch endpoints `404 not_found` (whole batch, no existence leak). An ex-member's old group items are also excluded from `POST /recipes/suggest` (an `item_ids` entry naming one -> `404 not_found`, like an unknown id) and from `GET /tips` (expiry observations); `GET /people/reachable?item_id=` for such an item -> `404 not_found`. `GET /impact` is unchanged: it counts the user's own past food events.
+
 ## Health
 - ✅ `GET /health` → `200 {"status": "ok"}`
 
 ## Auth
-- ✅ `POST /auth/signup` `{email, password (>=8 chars), display_name}` → `201 {token, user}`;
+- ✅ `POST /auth/signup` `{email (<=254), password (8-256 chars), display_name (<=60)}` → `201 {token, user}`;
   `409 email_taken`. Emails are case-insensitive.
 - ✅ `POST /auth/login` `{email, password}` → `200 {token, user}`; `401 invalid_credentials`. An
   account created through Google has no password, so email login for it is also

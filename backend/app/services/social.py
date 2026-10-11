@@ -1,11 +1,11 @@
 """Visibility primitives for the social layer. Everything a user may see flows through here."""
 import secrets
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from ..errors import ApiError, not_found
 from ..extensions import db
-from ..models import Friendship, Group, GroupMember
+from ..models import Friendship, Group, GroupMember, Item
 
 # No 0/O, 1/I/L: codes get read aloud and typed by hand.
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -120,3 +120,11 @@ def audience_view(author_id, audiences, uid, my_groups: dict, friends_with_autho
             hidden_n += 1
     groups.sort(key=lambda x: (x["name"].casefold(), x["id"]))
     return {"friends": friends, "groups": groups, "hidden_count": hidden_n}
+
+
+def caller_active_items_filter(uid):
+    """SQL condition: the caller's own active items they can still see. Personal items, or group-pantry
+    items whose group the caller is a CURRENT member of (an ex-member's old group items are excluded)."""
+    member_of = db.select(GroupMember.group_id).where(GroupMember.user_id == uid)
+    return and_(Item.owner_id == uid, Item.removed_at.is_(None),
+                or_(Item.group_id.is_(None), Item.group_id.in_(member_of)))

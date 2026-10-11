@@ -8,11 +8,29 @@ from ..errors import ApiError, not_found, validation_error
 from ..services import food_group
 
 
+def _has_nul(v) -> bool:
+    if isinstance(v, str):
+        return "\x00" in v
+    if isinstance(v, dict):
+        return any(_has_nul(k) or _has_nul(x) for k, x in v.items())
+    if isinstance(v, list):
+        return any(_has_nul(x) for x in v)
+    return False
+
+
 def json_body() -> dict:
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         raise validation_error("Request body must be a JSON object.")
+    if _has_nul(body):  # Postgres text cannot hold NUL: would be a DataError -> 500
+        raise validation_error("Strings must not contain NUL (\\u0000) characters.")
     return body
+
+
+def check_len(value: str, field: str, maxlen: int) -> str:
+    if len(value) > maxlen:
+        raise validation_error(f"{field} must be at most {maxlen} characters.")
+    return value
 
 
 def parse_uuid(value, *, missing_ok=False):
@@ -24,12 +42,12 @@ def parse_uuid(value, *, missing_ok=False):
         raise validation_error("Invalid UUID.")
 
 
-def path_uuid(value):
-    """Path ids that are malformed cannot exist -> 404."""
+def path_uuid(value, noun="Item"):
+    """Path ids that are malformed cannot exist -> 404 "<noun> not found."."""
     try:
         return uuid.UUID(value)
     except ValueError:
-        raise not_found("Item not found.")
+        raise not_found(f"{noun} not found.")
 
 
 def parse_date(value, field):
