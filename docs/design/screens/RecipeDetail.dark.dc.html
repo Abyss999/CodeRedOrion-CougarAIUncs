@@ -22,7 +22,8 @@ body{background:#0F1A12}</style>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
     <div>
       <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 26px; line-height: 1.15">Chicken thighs with wilted spinach and yogurt sauce</h1>
-      <p style="margin: 6px 0 0; font-size: 14px; color: #9DB09F">35 min · 2 servings · macros estimated per serving</p>
+      <p style="margin: 6px 0 0; font-size: 14px; color: #9DB09F">35 min · macros estimated per serving</p>
+      <p style="margin: 4px 0 0; font-size: 15px; font-weight: 600; color: #C9D6BC">Serving size 320 g · 2 servings</p>
     </div>
     <dl aria-label="Macros per serving" style="margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
       <sc-for list="{{macros}}" as="m" hint-placeholder-count="4">
@@ -32,12 +33,14 @@ body{background:#0F1A12}</style>
       </sc-for>
     </dl>
     <section style="display: flex; flex-direction: column; gap: 8px">
-      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">From your fridge</h2>
-      <div style="display: flex; gap: 6px; flex-wrap: wrap">
-        <span style="font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 10px; background: #4A2614; color: #FFB98A">Chicken thighs · Today</span>
-        <span style="font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 10px; background: #4A2614; color: #FFB98A">Baby spinach · Tomorrow</span>
-        <span style="font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 10px; background: #24361F; color: #B9D871">Greek yogurt · 2–3 days</span>
-      </div>
+      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 700">Ingredients</h2>
+      <ul style="margin: 0; padding: 0 0 0 20px; list-style: disc; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.45; color: #C9D6BC">
+        <li>Chicken thighs, 450 g <span style="display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px; background: #4A2614; color: #FFB98A; white-space: nowrap">In your fridge · Today</span></li>
+        <li>Baby spinach, 140 g <span style="display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px; background: #4A2614; color: #FFB98A; white-space: nowrap">In your fridge · Tomorrow</span></li>
+        <li>Greek yogurt, 120 g <span style="display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px; background: #24361F; color: #B9D871; white-space: nowrap">In your fridge · 2–3 days</span></li>
+        <li>Olive oil, 1 tbsp</li>
+        <li>Salt and pepper</li>
+      </ul>
     </section>
     <section style="display: flex; flex-direction: column; gap: 8px">
       <h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">Steps</h2>

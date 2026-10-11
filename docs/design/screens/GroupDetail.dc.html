@@ -15,8 +15,8 @@ body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color
 a{color:#1F4D2B}a:hover{color:#13261A}
 </style>
 </helmet>
-<main style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F8E8; padding: 56px 20px 34px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
-  <header style="display: flex; align-items: center; gap: 10px">
+<main style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F8E8; padding: 64px 20px 34px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+  <header style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px">
     <a href="Connect.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF; flex-shrink: 0">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
     <div style="flex: 1">
@@ -24,11 +24,6 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">18 members · you joined Sep 2</p>
     </div>
   </header>
-
-  <div style="background: #D9EC8F; border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 10px">
-    <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: #2B3D30">Invite code</span><span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: 0.08em; color: #13261A">K7PQ-M2XR</span></span>
-    <button style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #1F4D2B; color: #F4F8E8; font-size: 14px; font-weight: 600">Share invite</button>
-  </div>
 
   <div role="tablist" aria-label="Group view" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #E3EDCB; border-radius: 14px">
     <button role="tab" aria-selected="true" style="height: 40px; border: 0; border-radius: 10px; background: #FFFFFF; color: #13261A; font-weight: 600; font-size: 15px">Group pantry</button>
@@ -45,6 +40,10 @@ a{color:#1F4D2B}a:hover{color:#13261A}
     </sc-for>
   </ul>
   <button style="height: 52px; border: 0; border-radius: 14px; background: #1F4D2B; color: #F4F8E8; font-family: Outfit, sans-serif; font-weight: 600; font-size: 16px">+ Add to group pantry</button>
+  <div role="group" aria-label="Invite code" style="margin-top: 6px; background: #D9EC8F; border-radius: 16px; padding: 8px 8px 8px 14px; display: flex; align-items: center; gap: 10px">
+    <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: #2B3D30">Invite code</span><span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; color: #13261A">K7PQ-M2XR</span></span>
+    <button type="button" style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: #1F4D2B; color: #F4F8E8; font-size: 14px; font-weight: 600">Share invite</button>
+  </div>
   <button style="margin-top: auto; min-height: 44px; border: 0; background: transparent; color: #8A3B0E; font-size: 15px; font-weight: 600">Leave group</button>
 </main>
 </x-dc>
