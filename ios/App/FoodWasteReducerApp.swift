@@ -9,11 +9,12 @@ struct FoodWasteReducerApp: App {
     var body: some Scene {
         WindowGroup {
             AuthGate()
+                // Inside .environment(env): the friend-link modifier reads AppEnvironment.
+                .handlesFriendLinks()
                 .environment(env)
                 .environment(\.reduceMotionOverride, env.launch.reduceMotion ? true : nil)
                 .environment(\.undoWindowOverride, env.launch.undoWindow)
                 .onOpenURL { GoogleSignInConfig.handleOpenURL($0) }
-                .handlesFriendLinks()
         }
     }
 }
