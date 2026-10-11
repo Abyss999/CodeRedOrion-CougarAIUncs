@@ -35,7 +35,9 @@ model lands.
 2. **Fridge polish** (`feat/ios-fridge-polish`), from the 2026-10-11 feedback:
    - one status per row; the meta line shows quantity only; spoiled reads "Looks off"
    - estimated expiry ranges (2–3 days … 3+ weeks)
-   - RemoveSheet: "Used it" / "Shared it" or "Gave it to <first name>" / "Threw it away"; no captions; a listing badge on the icon
+   - RemoveSheet: "Used it" / "Shared it" (then a **Given to** menu: the claimer, friends, fellow group members, or "Someone not on BiteDown"; then Done) / "Threw it away"; no captions; a listing badge on the icon. `recipient_id: null` needs `feat/donation-recipient`
+   - Fridge header: a "Select" text button beside Search → multi-select (FridgeSelect)
+   - `ExpiryBadge`: spoiled reads "Looks off" (the code still says "Check")
    - RemoveReason: titles only
    - deferred #64 review items:
      - a refresh during restore re-inserts the row
@@ -112,7 +114,8 @@ model lands.
   - The 2026-10-11 feedback round (DESIGN_SYSTEM Principles; DECISIONS 2026-10-11): one status per item, expiry ranges, no helper captions, units follow Settings, inline choices over chained alerts. Toss in photo review counts as waste.
   - Google linking: gmail/googlemail, or `hd` equal to the email domain; otherwise 409 `account_exists_use_password`. One Google identity per user (409 `identity_conflict`). A `created` flag goes in the body.
   - Requests: multi-audience with union visibility; the legacy `group_id` is deprecated for one release; leaving a group drops only that audience. Tips: one-line observations over 30 days.
-  - Fridge: a claimed listing goes to the claimer (no "Someone else"); the row collapses at the tap; a failed remove plays `.error`.
+  - Fridge: "Shared it" picks the recipient in a Given-to menu (defaults to the claimer, else "Someone not on BiteDown"; DECISIONS 2026-10-11 round 2); the row collapses at the tap; a failed remove plays `.error`.
+  - Design QA gate (2026-10-11): READY WITH FIXES, fixes applied in `design/qa-gate-fixes`. `mkdark.py` now fails on any unmapped light token. iOS notes: add `onForestChip` to Theme.swift; one `DetectedItemRow` for all add-review lists; MyRequests "Done" waits on `GET /requests?mine=1` (G1); receipt review stays mocked until OCR lands; the photo overlay draws only when `bbox` is present.
   - #62 data: keep the new sources with named risks (ML-51/52/55, ML-62). PL-5 won't fix (beef train-only). In `stratification_check`, cross-split pHash pairs are a warning (leakage_check's ≤ 1% is the gate).
   - A teammate's branch takes `main` merged in, never a rebase or force-push.
 - **Open owner items:**

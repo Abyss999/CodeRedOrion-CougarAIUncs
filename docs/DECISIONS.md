@@ -10,6 +10,14 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **"I have it" becomes "Offer" plus a confirmation sheet.** Fulfilling closes the request for everyone and can't be undone. No in-app messaging is promised.
 - **Kept against the comments, with reasons:** the Fridge swipe action stays forest, not red, with a take-out icon instead of the checkmark, because removal records an outcome and isn't a delete. The Add-sheet hero stays full width but shorter, to keep the shared 20 pt margins.
 - Also: the reason picker becomes a list ("Why was it thrown out?"); the Pantry widget shows food tiles with no counts; Photo review loses its captions and gets a taller photo; the barcode hint is "Boxes, cans, jars"; the Remove sheet meta is capitalised, with a badge.
+- **Design QA gate before iOS (READY WITH FIXES; fixes applied in `design/qa-gate-fixes`):**
+  - **Batch "Shared them"** sends `recipient_id` per the donation-recipient contract (being added to `remove-batch`): each item's claimer, else explicit `null` (someone not on BiteDown). There's no per-batch Given-to menu.
+  - **The Home pill shows food saved over the previous 30 days** (`/impact?range=month`), matching Impact's Month hero. Tips render verbatim and may wrap: "one line" means one sentence.
+  - **Donated reads "shared" everywhere**, Impact included ("19 used · 4 shared"). CO₂e follows the Units setting (lb for US).
+  - **One `DetectedItemRow` for every add-review list** (photo, type or say, receipt): checkbox, name, food group, one status badge, trailing stepper or price. Review lists show badges, not exact day counts.
+  - **The Pantry widget is a link** that pushes Food Pantry. It no longer expands in place, because the artboard has a Back button.
+  - **New entry points:** Fridge "Select" → multi-select; Social "Yours" → Your requests (its Done section waits on `GET /requests?mine=1`, G1); Settings › Debug › Server address.
+  - **Dark generation:** new token `onForestChip` (light text on `forestChip` in both modes). Camera surfaces keep light colours. `mkdark.py` fails on any light-only token it didn't map.
 
 ## 2026-10-11 — gunicorn gthread (#63)
 - **The API container runs one `gthread` worker with 4 threads** (`GUNICORN_THREADS`, default 4; `--timeout 120`, `--graceful-timeout 30`). A slow Gemini call no longer blocks other requests, and the in-process recipe cache stays shared (lock-guarded). *Why not several processes:* the cache is per process and there is no Redis. This closes the follow-up noted under "Backend wave 2 rulings".

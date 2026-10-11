@@ -21,7 +21,7 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
     <div>
       <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 26px">Food Pantry</h1>
-      <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Shared by your friends and groups</p>
+      <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Shared by friends and groups</p>
     </div>
   </header>
   <div role="tablist" aria-label="Source" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #E3EDCB; border-radius: 14px">
@@ -35,7 +35,7 @@ a{color:#1F4D2B}a:hover{color:#13261A}
         <span style="{{l.tile}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{l.stroke}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{l.icon}}"></path></svg></span>
         <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
           <span style="font-size: 16px; font-weight: 600">{{l.name}}</span>
-          <span style="font-size: 13px; color: #45584A">{{l.meta}}</span>
+          <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px"><span style="font-size: 13px; color: #45584A">{{l.meta}}</span><span style="{{l.badgeStyle}}">{{l.when}}</span></span>
         </span>
         <sc-if value="{{l.claimed}}" hint-placeholder-val="{{ false }}">
           <span style="font-size: 13px; font-weight: 600; color: #1F4D2B">Claimed</span>
@@ -46,7 +46,6 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       </li>
     </sc-for>
   </ul>
-  <p style="margin: 0; font-size: 13px; color: #45584A">Claiming tells the owner you'd like it. Arrange pickup with them, and they'll mark it given.</p>
 </main>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
@@ -57,13 +56,15 @@ const G = 'M5 11a4 4 0 0 1 1-7h12a4 4 0 0 1 1 7v9H5zM9 11v5M15 11v5';
 const V = 'M7 17l-3 3M15.5 8.5l-8 8c-1.4-1.4-1.4-3.6 0-5l3-3c1.4-1.4 3.6-1.4 5 0zM15.5 8.5c.8-2.2 2.7-3.5 5-3.5M15.5 8.5c2.2-.8 3.5-2.7 3.5-5';
 const P = 'M14.5 3.5a6 6 0 0 1 6 6c0 3.3-2.7 5.4-5.6 5.9l-3.6 3.6a2.2 2.2 0 1 1-3.1-3.1l-.6-.6a2.2 2.2 0 1 1 3.1-3.1l3.6-3.6c.5-2.9 0-5.1.2-5.1z';
 const J = 'M8 3h8v3H8zM7 6h10a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM6 11h12';
+const soon = 'font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #EEF5D6; color: #1F4D2B; white-space: nowrap';
+const urgent = 'font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap';
 return {
 listings: [
-{ name: 'Sourdough, half loaf', meta: 'Theo Nguyen · use by Oct 12', icon: G, stroke: '#8A6414', tile: tile('#F5EBCD'), open: false, claimed: true },
-{ name: 'Basil', meta: 'Moody Hall 4F · use by Oct 11', icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false },
-{ name: 'Eggs, 6', meta: 'Priya R. · use by Oct 30', icon: P, stroke: '#B0412E', tile: tile('#FBE4DE'), open: true, claimed: false },
-{ name: 'Jasmine rice, 2 lb', meta: 'CougarCS Kitchen · pantry', icon: J, stroke: '#6A4FA3', tile: tile('#ECE5F7'), open: true, claimed: false },
-{ name: 'Bell peppers, 3', meta: 'Moody Hall 4F · use by Oct 14', icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false }
+{ name: 'Sourdough, half loaf', meta: 'Theo Nguyen', when: '2–3 days', badgeStyle: soon, icon: G, stroke: '#8A6414', tile: tile('#F5EBCD'), open: false, claimed: true },
+{ name: 'Basil', meta: 'Moody Hall 4F', when: 'Tomorrow', badgeStyle: urgent, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false },
+{ name: 'Eggs, 6', meta: 'Jordan K.', when: '2–3 weeks', badgeStyle: soon, icon: P, stroke: '#B0412E', tile: tile('#FBE4DE'), open: true, claimed: false },
+{ name: 'Jasmine rice, 2 lb', meta: 'CougarCS Kitchen', when: '3+ weeks', badgeStyle: soon, icon: J, stroke: '#6A4FA3', tile: tile('#ECE5F7'), open: true, claimed: false },
+{ name: 'Bell peppers, 3', meta: 'Moody Hall 4F', when: '4–5 days', badgeStyle: soon, icon: V, stroke: '#2F7A3A', tile: tile('#E2F1D8'), open: true, claimed: false }
 ]
 };
 }
