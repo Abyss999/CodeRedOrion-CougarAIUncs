@@ -115,3 +115,9 @@ WHERE user_id = :uid AND event_type = 'remove'
 GROUP BY week ORDER BY week;
 ```
 waste_rate = wasted / (saved + wasted).
+
+`GET /impact` (wave 2) runs a fixed set of queries over `food_events`: one scan with `FILTER`
+aggregates for the current and previous window (used / donated / saved / wasted), one `GROUP BY
+waste_reason`, the range-filtered `time_bucket` weekly counts, and a `generate_series` of the last 6
+week buckets left-joined to the events (zero-filled). No schema change and no migration in wave 2;
+the recipe suggestion cache is in-process memory, not a table.

@@ -49,7 +49,33 @@ def is_configured() -> bool:
     return bool(current_app.config.get("GEMINI_API_KEY"))
 
 
-def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "generate"):
+def _as_list(data, list_key):
+    """The usable list in a parsed response: a top-level list, or `data[list_key]` (a missing key
+    means "nothing found" -> []). Any other shape raises, so `_generate` reports it as an upstream
+    error (BE-13) instead of a caller crashing with a 500."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and list_key is not None:
+        inner = data.get(list_key, [])
+        if isinstance(inner, list):
+            return inner
+        raise ValueError(f"Gemini '{list_key}' is {type(inner).__name__}, not a list")
+    raise ValueError(f"Gemini returned {type(data).__name__}, not a JSON list/object")
+
+
+def _unwrap(data, list_key):
+    """Callers re-apply `_as_list` (a no-op on `_generate`'s list) so a stubbed `_generate` returning a
+    wrapped object or a bad shape still behaves: unusable -> UpstreamError, never a 500."""
+    try:
+        return _as_list(data, list_key)
+    except ValueError as e:
+        raise UpstreamError(f"Gemini returned an unusable response: {e}") from e
+
+
+def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "generate",
+              list_key: str | None = None):
+    """Parsed JSON as a list (see `_as_list`). A scalar (null, string, number, bool) or an unusable
+    shape is an UpstreamError, logged as exactly one `status=error` usage line."""
     key = current_app.config.get("GEMINI_API_KEY")
     model = current_app.config.get("GEMINI_MODEL")
     if not key or not model:
@@ -67,7 +93,7 @@ def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "
                 response_mime_type="application/json", system_instruction=schema_hint,
                 **({"response_schema": response_schema} if response_schema else {})),
         )
-        data = json.loads(resp.text)
+        data = _as_list(json.loads(resp.text), list_key)
     except Exception as e:  # SDK/network/JSON errors all mean "upstream failed"
         _log_usage(model, purpose, started, "error", resp)
         raise UpstreamError(f"Gemini request failed: {type(e).__name__}") from e
@@ -84,8 +110,8 @@ _ITEM_SCHEMA = (
 
 
 def parse_text(text: str) -> list[dict]:
-    data = _generate(f"Extract the grocery/food items from this text:\n{text}", _ITEM_SCHEMA, purpose="parse_text")
-    return data if isinstance(data, list) else data.get("items", [])
+    return _unwrap(_generate(f"Extract the grocery/food items from this text:\n{text}", _ITEM_SCHEMA,
+                             purpose="parse_text", list_key="items"), "items")
 
 
 def detect_from_image(image: bytes, mime: str, mode: str) -> list[dict]:
@@ -96,8 +122,7 @@ def detect_from_image(image: bytes, mime: str, mode: str) -> list[dict]:
             "confidence:number 0-1, freshness:fresh|semi_fresh|spoiled}." % (", ".join(CATEGORIES), ", ".join(FOOD_GROUPS)))
     part = types.Part.from_bytes(data=image, mime_type=mime)
     prompt = "Single item close-up." if mode == "single" else "Fridge/pantry shelf photo."
-    data = _generate([part, prompt], hint, purpose="detect")
-    return data if isinstance(data, list) else data.get("candidates", [])
+    return _unwrap(_generate([part, prompt], hint, purpose="detect", list_key="candidates"), "candidates")
 
 
 _RECIPE_SCHEMA = {
@@ -107,6 +132,7 @@ _RECIPE_SCHEMA = {
         "properties": {
             "title": {"type": "string"},
             "minutes": {"type": "integer"},
+            "servings": {"type": "integer", "description": "How many people the recipe serves."},
             "uses_items": {"type": "array", "items": {"type": "string"}},
             "missing_items": {"type": "array", "items": {"type": "string"}},
             "steps": {"type": "array", "items": {"type": "string"}},
@@ -122,24 +148,24 @@ _RECIPE_SCHEMA = {
                 "required": ["kcal", "protein_g", "carbs_g", "fat_g"],
             },
         },
-        "required": ["title", "minutes", "uses_items", "missing_items", "steps", "macros"],
+        "required": ["title", "minutes", "servings", "uses_items", "missing_items", "steps", "macros"],
     },
 }
 
 
 def suggest_recipes(items: list[dict], max_results: int, dietary: list[str]) -> list[dict]:
     hint = ("Suggest recipes that use up the soonest-expiring items first. Return JSON: a list of "
-            "{title:str, minutes:int, uses_items:[str], missing_items:[str], steps:[str], "
+            "{title:str, minutes:int, servings:int, uses_items:[str] (names exactly as given in the input), "
+            "missing_items:[str], steps:[str], "
             "macros:{kcal:int, protein_g:number, carbs_g:number, fat_g:number} (estimated per serving)}.")
     prompt = json.dumps({"items_soonest_expiring_first": items, "max_results": max_results,
                          "dietary": dietary})
-    data = _generate(prompt, hint, _RECIPE_SCHEMA, purpose="recipes")
-    data = data if isinstance(data, list) else data.get("recipes", [])
-    return data[:max_results]
+    return _unwrap(_generate(prompt, hint, _RECIPE_SCHEMA, purpose="recipes", list_key="recipes"),
+                   "recipes")[:max_results]
 
 
 def estimate_shelf_life(items: list[dict]) -> list[int | None]:
     """Days until expiry for each {name, category, storage}; None where unknown."""
     hint = "Return JSON: a list of integers (days of shelf life), one per input item, in order."
-    data = _generate(json.dumps(items), hint, purpose="shelf_life")
+    data = _unwrap(_generate(json.dumps(items), hint, purpose="shelf_life", list_key="days"), "days")
     return [d if isinstance(d, int) and 0 <= d <= 3650 else None for d in data][: len(items)]
