@@ -319,8 +319,8 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
     `macros_estimated` is always `true`.
   - **Cache:** per user, keyed by a SHA-256 of all the caller's active items (id, name, category,
     quantity, unit, expiry) plus `max_results` and `dietary`; TTL 6 h (`RECIPE_CACHE_TTL_SECONDS`, `0`
-    disables). Any add/edit/remove/restore changes the key, so the next call goes to Gemini. In-process
-    per gunicorn worker (not shared, lost on restart). Each lookup logs one INFO line on
+    disables). Any add/edit/remove/restore changes the key, so the next call goes to Gemini. In-process,
+    shared by the single gunicorn worker's threads (lock-guarded; lost on restart). Each lookup logs one INFO line on
     `app.recipes.cache`: `recipes_cache status=hit age_s=<n>` or `status=miss reason=empty|items_changed|expired`
     (no user data). Errors (`502`) are not cached.
   - With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
