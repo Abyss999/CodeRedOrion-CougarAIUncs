@@ -2,6 +2,26 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Dark-mode artboards (owner)
+- **The canvas has a Dark page with a dark artboard for every screen**, no longer deferred. They're generated from the light artboards with the adaptive tokens (`docs/design/tools/mkdark.py`), so the light artboards stay the single source and dark can't drift. iOS QA compares dark screenshots against them.
+
+## 2026-10-11 — Design feedback round (owner + teammate, 21 canvas comments)
+A UI/UX QA pass checked every comment. The owner made the product calls, and the rest follow the review.
+- **Spoiled items in Photo review are decided inline** (Toss it / Keep it in a "Looks spoiled" section), not a chain of popups. **Toss counts as waste:** the item is created and then removed as `thrown_out` / `expired` (two calls in v1).
+- **No extra swipe confirmation.** A swipe only opens the outcome sheet (with Cancel), and a 5 s Undo follows.
+- **Freshness shows only when a photo assessed it**, in the badge ("Looks off"). No guessed ripeness for unphotographed food, and no "Photo check" text. Estimated expiry shows as a range.
+- **Weights follow the Units setting** (US default: lb/oz). The API stays metric.
+- **Kept against the comments:**
+  - the Profile entry on Home (as an icon), because it's the only route to Settings and Delete account;
+  - the Impact pill in the header, because it's the demo path's last step;
+  - "Used it" rather than "Used in a recipe / ate it";
+  - **"Shared it"** rather than "Gave to a friend", because `donated` also covers groups and the Food Pantry;
+  - no "someone not on BiteDown" option, because the API stores recipients as users only, and no recipient is recorded when nobody claimed the item.
+- **Tagline:** "Use what you have. Share what you spare." (from #49), replacing "Eat what you buy." on the sign-in screen.
+- **Owner: requests can target several audiences at once** (friends and/or groups). One note shows on every chosen board, via a join table. Backend change queued.
+- **Deferred:** per-item photo history (needs image storage and a privacy review) and a free-text waste note.
+- The principles are in `docs/design/DESIGN_SYSTEM.md` → Principles.
+
 ## 2026-10-10 — Google Sign-In and removal rulings (#60, Fridge screen)
 - **`POST /auth/oauth/google` returns `created: true|false` in the body** as well as 201/200, so the app doesn't depend on status codes.
 - **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim is present. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
@@ -66,7 +86,7 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **Account deletion** (`DELETE /auth/me`) is in scope, since the App Store requires it once sign-up exists. Undo-remove uses `POST /items/:id/restore` within 10 min.
 - **Screen states:** empty and error use native `ContentUnavailableView`, loading uses skeleton rows, and an expired item's badge reads **"Expired"**.
 - **The inactive tab colour** follows the system under Liquid Glass (IOS-3 closed as won't-fix).
-- **Deferred:** dark artboards (the tokens cover dark mode), onboarding, notifications, localisation, widgets.
+- **Deferred:** onboarding, notifications, localisation, widgets. (Dark artboards were added on 2026-10-11.)
 
 ## 2026-10-10 — Gemini model, training venue
 - **`GEMINI_MODEL=gemini-3.8-flash`.** This is the newest non-preview Flash model in the key's model list, as listed on the Mac on 2026-10-10. `gemini-3.8-flash-lite` is the fallback if cost or latency becomes a problem. Re-check the list before the demo, because preview and retired ids change.

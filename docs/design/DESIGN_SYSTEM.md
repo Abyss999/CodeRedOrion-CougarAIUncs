@@ -4,6 +4,14 @@ The source of truth for every color, type and spacing value. `ios/App/Theme.swif
 file, so change both together. Views never use ad-hoc values. These values come from the screens
 in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 
+## Principles (owner feedback, 2026-10-11)
+1. **One status per item, in one place.** The badge carries expiry or freshness ("Use soon", "Looks off", "2–3 days", "Expired"). The meta line is the quantity only ("8 left", "5 oz bag"). No "Photo check:" text, no "added …" on rows.
+2. **No helper captions.** Labels say it. Explanations go in VoiceOver hints or on detail screens.
+3. **Predictions read as estimates.** An estimated expiry 2+ days out shows a range ending at the predicted date ("2–3 days", "4–5 days", "6–7 days", "1–2 weeks", "2+ weeks"). Today / Tomorrow / Expired and user-entered dates stay exact. Never show data we don't have, e.g. freshness for an item no photo has assessed.
+4. **Units follow Settings** (default US: lb / oz). The API stays metric, and the client converts.
+5. **Every screen keeps a route to Settings and to Impact.**
+6. **Prefer inline choices over chained alerts** (e.g. spoiled items in Photo review get Toss it / Keep it buttons in place).
+
 ## Color
 | Token | Hex | Use |
 |---|---|---|
@@ -30,6 +38,8 @@ in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 | `chartWasted` | `#E8A04C` | Chart: thrown out, waste-reason bars |
 
 ### Dark mode
+Dark artboards for every screen are on the canvas's **Dark** page (`screens/*.dark.dc.html`). They're generated from the light artboards by `docs/design/tools/mkdark.py`, a property-aware token mapping (backgrounds to dark grounds, text and strokes to dark inks, dark text kept on lime cards). The light artboards stay the source.
+
 Every token above is **adaptive**. `Theme.swift` resolves each one per trait collection, so a view
 never branches on color scheme. In dark mode the brand flips: **the lime family is the action
 color**, and forest becomes the deep ground. That's why the `forest` token is light lime in dark,

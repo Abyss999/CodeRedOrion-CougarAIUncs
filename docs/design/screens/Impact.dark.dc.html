@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark: Impact</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
+a{color:#B9D871}a:hover{color:#E8F0DA}
+@keyframes bar-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes hero-in{from{opacity:0}to{opacity:1}}
+@keyframes label-in{from{opacity:0}to{opacity:1}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){[style*="animation"]{animation-name:fade-in!important;animation-duration:.15s!important;animation-delay:0s!important}}
+
+body{background:#0F1A12}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1A12; display: flex; flex-direction: column">
+  <main style="flex: 1; overflow: hidden; padding: 56px 20px 0; display: flex; flex-direction: column; gap: 16px">
+    <header style="display: flex; align-items: center; gap: 10px">
+      <a href="Home.dark.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #18261B; box-shadow: inset 0 0 0 1px #34483A">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+      <h1 style="margin: 0; flex: 1; font-family: Outfit, sans-serif; font-weight: 600; font-size: 26px">Your impact</h1>
+    </header>
+    <div role="tablist" aria-label="Range" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #223024; border-radius: 14px; margin-top: -6px">
+      <button role="tab" aria-selected="false" style="height: 40px; border: 0; border-radius: 10px; background: transparent; color: #9DB09F; font-size: 15px; font-weight: 500">Week</button>
+      <button role="tab" aria-selected="true" style="height: 40px; border: 0; border-radius: 10px; background: #18261B; color: #E8F0DA; font-size: 15px; font-weight: 600">Month</button>
+      <button role="tab" aria-selected="false" style="height: 40px; border: 0; border-radius: 10px; background: transparent; color: #9DB09F; font-size: 15px; font-weight: 500">All</button>
+    </div>
+
+    <section style="background: #B9D871; color: #13261A; border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 4px; animation: hero-in 0.25s ease-out both">
+      <span style="font-size: 14px; color: #13261A; font-weight: 600">CO₂e kept out of the air</span>
+      <span style="font-family: Outfit, sans-serif; font-size: 48px; font-weight: 600; line-height: 1; letter-spacing: -0.02em">18.7 <span style="font-size: 22px; font-weight: 500">kg</span></span>
+      <span style="font-size: 14px; color: #2F4A2A">About the same as driving 46 miles. September: 13.2 kg</span>
+    </section>
+
+    <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="background: #18261B; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 13px; color: #9DB09F">Food saved</span>
+        <span style="font-family: Outfit, sans-serif; font-size: 26px; font-weight: 600">23 items</span>
+        <span style="font-size: 13px; color: #9DB09F">19 used · 4 given away</span>
+      </div>
+      <div style="background: #18261B; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 13px; color: #9DB09F">Money saved</span>
+        <span style="font-family: Outfit, sans-serif; font-size: 26px; font-weight: 600">$61.40</span>
+        <span style="font-size: 13px; color: #9DB09F">Waste rate 14.8%, was 21.3%</span>
+      </div>
+    </section>
+
+    <section aria-labelledby="wk" style="background: #18261B; border-radius: 16px; padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <h2 id="wk" style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">Items per week</h2>
+        <div style="display: flex; gap: 12px; font-size: 12px; color: #9DB09F">
+          <span style="display: flex; align-items: center; gap: 5px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #24783D"></span>Saved</span>
+          <span style="display: flex; align-items: center; gap: 5px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #C6802F"></span>Thrown out</span>
+        </div>
+      </div>
+      <div role="img" aria-label="Saved and thrown-out items for the last six weeks. Saved rose from 4 to 8 a week; thrown out fell from 3 to 1." style="height: 150px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; align-items: end; border-bottom: 1px solid #2A3A2D; padding: 0 4px">
+        <sc-for list="{{weeks}}" as="w" hint-placeholder-count="6">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <span style="font-size: 11px; font-weight: 600; color: #C9D6BC; animation: label-in 0.1s ease-out 0.4s both">{{w.label}}</span>
+            <div style="{{w.stackStyle}}">
+              <div style="{{w.wasteStyle}}"></div>
+              <div style="{{w.savedStyle}}"></div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; padding: 0 4px; font-size: 11px; color: #9DB09F; text-align: center">
+        <sc-for list="{{weeks}}" as="w" hint-placeholder-count="6"><span>{{w.name}}</span></sc-for>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">Why food got thrown out</h2>
+      <sc-for list="{{reasons}}" as="r" hint-placeholder-count="3">
+        <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr) 24px; align-items: center; gap: 8px; font-size: 13px">
+          <span style="color: #C9D6BC">{{r.label}}</span>
+          <div style="height: 10px; border-radius: 0 4px 4px 0; background: #2A3A2D"><div style="{{r.barStyle}}"></div></div>
+          <span style="text-align: right; font-weight: 600">{{r.n}}</span>
+        </div>
+      </sc-for>
+    </section>
+  </main>
+
+  <nav aria-label="Tabs" style="padding: 6px 14px 26px; box-sizing: border-box">
+    <div style="height: 62px; border-radius: 31px; background: rgba(24,38,27,0.82); box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; padding: 0 5px">
+    <a href="Home.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; background: rgba(185,216,113,0.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #B9D871; font-size: 10px; font-weight: 600">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"></path></svg>Home</a>
+    <a href="#" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"></path><path d="M2 10h20"></path><path d="M9 7c0-1.2 1-1.8 1-3M14 7c0-1.2 1-1.8 1-3"></path></svg>Recipes</a>
+    <a href="AddSheet.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #B9D871; font-size: 10px; font-weight: 600">
+      <span style="width: 28px; height: 28px; border-radius: 14px; background: #B9D871; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#13261A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>Add</a>
+    <a href="Fridge.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="M6 10h12M9 5v2M9 13v3"></path></svg>Fridge</a>
+    <a href="Social.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.8 3.5 6"></path></svg>Social</a>
+    </div>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const unit = 12;
+const raw = [['Sep 1', 4, 3], ['Sep 8', 5, 2], ['Sep 15', 4, 2], ['Sep 22', 6, 1], ['Sep 29', 7, 2], ['Oct 6', 8, 1]];
+const weeks = raw.map(([name, s, w], i) => ({
+name: name.split(' ')[1] ? name.replace('Sep ', '9/').replace('Oct ', '10/') : name,
+label: s + '·' + w,
+stackStyle: 'width: 100%; display: flex; flex-direction: column; transform-origin: bottom; animation: bar-grow 0.3s cubic-bezier(.2,.8,.2,1) both; animation-delay: ' + (100 + i * 20) + 'ms',
+savedStyle: 'width: 100%; height: ' + (s * unit) + 'px; background: #24783D; border-radius: 0',
+wasteStyle: 'width: 100%; height: ' + (w * unit) + 'px; background: #C6802F; border-radius: 4px 4px 0 0; margin-bottom: 2px'
+}));
+const reasons = [['Forgot about it', 9], ['Expired', 6], ["Didn't like it", 2], ['Other', 1]];
+return {
+weeks,
+reasons: reasons.map(([label, n]) => ({ label, n, barStyle: 'height: 10px; width: ' + Math.round(n / 9 * 100) + '%; border-radius: 0 4px 4px 0; background: #C6802F' }))
+};
+}
+}
+</script>
+</body>
+</html>

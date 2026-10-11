@@ -20,7 +20,7 @@ transitions (sheets, push, tab switch, swipe actions) stay native and aren't res
   - `.success`: add confirmed, remove confirmed, claim, "I made this".
   - `.selection`: steppers, segmented controls, outcome tiles.
   - `.warning`: "Threw it away".
-  - `.error`: a sign-in error.
+  - `.error`: any failed key action (a sign-in error, a failed remove, add or claim).
 
 ## Reduce Motion (required)
 When `accessibilityReduceMotion` is on, the elements still appear with a short fade. Don't skip the animation outright, and nothing may stay invisible:
@@ -35,7 +35,7 @@ iOS QA tests every flow with Reduce Motion on and off.
 | Screen | Animation | Token |
 |---|---|---|
 | **All data screens** | Skeleton rows shimmer while loading, then cross-fade to content. Empty and error states fade in | `shimmer`, `quick` |
-| **Fridge** | After a removal, the row collapses (height + fade) as the sheet dismisses. An **Undo toast** slides up from the bottom with a 5 s progress bar, then slides away | `standard` |
+| **Fridge** | After a removal, the row collapses (height + fade) at the tap, behind the sheet. The request has already fired, and the sheet holds 200 ms so the checkmark is seen. An **Undo toast** slides up from the bottom with a 5 s progress bar, then slides away | `standard` |
 | | First load of a section: rows stagger in. Not repeated on every refresh | `stagger` |
 | **Remove: outcome** | The tapped tile gets a checkmark scale-in (0.8 → 1) plus haptic, then the sheet dismisses. "Threw it away" pushes to the reason step natively | `quick`, then native |
 | **Remove: reason** | The tapped reason tile highlights, then dismisses. Haptic `.warning` | `quick` |
