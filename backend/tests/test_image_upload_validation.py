@@ -35,6 +35,7 @@ def seen(app, monkeypatch):
     """Stub the vision backends; records the mime each one receives."""
     got = []
     monkeypatch.setitem(app.config, "ML_SERVICE_URL", "")
+    monkeypatch.setattr(ml, "is_configured", lambda: True)  # receipts: OCR first, never the Gemini fallback (#95)
     monkeypatch.setattr(gemini, "detect_from_image",
                         lambda data, mime, mode: got.append(("photo", mime)) or [])
     monkeypatch.setattr(ml, "ocr", lambda data, name, mime: got.append(("receipt", mime)) or {"lines": [], "total": None})

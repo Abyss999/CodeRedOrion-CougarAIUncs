@@ -26,8 +26,17 @@ import requests
 
 from app.routes import items as items_route
 from app.services import gemini, ml
+from PIL import Image
 
-IMAGE = b"\xff\xd8receipt-timeout-sentinel-55102"
+def _jpeg_with(sentinel: bytes) -> bytes:
+    """A real 8x8 JPEG (main's upload check rejects fake bytes, BE-26) with the sentinel after EOI,
+    which the check allows (BE-28), so log-leak assertions can still search for it."""
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (240, 240, 240)).save(buf, "JPEG")
+    return buf.getvalue() + sentinel
+
+
+IMAGE = _jpeg_with(b"receipt-timeout-sentinel-55102")
 FAKE_KEY = "AIzaSy-FAKE-KEY-timeouts-sentinel"
 MODEL = "gemini-test-model"
 ML_URL = "http://ml.invalid"
