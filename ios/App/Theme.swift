@@ -209,6 +209,15 @@ enum Theme {
         static let tileCheckmark: CGFloat = 24
         /// First-guess height of the Remove sheet before its content is measured.
         static let removeSheetEstimate: CGFloat = 560
+        /// Social: minimum height of a request note (Social artboard: 168).
+        static let noteMin: CGFloat = 168
+        /// Social: filled circle inside the 44 pt "+" button beside "Requests" (34).
+        static let addGlyphCircle: CGFloat = 34
+        /// Social: food tile in the Pantry widget (36) and its loading placeholder height.
+        static let pantryTile: CGFloat = 36
+        static let pantryTilePlaceholder: CGFloat = 72
+        /// ClaimedItem: map preview height.
+        static let mapPreview: CGFloat = 160
         /// DEBUG-only invisible probe elements read by UI tests.
         static let debugProbe: CGFloat = 1
     }
