@@ -9,7 +9,7 @@ final class AuthStoreTests: XCTestCase {
     override func tearDown() { KeychainSessionStorage(service: service).clear() }
 
     /// Unsigned simulator builds (CODE_SIGNING_ALLOWED=NO, as in CI) have no keychain entitlement:
-    /// SecItemAdd returns errSecMissingEntitlement (-34018). Skip rather than fail; see IOS-4.
+    /// SecItemAdd returns errSecMissingEntitlement (-34018). Skip rather than fail; see IOS-7.
     private func requireKeychain() throws {
         let probe = KeychainSessionStorage(service: service + ".probe")
         probe.save(session)

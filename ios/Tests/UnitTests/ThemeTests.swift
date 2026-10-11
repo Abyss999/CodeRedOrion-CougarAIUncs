@@ -179,4 +179,28 @@ final class ThemeTests: XCTestCase {
         XCTAssertTrue(listed.contains("Outfit-Medium.ttf"))
         XCTAssertTrue(listed.contains("Outfit-SemiBold.ttf"))
     }
+
+    func testDisplayNameIsBiteDown() {
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String, "BiteDown")
+    }
+
+    /// Tokens added when ad-hoc view literals moved into Theme (IOS-9 and the #47 review). Values are
+    /// the artboard numbers the views used before; a change here is a visible change.
+    func testComponentTokens() {
+        XCTAssertEqual(Theme.Spacing.stack, 6)
+        XCTAssertEqual(Theme.Spacing.badgeHorizontal, 10)
+        XCTAssertEqual(Theme.Radius.bar, 4)
+        XCTAssertEqual(Theme.Radius.avatar, 12)
+        XCTAssertEqual(Theme.Size.avatar, 40)
+        XCTAssertEqual(Theme.Size.avatarGlyph, 22)
+        XCTAssertEqual(Theme.Size.groupHeaderIcon, 16)
+        XCTAssertEqual(Theme.Size.toastProgress, 3)
+        XCTAssertEqual(Theme.Size.skeletonTitle, CGSize(width: 140, height: 14))
+        XCTAssertEqual(Theme.Size.skeletonMeta, CGSize(width: 96, height: 11))
+        XCTAssertEqual(Theme.Size.skeletonBadge, CGSize(width: 56, height: 24))
+        XCTAssertEqual(Theme.Opacity.onForestFill, 0.18, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Shadow.toast.opacity, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Shadow.toast.radius, 12)
+        XCTAssertEqual(Theme.Shadow.toast.y, 4)
+    }
 }

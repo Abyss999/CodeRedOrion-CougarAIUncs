@@ -2,9 +2,11 @@ import XCTest
 import SwiftUI
 @testable import FoodWasteReducer
 
-/// Values asserted here are the ones the coordinator specified from docs/design/MOTION.md
-/// (quick easeOut 0.15, standard spring 0.35/0.85, emphasized spring 0.5/0.75, stagger 40 ms capped
-/// at 8, shimmer 1.2 s, toast 5 s). If MOTION.md changes, change both.
+/// Values asserted here are literals copied from docs/design/MOTION.md (quick easeOut 0.15,
+/// standard spring 0.35/0.85, emphasized spring 0.5/0.75, stagger 40 ms per item (20 ms for chart
+/// columns) capped at 6 items with a 0.3 s item so the sequence ends by 0.5 s, shimmer 1.2 s,
+/// listening pulse 8 pt / 30% / 1.6 s, static ring 4 pt / 25%, list insert 8 pt / 0.3 s, toast 5 s).
+/// If MOTION.md changes, change both.
 @MainActor
 final class MotionTests: XCTestCase {
     func testTokenValues() {
@@ -12,9 +14,32 @@ final class MotionTests: XCTestCase {
         XCTAssertEqual(Theme.Motion.standard, .spring(response: 0.35, dampingFraction: 0.85))
         XCTAssertEqual(Theme.Motion.emphasized, .spring(response: 0.5, dampingFraction: 0.75))
         XCTAssertEqual(Theme.Motion.staggerStep, 0.040, accuracy: 1e-9)
-        XCTAssertEqual(Theme.Motion.staggerCap, 8)
+        XCTAssertEqual(Theme.Motion.staggerCap, 6)
+        XCTAssertEqual(Theme.Motion.chartStaggerStep, 0.020, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.staggerItem, .easeOut(duration: 0.3))
+        XCTAssertEqual(Theme.Motion.staggerItemDuration, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.listInsert, .easeOut(duration: 0.3))
+        XCTAssertEqual(Theme.Motion.listInsertOffset, 8)
+        XCTAssertEqual(Theme.Motion.pulseGrowth, 8)
+        XCTAssertEqual(Theme.Motion.pulsePeakOpacity, 0.30, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.pulsePeriod, 1.6, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.pulseStaticWidth, 4)
+        XCTAssertEqual(Theme.Motion.pulseStaticOpacity, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.pulseLineWidth, 2)
+        XCTAssertEqual(Theme.Motion.shimmerHighlightOpacity, 0.65, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.shimmerBandWidth, 0.6, accuracy: 1e-9)
         XCTAssertEqual(Theme.Motion.shimmerDuration, 1.2, accuracy: 1e-9)
-        XCTAssertLessThanOrEqual(Theme.Motion.oneShotLimit, 0.5)
+        XCTAssertEqual(Theme.Motion.oneShotLimit, 0.5, accuracy: 1e-9)
+    }
+
+    /// MOTION.md: "5 x 40 ms of delay + a 0.3 s item = 0.5 s"; the whole sequence ends within 0.5 s.
+    func testFullStaggerSequenceFitsTheOneShotLimit() {
+        let last = Theme.Motion.staggerDelay(index: 1_000) + Theme.Motion.staggerItemDuration
+        XCTAssertEqual(last, 0.5, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(last, Theme.Motion.oneShotLimit + 1e-9)
+        let chartLast = Theme.Motion.staggerDelay(index: 1_000, step: Theme.Motion.chartStaggerStep)
+            + Theme.Motion.staggerItemDuration
+        XCTAssertLessThanOrEqual(chartLast, Theme.Motion.oneShotLimit + 1e-9)
     }
 
     func testTokensAreDistinct() {
@@ -34,12 +59,15 @@ final class MotionTests: XCTestCase {
         XCTAssertEqual(Theme.Motion.animation(Theme.Motion.standard, reduceMotion: false), Theme.Motion.standard)
     }
 
-    func testStaggerDelayIs40msPerIndexCappedAtEight() {
+    /// Capped at 6 items: index 5 (the 6th item) is 5 x 40 ms = 0.2 s; items past the 6th share it.
+    func testStaggerDelayIs40msPerIndexCappedAtSixItems() {
         XCTAssertEqual(Theme.Motion.staggerDelay(index: 0), 0, accuracy: 1e-9)
         XCTAssertEqual(Theme.Motion.staggerDelay(index: 1), 0.040, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.staggerDelay(index: 4), 0.160, accuracy: 1e-9)
         XCTAssertEqual(Theme.Motion.staggerDelay(index: 5), 0.200, accuracy: 1e-9)
-        XCTAssertEqual(Theme.Motion.staggerDelay(index: 8), 0.320, accuracy: 1e-9)
-        for i in 9...50 { XCTAssertEqual(Theme.Motion.staggerDelay(index: i), 0.320, accuracy: 1e-9, "index \(i)") }
+        for i in 6...50 { XCTAssertEqual(Theme.Motion.staggerDelay(index: i), 0.200, accuracy: 1e-9, "index \(i)") }
+        XCTAssertEqual(Theme.Motion.staggerDelay(index: 3, step: Theme.Motion.chartStaggerStep), 0.060, accuracy: 1e-9)
+        XCTAssertEqual(Theme.Motion.staggerDelay(index: 9, step: Theme.Motion.chartStaggerStep), 0.100, accuracy: 1e-9)
         XCTAssertEqual(Theme.Motion.staggerDelay(index: -3), 0, accuracy: 1e-9, "negative index clamps to 0")
         let delays = (0..<20).map { Theme.Motion.staggerDelay(index: $0) }
         XCTAssertEqual(delays, delays.sorted(), "never decreases")
@@ -54,7 +82,8 @@ final class MotionTests: XCTestCase {
         XCTAssertEqual(c.generation, 1)
         c.restart()
         XCTAssertEqual(c.generation, 2)
-        XCTAssertGreaterThan(StaggerController.window, Theme.Motion.staggerDelay(index: 8))
+        XCTAssertGreaterThan(StaggerController.window,
+                             Theme.Motion.staggerDelay(index: Theme.Motion.staggerCap) + Theme.Motion.staggerItemDuration)
     }
 
     func testHapticsProviderIsSwappableAndRecords() {

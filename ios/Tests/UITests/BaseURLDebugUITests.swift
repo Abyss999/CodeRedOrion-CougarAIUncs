@@ -38,7 +38,7 @@ final class BaseURLDebugUITests: XCTestCase {
         field.typeText("https://demo-tunnel.trycloudflare.com")
         app.buttons[ID.urlSave].tap()
         XCTAssertTrue(current.label.contains("https://demo-tunnel.trycloudflare.com"), current.label)
-        XCTAssertFalse(app.staticTexts[ID.urlError].exists)
+        XCTAssertFalse(app.urlError.exists)
 
         app.buttons[ID.urlReset].tap()
         XCTAssertTrue(current.label.contains("127.0.0.1:5055"), "reset should restore the default: \(current.label)")
@@ -52,12 +52,31 @@ final class BaseURLDebugUITests: XCTestCase {
         field.tap()
         field.typeText("ftp://nope.example.com")
         app.buttons[ID.urlSave].tap()
-        // At AX5 on a small phone the keyboard and large text push the error off screen (form rows are
-        // lazy), so scroll for it before asserting.
-        let err = app.staticTexts[ID.urlError]
-        if !err.waitForExistence(timeout: 2) { app.swipeUp() }
-        XCTAssertTrue(err.waitForExistence(timeout: 3))
+        // IOS-5 regression: the error is a `Label` row directly under the field in the "API base URL"
+        // section, and the sheet scrolls it to the centre on every failed Save, so it is on screen
+        // without the test scrolling, including at AX5 on the iPhone SE with the keyboard up.
+        let err = app.urlError
+        XCTAssertTrue(err.waitForExistence(timeout: 3), "debug.baseurl.error missing")
+        XCTAssertTrue(err.isHittable, "error must be visible without scrolling")
+        XCTAssertTrue(err.label.contains("valid http"), "error text: \(err.label)")
+        XCTAssertGreaterThan(err.frame.minY, app.textFields[ID.urlField].frame.minY, "error sits under the field")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists { XCTAssertLessThanOrEqual(err.frame.maxY, keyboard.frame.minY + 1, "error hidden by the keyboard") }
+        XCTAssertGreaterThanOrEqual(err.frame.minY, app.windows.firstMatch.frame.minY, "error above the top edge")
+        attachScreenshot(app, name: "baseurl-error")
         XCTAssertTrue(app.staticTexts[ID.urlCurrent].label.contains("127.0.0.1:5055"))
+
+        // A valid save clears the error.
+        let field2 = app.textFields[ID.urlField]
+        field2.tap()
+        let typed = (field2.value as? String)?.count ?? 0
+        field2.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed))
+        field2.typeText("https://ok.example.com")
+        app.buttons[ID.urlSave].tap()
+        XCTAssertTrue(app.staticTexts[ID.urlCurrent].label.contains("https://ok.example.com"),
+                      app.staticTexts[ID.urlCurrent].label)
+        XCTAssertFalse(app.urlError.exists, "error clears after a valid save")
+        resetViaSheet(app)
     }
 
     func testOverridePersistsAcrossRelaunchUntilReset() {

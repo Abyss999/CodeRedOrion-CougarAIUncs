@@ -106,3 +106,53 @@ Mac: Apple M4 Pro, Xcode 26.6. Simulators: iPhone 17 Pro and a new **iPhone SE (
 - **Reduce Motion on/off in UI tests**: `simctl ui` on this Xcode only supports `appearance`, `increase_contrast`, `content_size`; the builder added no launch argument. Covered by unit tests of `Theme.Motion.animation(_:reduceMotion:)`. Request: a DEBUG launch arg that forces `\.accessibilityReduceMotion`.
 - **Shimmer and toast video clip** (`docs/qa/ios/`): no screen shows `SkeletonList` and no hook shows the toast, so there is nothing to record. To do when a screen or hook exists. `docs/design/MOTION.md` is not in this worktree, so token values were checked against the coordinator's numbers; re-check against the file once present.
 - Food-group glyph assets (Grains/Pantry swap): no view renders them yet.
+
+## 2026-10-10: Foundation re-verify (#47)
+Head: `b6429df` plus the builder's uncommitted `ios/App` and `project.yml` fixes (IOS-5, 9, 10, 11, the Add `Binding`, `APIDate`, tokens, id renames, BiteDown) plus the QA test edits below. Mac: Apple M4 Pro, Xcode 26.6, XcodeGen 2.45.4, `CODE_SIGNING_ALLOWED=NO`. `xcodegen generate`, then one full `xcodebuild test` per device, run one after the other with no backend suite running.
+
+### Verdict: PASS
+| Device | Unit | UI |
+|---|---|---|
+| iPhone 17 Pro (iOS 26.5), light, `large` | **117 run, 0 failed, 3 skipped** (Keychain, IOS-7 by design) | **24 run, 0 failed**, no expected failures |
+| iPhone SE QA (iOS 26.5), **AX5** (`accessibility-extra-extra-extra-large`) | **117 run, 0 failed, 3 skipped** | **24 run, 0 failed**, no expected failures |
+
+The SE was reset to `large` and shut down afterwards. The 17 Pro was left on light / `large`.
+
+### Bug status
+| ID | Status | Evidence |
+|---|---|---|
+| IOS-4 | fixed | `testTabIdentifiersReachTheTabBar_IOS4` is now strict over 3 launches per run: `tab.home`…`tab.social` on every launch, on both devices |
+| IOS-5 | fixed | `testInvalidSchemeShowsErrorAndKeepsDefault` (strict, no scrolling): on SE AX5 the error is hittable, under the field and above the keyboard. Before: [se-ax5-ios5-before.png](media/ios-foundation/se-ax5-ios5-before.png). After: [se-ax5-baseurl-error.png](media/ios-foundation/se-ax5-baseurl-error.png) |
+| IOS-6 | fixed | `xcodebuild -showBuildSettings` with a temporary `Local.xcconfig` (deleted afterwards): Debug and Release both resolve `API_BASE_URL = https://local-override.example.com`, bundle id `com.qa.test.fwr` |
+| IOS-7 | fixed | Test targets have `GENERATE_INFOPLIST_FILE: YES`. `save()` logs `Keychain save failed, OSStatus -34018` and returns false (seen in the unsigned run). The 3 real-Keychain tests still skip unsigned, by design |
+| IOS-8 | fixed | `.github/workflows/ios.yml`: `-destination "platform=iOS Simulator,name=$SIM_NAME,OS=26.5"` |
+| IOS-9 | fixed | `SkeletonAccessibilityTests` (hosted `SkeletonList`, AX tree on): exactly 1 element, `<screen>.loading`, label "Loading", no per-row ids. `SkeletonRow` uses only Theme tokens (`ThemeTests.testComponentTokens` pins them). No numeric frame, spacing, radius or opacity literals are left in `ios/App` views (grep) |
+| IOS-10 | fixed (VoiceOver) | `testTabButtonsHaveNoStrayImageLabels_IOS10`: the button labels are exactly Home, Recipes, Add, Fridge, Social and are queryable by id. Note: XCUITest still lists an image *inside* each button with a symbol label (`home`, `frying.pan.fill`). The button is the VoiceOver element, so that image is not a stop; it is logged, not asserted. No other view uses these SF Symbols, so the shared-image risk does not apply yet |
+| IOS-11 | **new, fixed in this round** (medium) | At AX5 the toast kept message and Undo side by side, so on the SE the message broke mid-word ("spinac/h re-/move/d"): [before](media/ios-foundation/se-ax5-toast-before.png). Now stacked: [se-ax5-toast-stacked.png](media/ios-foundation/se-ax5-toast-stacked.png). `testToastMessageIsNotSqueezedAtAX5_IOS11` is strict: Undo below the message, message ≥ 80% of the toast width, Undo ≥ 44 pt, toast above the tab bar |
+
+**CI failure `testAddFromFridgeKeepsFridgeSelected` (macos-26): test flake, not an app bug.** In CI the grabber drag did not dismiss the sheet within 5 s on a slow runner (the drag synthesis alone took 3.3 s), while the same helper passed in the other two Add tests in the same run. Locally it passed 5/5 iterations (`-test-iterations 5`) and in every full run on both devices. Fix in the test: wait for the sheet frame to settle, then drag, retrying up to 3 times. The builder's custom `Binding` (Add never becomes the selection) is in this head and passes too. No IOS id was assigned.
+
+No open iOS bugs from this round. Still open from earlier: IOS-2 (glass tab bar vs artboard; owner).
+
+### Tests changed (`ios/Tests/**`)
+- `MotionTests`: stagger cap is now 6 (`testStaggerDelayIs40msPerIndexCappedAtSixItems`: index 5 = 0.2 s, later indexes share it). `testTokenValues` pins every `Theme.Motion` token against `docs/design/MOTION.md`: quick, standard, emphasized, 40 ms / 20 ms chart step, cap 6, 0.3 s item, list insert 8 pt / 0.3 s, pulse 8 pt / 30% / 1.6 s, static ring 4 pt / 25%, shimmer 1.2 s, one-shot 0.5 s. It also pins the builder's pulse line width and shimmer band and highlight. New `testFullStaggerSequenceFitsTheOneShotLimit` (5 × 40 ms + 0.3 s = 0.5 s exactly). The code matches MOTION.md; no discrepancy.
+- New `APIDateTests` (15): backend-shaped `Item`, `ItemsResponse`/`SectionsResponse`/`ItemResponse`, `AuthSession.user.created_at` and `Impact.weekly.week` JSON.
+  - Strings decoded: `…T12:00:00.123456+00:00`, `…T12:00:00+00:00`, `Z`, `.000Z`, `.123456Z`, and the week as a date or a midnight `+00:00` timestamp.
+  - `parse` forms: T/t/space separators, 1-9 digit fractions crossed with Z/`+00:00`/no zone, `±HH:MM` and `±HHMM` (+05:30, +13:45, -05:00), a year rollover, a leap day, and date-only as local midnight in 4 zones.
+  - About 45 rejected strings: bare dot, more than 9 digits, bare `+00`, out-of-range fields, bad separators, trailing junk.
+  - Encoding: a whole-second `Z` string, and `dayString` at UTC+14.
+  - The app has no event model, so "event" coverage is the date fields the app decodes.
+- New `SkeletonAccessibilityTests` (3); `ThemeTests` adds `testComponentTokens` and `testDisplayNameIsBiteDown`.
+- `BaseURLDebugUITests`: ids renamed to `debug.versionlabel` / `debug.baseurl.*`. The error is queried as the Label's **text** (`app.staticTexts`): SwiftUI puts the id on both the icon and the text. The test asserts strictly that the error is visible without scrolling and clears after a valid save.
+- New `MotionUITests` (7), via `-UITestShowToast` and `-UITestReduceMotion`:
+  - message, Undo label, a 44 pt target, and the toast above the tab bar
+  - Undo calls back (`toast.undo.marker`) and dismisses
+  - auto-dismiss: not before 5 s from launch, and gone within 7 s of first sighting, without calling Undo
+  - Reduce Motion: the toast appears, Undo works, its frame does not move (a fade, not a slide), and the timeout is unchanged
+  - AX5 stacked layout (IOS-11)
+- `TabShellUITests`: IOS-4 strict, IOS-10 test, sturdier sheet dismissal. `README.md`: the new ids, launch args, the loading-id rule and the Label id note.
+
+### Motion evidence (iPhone 17 Pro)
+- [toast-motion.mp4](media/ios-foundation/toast-motion.mp4) (494 KB, 9.8 s, 440×960, `avconvert` Preset960x540): launch, then the toast with its 5 s progress bar, then it slides away. A frame sheet sampled every 0.5 s shows the toast for about 5 s.
+- **No stagger is shown**: no screen in the foundation uses `staggeredAppearance` yet. It is covered by unit tests; record it with the first list screen (Fridge).
+- Screenshots: [light](media/ios-foundation/toast-light.png), [dark](media/ios-foundation/toast-dark.png). In dark mode the toast uses the lime surface with dark text and stays legible.
