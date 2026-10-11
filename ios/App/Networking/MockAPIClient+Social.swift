@@ -86,7 +86,7 @@ extension MockAPIClient {
         let sortedGroups = groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         let r = HelpRequest(id: "req-new-\(nextID)", authorId: me.id, authorName: me.displayName, text: trimmed, status: .open,
                             fulfilledBy: nil, fulfilledByName: nil, createdAt: Date(),
-                            audiences: RequestAudiences(friends: friends, groups: sortedGroups), source: .me,
+                            audiences: RequestAudiences(friends: friends, groups: sortedGroups), source: .init(type: .me, name: me.displayName),
                             groupId: sortedGroups.first?.id, groupName: sortedGroups.first?.name)
         social.requests.insert(r, at: 0)
         return r
@@ -226,8 +226,14 @@ extension MockAPIClient {
 
     // MARK: People
 
-    func reachablePeople() async throws -> [Person] {
+    func reachablePeople(itemId: String?) async throws -> [Person] {
         try await gate("reachablePeople")
-        return social.people
+        guard let itemId, let listing = social.listings.first(where: { $0.itemId == itemId }) else { return social.people }
+        let people = social.people.map { p -> Person in
+            var p = p
+            p.isClaimer = listing.claimedBy != nil && p.id == listing.claimedBy
+            return p
+        }
+        return people.filter { $0.isClaimer == true } + people.filter { $0.isClaimer != true }
     }
 }

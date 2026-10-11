@@ -126,13 +126,21 @@ final class FridgeModel {
 
     /// Optimistic removal: the row goes now, the toast offers Undo for 5 s, and the request runs in
     /// the background. A failure puts the row back and shows the banner.
-    func remove(_ item: Item, choice: RemoveChoice, reduceMotion: Bool) {
+    /// `showToastNow` is for removals made without a sheet (the banner's "Try again"): the toast
+    /// shows at once instead of waiting for a sheet dismissal that will never come.
+    func remove(_ item: Item, choice: RemoveChoice, reduceMotion: Bool, showToastNow: Bool = false) {
         guard let location = location(of: item.id) else { return }
         banner = nil
         locallyRemoved.insert(item.id)
         withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { delete(item.id) }
-        pendingToast = UndoToastItem(message: "\(item.name) removed") { [weak self] in
+        let undoToast = UndoToastItem(message: "\(item.name) removed") { [weak self] in
             self?.undo(item, location: location, reduceMotion: reduceMotion)
+        }
+        if showToastNow {
+            pendingToast = nil
+            toast = undoToast
+        } else {
+            pendingToast = undoToast
         }
         let api = self.api
         pendingRemovals[item.id] = Task { [weak self] in
@@ -141,6 +149,9 @@ final class FridgeModel {
                                              wasteReason: choice.wasteReason, recipientId: choice.recipientId)
                 return true
             } catch {
+                // The server already removed it (409 already_removed), or answered 2xx with a body
+                // we couldn't read: the removal stands.
+                if error.removeStands { return true }
                 self?.removeFailed(item, location: location, choice: choice, error: error, reduceMotion: reduceMotion)
                 return false
             }
@@ -164,7 +175,7 @@ final class FridgeModel {
         Haptics.error()
         showBanner("Couldn't remove \(item.name). It's back in your list.") { [weak self] in
             guard let self, let current = self.item(id: item.id) else { return }
-            self.remove(current, choice: choice, reduceMotion: reduceMotion)
+            self.remove(current, choice: choice, reduceMotion: reduceMotion, showToastNow: true)
         }
     }
 
@@ -294,5 +305,14 @@ enum ItemText {
         if let e = expiryPhrase(item) { parts.append(e) }
         if hasOpenListing(item) { parts.append("on Share") }
         return parts.joined(separator: " · ")
+    }
+}
+
+private extension Error {
+    /// True when a failed remove call still means the item is removed on the server.
+    var removeStands: Bool {
+        guard let e = self as? APIError else { return false }
+        if case .decoding = e { return true }
+        return e.code == "already_removed"
     }
 }

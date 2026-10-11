@@ -10,6 +10,8 @@ struct RemoveSheet: View {
 
     @State private var chosen: RemoveOutcome?
     @State private var showReason = false
+    /// Set once any outcome is submitted (including the reason step), so nothing else can be tapped.
+    @State private var submitted = false
     @State private var contentHeight: CGFloat = Theme.Size.removeSheetEstimate
 
     init(item: Item, onRemove: @escaping (RemoveChoice) -> Void, close: @escaping () -> Void) {
@@ -34,6 +36,7 @@ struct RemoveSheet: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showReason) {
                 RemoveReasonView(item: item) { reason in
+                    submitted = true
                     onRemove(RemoveChoice(outcome: .thrownOut, wasteReason: reason))
                 } close: { close() }
             }
@@ -63,11 +66,12 @@ struct RemoveSheet: View {
                 }
                 RemoveOutcomeTile(outcome: .thrownOut, subtitle: "Counts as waste. One quick question next",
                                   isChosen: false, leadsOn: true) {
-                    guard chosen == nil else { return }
+                    guard chosen == nil, !submitted else { return }
                     Haptics.selection()
                     showReason = true
                 }
             }
+            .allowsHitTesting(!submitted)
             if let claimer {
                 recipientLine(claimer)
             }
@@ -125,7 +129,8 @@ struct RemoveSheet: View {
     /// Used / gave away: the removal happens now; the sheet waits only long enough for the
     /// checkmark to land (`Theme.Motion.confirmHold`).
     private func finish(_ outcome: RemoveOutcome) {
-        guard chosen == nil else { return }
+        guard chosen == nil, !submitted else { return }
+        submitted = true
         chosen = outcome
         Haptics.success()
         onRemove(RemoveChoice(outcome: outcome))

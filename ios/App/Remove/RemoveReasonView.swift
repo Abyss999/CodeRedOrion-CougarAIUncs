@@ -73,6 +73,7 @@ struct RemoveReasonView: View {
         .background(Theme.Colors.ground)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .navigationBarBackButtonHidden(chosen != nil)
         .accessibilityIdentifier(AccessibilityID.RemoveReason.screen)
     }
 
