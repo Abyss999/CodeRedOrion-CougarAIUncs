@@ -555,6 +555,9 @@ def from_photo():
     return jsonify(**body)
 
 
+RECEIPT_CATEGORIZE_BUDGET_S = 40  # worst case then: read 91.5 s at most, or read <= 40 s + categorize 61.5 s
+
+
 def _read_receipt(data, filename, mime):
     """(body, source): the ML service's OCR first; Gemini vision on the image if the service is unset
     or fails. Both unavailable -> 502 naming both."""
@@ -576,12 +579,15 @@ def _read_receipt(data, filename, mime):
 @bp.post("/from-receipt")
 @require_auth
 def from_receipt():
+    started = time.monotonic()
     data, filename, mime = _image_upload()
     body, source = _read_receipt(data, filename, mime)
     lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()
              and not candidates.is_receipt_noise(l.get("name"), l.get("price"))]
     enriched = None
-    if lines and gemini.is_configured():
+    # Reading can take up to 2 x 45 s + retry delay; a second slow call would pass gunicorn's 120 s timeout,
+    # so after a slow read keep the printed names and the food-group heuristic.
+    if lines and gemini.is_configured() and time.monotonic() - started <= RECEIPT_CATEGORIZE_BUDGET_S:
         try:
             enriched = gemini.categorize_receipt_lines([str(l["name"]).strip() for l in lines])
         except gemini.UpstreamError:
