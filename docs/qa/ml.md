@@ -786,3 +786,30 @@ Data-owner ruling (from the builder): MeatScan, DaFiF and food_spoilage_status a
 
 ## Final verdict: safe to include in the Colab run? **YES (PASS), with named risks labelled**
 No leakage on any of the three sources; every gate passes. The risks that must be labelled in any quoted metric: ML-51 (fish held-out = unseen species tuna, one batch, one tray), ML-52 (beef spoiled = one specimen in a black bag, scene-confounded, uncapped, 49% of train before the new sources are counted against the rest, no held-out metric), ML-55 (DaFiF tray colour tracks the label), plus: food_spoilage_status is white-background web product shots with baked-in augmentation (separate domain), and spoiled-recall evidence is thin outside fish (above).
+
+## 2026-10-11: notebook cell 4 fresh-build fix + agrifreshnet pHash re-check (PR #62)
+Trigger: a Colab run reused a leftover `/content/fwr_data`; `!python prepare_dataset.py` refused the non-empty `--out`, `!` swallowed the exit code, and the gates ran on the stale dataset built by main's older code (agrifreshnet pHash 1.12% > 1%).
+
+**Cell 4 change (read from the uncommitted diff):** the only hunk in the notebook. The `else:` branch is now `shutil.rmtree(DATA, ignore_errors=True)` then `subprocess.run([sys.executable, "prepare_dataset.py", "--sources", "/content/sources.colab.json", "--out", DATA], check=True)`. `shutil`, `subprocess`, `sys`, `DATA` are all defined in cell 1; cwd is `/content/repo/ml/yolo` (cell 1 `%cd`, no later `%cd`; cell 3 only passes `cwd=` to subprocess). The `DATA_ON_DRIVE` restore branch is byte-identical. Executed the new branch against a stale dir and a bad sources file: the stale report is deleted and `CalledProcessError` is raised (the gates are never reached). Confirmed `prepare_dataset.py` exits non-zero with "refusing to overwrite" on a non-empty `--out` (the original failure mode).
+
+**Regression test added:** `ml/eval/tests/test_notebook_prepare_fresh.py` (4 tests): no `!python` in cells 3/4, rmtree before a `check=True` prepare, Drive branch still `check=True` + stamp, and a functional run of the else-branch.
+
+**Gates re-run by me on the builder's agrifreshnet-only repro** (`mldata/repro_agri/fwr_data`, built 00:25 after the branch's `prepare_dataset.py` 00:23; only agrifreshnet non-pending; dataset untouched, sha256 of report/manifest unchanged; my outputs in `mldata/repro_agri/qa_leak`, `qa_strat`):
+| Gate | Result |
+|---|---|
+| `leakage_check.py` | **ML-21 PASS**, exit 0. agrifreshnet: 567 held-out / 4,109 train+val originals; 412 timestamped, 0 within 60 s and 300 s, min gap 356 s; **pHash 2 / 567 = 0.35%** (both pairs at distance 6). Matches the builder's 567 / 2 / 0.35%. dHash 52 (9.17%) is reported only, not a gate |
+| `stratification_check.py` | **PASS, FAILURES: none**, exit 0; never-trained cells none; report vs manifest all ok; required cells missing from held-out none; not measurable: eggplant/spoiled. Info: bitter_melon/spoiled and papaya/semi_fresh have no val image |
+| `parent_sibling_check.py all` | exit 0 |
+| cls train/val dirs | fresh, semi_fresh, spoiled in both |
+
+Splits: train 3,761 / val 348 / held-out 567 images. This is a single-source dataset: it shows the branch code's agrifreshnet split passes, not the multi-source Colab dataset (no full prepare run here, as instructed).
+
+**Tests:** `ml/yolo/tests/test_notebook_dry_run.py` 7 passed; `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped (real MeatScan CSV not downloaded); `ml/eval/tests` 219 passed (215 + 4 new).
+
+**Other `!` calls whose failure is swallowed:** none left in cells 3/4 before the gates (cell 1's `!pip`/`!python -c "import ultralytics"` are followed by a hard `import imagehash`; the cell 3 `!curl` failure surfaces as a zip / `StopIteration` error). After the gates, one:
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-57 | low | Cell 5 runs `!python train.py ...` (both branches): a crash is ignored, and `train.py` never clears `<RUN_DIR>/export`, so cell 6 can report "DRY RUN OK" (or load/download `detector.pt`) from an earlier run's export with the same RUN_ID. Fix: `subprocess.run([...], check=True)` as in cell 4 | open (builder) |
+
+**Verdict: PASS** for the cell-4 fix and the agrifreshnet leakage re-check. The 1.12% was the stale dataset; the branch code gives 0.35%. ML-57 does not block this PR.
