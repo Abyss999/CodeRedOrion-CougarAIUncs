@@ -25,12 +25,19 @@ import Foundation
 /// - `-UITestPhoto502`        `from-photo` and `from-receipt` fail with 502 `upstream_unavailable`
 /// - `-UITestCameraDenied`    screens behave as if camera access is denied (no mock call; read `launch.cameraDenied`)
 /// - `-UITestTossFails`       removing with outcome `thrown_out` fails (used / donated still work)
+/// - `-UITestReceiptUnavailable` the Add sheet shows the Receipt tile as unavailable (as on the live API while OCR is down)
+/// - `-UITestMicDenied`      the Add text "Say it" mic behaves as if microphone access is denied (PermissionCard)
 /// - `-UITestRecipes502`      `POST /recipes/suggest` fails with 502 `upstream_unavailable`
 /// - `-UITestGoogle409`       Google sign-in fails with 409 `account_exists_use_password`
 /// - `-UITestClaimConflict`   claiming a listing fails with 409 `already_claimed`
 /// - `-UITestEmailUnknown`    adding a friend fails with 404 `not_found` (unknown email)
 /// - `-UITestFailBatch`       `remove-batch` and `restore-batch` fail (network error)
+/// - `-UITestFailPeople`      `GET /people/reachable` fails (the Given-to menu falls back to its defaults)
 /// - `-UITestFailShare`       `POST /share` fails (network error)
+/// - `-UITestOpenImpact`     present ImpactView full screen from RootTabView on launch (until Home links to it)
+/// - `-UITestImpactFailOnce` the first `GET /impact` fails (network), the retry succeeds
+/// - `-UITestFailSocial`     the Social lists (requests, my requests, Food Pantry) fail with a network error
+/// - `-UITestFailFulfil`      `POST /requests/:id/fulfil` and `POST /requests` fail (network error)
 /// - `-UITestUndoWindow <s>`   Undo toast window in seconds (e.g. 30) instead of 5 s (15 s with assistive tech)
 struct LaunchConfiguration: Equatable, Sendable {
     var useMockAPI = false
@@ -56,18 +63,27 @@ struct LaunchConfiguration: Equatable, Sendable {
     var photo502 = false
     var cameraDenied = false
     var tossFails = false
+    var receiptUnavailable = false
+    var micDenied = false
     var recipes502 = false
     var google409 = false
     var claimConflict = false
     var emailUnknown = false
     var failBatch = false
     var failShare = false
+    var openImpact = false
+    var impactFailOnce = false
+    var failSocial = false
+    var failFulfil = false
+    var failPeople = false
     /// `-UITestUndoWindow <seconds>`; nil keeps `UndoToastTiming`.
     var undoWindow: Duration?
 
     static let slowDelay: Duration = .seconds(3)
     static let defaultDelay: Duration = .milliseconds(150)
 
+    static let flagFailSocial = "-UITestFailSocial"
+    static let flagFailFulfil = "-UITestFailFulfil"
     static let flagMockAPI = "-UITestMockAPI"
     static let flagSeed = "-UITestSeed"
     static let flagSignedIn = "-UITestSignedIn"
@@ -91,12 +107,17 @@ struct LaunchConfiguration: Equatable, Sendable {
     static let flagPhoto502 = "-UITestPhoto502"
     static let flagCameraDenied = "-UITestCameraDenied"
     static let flagTossFails = "-UITestTossFails"
+    static let flagReceiptUnavailable = "-UITestReceiptUnavailable"
+    static let flagMicDenied = "-UITestMicDenied"
     static let flagRecipes502 = "-UITestRecipes502"
     static let flagGoogle409 = "-UITestGoogle409"
     static let flagClaimConflict = "-UITestClaimConflict"
     static let flagEmailUnknown = "-UITestEmailUnknown"
     static let flagFailBatch = "-UITestFailBatch"
     static let flagFailShare = "-UITestFailShare"
+    static let flagOpenImpact = "-UITestOpenImpact"
+    static let flagImpactFailOnce = "-UITestImpactFailOnce"
+    static let flagFailPeople = "-UITestFailPeople"
     static let flagUndoWindow = "-UITestUndoWindow"
     /// Effectively "never" for `-UITestLoadingForever`.
     static let foreverDelay: Duration = .seconds(3600)
@@ -126,12 +147,19 @@ struct LaunchConfiguration: Equatable, Sendable {
         photo502 = arguments.contains(Self.flagPhoto502)
         cameraDenied = arguments.contains(Self.flagCameraDenied)
         tossFails = arguments.contains(Self.flagTossFails)
+        receiptUnavailable = arguments.contains(Self.flagReceiptUnavailable)
+        micDenied = arguments.contains(Self.flagMicDenied)
         recipes502 = arguments.contains(Self.flagRecipes502)
         google409 = arguments.contains(Self.flagGoogle409)
         claimConflict = arguments.contains(Self.flagClaimConflict)
         emailUnknown = arguments.contains(Self.flagEmailUnknown)
         failBatch = arguments.contains(Self.flagFailBatch)
         failShare = arguments.contains(Self.flagFailShare)
+        openImpact = arguments.contains(Self.flagOpenImpact)
+        impactFailOnce = arguments.contains(Self.flagImpactFailOnce)
+        failSocial = arguments.contains(Self.flagFailSocial)
+        failFulfil = arguments.contains(Self.flagFailFulfil)
+        failPeople = arguments.contains(Self.flagFailPeople)
         if signedOut { signedIn = false }
         if expiredSession { signedIn = true }
         if let i = arguments.firstIndex(of: Self.flagUndoWindow), arguments.indices.contains(i + 1),
@@ -144,8 +172,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         // Seeding or signing in only makes sense against the mock.
         if seed != nil || signedIn || failNetwork || slowNetwork || loadingForever || failList || failListOnce
             || failRemove || failRestore || restoreNotRemoved || slowRemove || slowRestore
-            || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails
-            || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare { useMockAPI = true }
+            || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails || receiptUnavailable || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare || impactFailOnce || failSocial || failFulfil || micDenied || failPeople { useMockAPI = true }
     }
 
     /// Parsed from the process arguments in DEBUG; always empty in Release.
@@ -189,6 +216,12 @@ struct LaunchConfiguration: Equatable, Sendable {
         }
         if failBatch { b.failures["removeBatch"] = offline; b.failures["restoreBatch"] = offline }
         if failShare { b.failures["createShare"] = offline }
+        b.emptyImpact = seed == "empty"
+        if impactFailOnce { b.failFirst["impact"] = 1 }
+        if failSocial { for k in ["listRequests", "listMyRequests", "listShares"] { b.failures[k] = offline } }
+        if failFulfil { b.failures["fulfilRequest"] = offline; b.failures["createRequest"] = offline }
+        if loadingForever { for k in ["listRequests", "listMyRequests", "listShares"] { b.delays[k] = Self.foreverDelay } }
+        if failPeople { b.failures["reachablePeople"] = offline }
         return b
     }
 }

@@ -209,7 +209,7 @@ def test_no_gemini_call_without_lines(client, user, monkeypatch, gem_on, ml_on):
     fake = FakeGenai(monkeypatch, [])
     set_ocr(monkeypatch, [{"name": "  "}, "junk", {"price": 1}], total=0)
     b = post_receipt(client, user).get_json()
-    assert b == {"candidates": [], "total": 0.0, "categorized_by": "heuristic"} and fake.calls == []
+    assert b == {"candidates": [], "total": 0.0, "categorized_by": "heuristic", "source": "ocr"} and fake.calls == []
 
 
 # ---------- 2. Gemini fails -> heuristic -----------------------------------------------------
@@ -539,7 +539,7 @@ def test_only_totals_no_gemini_call(client, user, monkeypatch, gem_on, ml_on):
     fake = FakeGenai(monkeypatch, [])
     set_ocr(monkeypatch, [{"name": "SUBTOTAL", "price": 1}, {"name": "TOTAL", "price": 1}], total=1)
     b = post_receipt(client, user).get_json()
-    assert fake.calls == [] and b == {"candidates": [], "total": 1.0, "categorized_by": "heuristic"}
+    assert fake.calls == [] and b == {"candidates": [], "total": 1.0, "categorized_by": "heuristic", "source": "ocr"}
 
 
 def test_partial_gemini_answer_counts_as_gemini(client, user, monkeypatch, gem_on, ml_on):

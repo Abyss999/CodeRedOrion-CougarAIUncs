@@ -102,12 +102,14 @@ struct ItemShare: Codable, Hashable, Sendable {
     let claimedBy: Claimant?
     /// Who the open listing is offered to (owner only; absent from older backends).
     var audience: ListingAudience?
+    /// The owner's pickup spot (always visible to the owner). Backend `feat/friend-qr-pickup`.
+    var pickup: Pickup?
 
-    init(id: String, status: ShareStatus, claimedBy: Claimant?, audience: ListingAudience? = nil) {
-        self.id = id; self.status = status; self.claimedBy = claimedBy; self.audience = audience
+    init(id: String, status: ShareStatus, claimedBy: Claimant?, audience: ListingAudience? = nil, pickup: Pickup? = nil) {
+        self.id = id; self.status = status; self.claimedBy = claimedBy; self.audience = audience; self.pickup = pickup
     }
 
-    private enum CodingKeys: String, CodingKey { case id, status, claimedBy, audience }
+    private enum CodingKeys: String, CodingKey { case id, status, claimedBy, audience, pickup }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -115,6 +117,7 @@ struct ItemShare: Codable, Hashable, Sendable {
         status = try c.decode(ShareStatus.self, forKey: .status)
         claimedBy = try c.decodeIfPresent(Claimant.self, forKey: .claimedBy)
         audience = try c.decodeIfPresent(ListingAudience.self, forKey: .audience)
+        pickup = try c.decodeIfPresent(Pickup.self, forKey: .pickup)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -123,6 +126,7 @@ struct ItemShare: Codable, Hashable, Sendable {
         try c.encode(status, forKey: .status)
         try c.encodeIfPresent(claimedBy, forKey: .claimedBy)
         try c.encodeIfPresent(audience, forKey: .audience)
+        try c.encodeIfPresent(pickup, forKey: .pickup)
     }
 }
 
@@ -203,6 +207,8 @@ struct NewItem: Codable, Hashable, Sendable {
     var confidence: Double?
     var source: String?
     var groupId: String?
+    /// Per-100 g estimate from `from-photo` enrichment; sent back so the server stores it. Omitted when nil.
+    var nutrition: Nutrition?
 
     /// Post a candidate back as-is. Pass `expiryEdited: true` if the user changed the date.
     init(candidate c: Candidate, expiryEdited: Bool = false, source: String? = nil) {
@@ -211,6 +217,7 @@ struct NewItem: Codable, Hashable, Sendable {
         predictedExpiry = c.predictedExpiry.map { APIDate.dayString($0) }
         expirySource = predictedExpiry == nil ? nil : (expiryEdited ? .user : c.expirySource.flatMap(ExpirySource.init(rawValue:)))
         freshness = c.freshness; confidence = c.confidence
+        nutrition = c.nutrition
         self.source = source
     }
 
@@ -288,6 +295,8 @@ struct Candidate: Codable, Identifiable, Hashable, Sendable {
     var estPrice: Double?
     var predictedExpiry: Date?
     var expirySource: String?
+    /// Present only when `from-photo` was asked to `enrich` with `nutrition` (PR #79); nil otherwise.
+    var nutrition: Nutrition?
 
     /// Candidates have no server id; this is stable within one response.
     var id: String {

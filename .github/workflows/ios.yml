@@ -6,6 +6,12 @@ on:
     branches: [main]
     paths: ["ios/**"]
 
+concurrency:
+  # PRs: a new push cancels the stale run. main: runs queue and are never cancelled mid-run, so the full
+  # UI suite on main always completes.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     # macos-26 image: Xcode 26.x with the iOS 26 SDK and iPhone 17 simulators
@@ -25,8 +31,12 @@ jobs:
       - name: Generate project
         working-directory: ios
         run: xcodegen generate
+      # PRs: build everything (UI tests included) but run only the unit tests (~5 min). The XCUITest suites
+      # run locally by each screen's iOS QA on Simulators before sign-off, and in full here on every push to main.
       - name: Build and test
         working-directory: ios
         run: |
+          SKIP=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then SKIP="-skip-testing:FoodWasteReducerUITests"; fi
           xcodebuild test -project FoodWasteReducer.xcodeproj -scheme FoodWasteReducer \
-            -destination "platform=iOS Simulator,name=$SIM_NAME,OS=26.5" CODE_SIGNING_ALLOWED=NO
+            -destination "platform=iOS Simulator,name=$SIM_NAME,OS=26.5" CODE_SIGNING_ALLOWED=NO $SKIP

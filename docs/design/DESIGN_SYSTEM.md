@@ -61,6 +61,8 @@ and its `onForest` text turns dark.
 | `forestMid` | `#3B7046` | `#8FB45A` |
 | `forestChip` | `#2F6B3C` | `#2C4A26` |
 | `onForestChip` (text on `forestChip`) | `#F4F8E8` | `#E8F0DA` |
+| `onLime` (text on `lime`) | `#1F4D2B` | `#1F4D2B` |
+| `chartDonated` (Impact donated series) | as in `ImpactParts.swift` | as in `ImpactParts.swift` |
 | `ink` | `#13261A` | `#E8F0DA` |
 | `inkSecondary` | `#2B3D30` | `#C9D6BC` |
 | `muted` | `#45584A` | `#9DB09F` |

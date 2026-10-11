@@ -4,7 +4,7 @@ extension RemoveOutcome {
     var tileTitle: String {
         switch self {
         case .used: "Used it"
-        case .donated: "Gave it away"
+        case .donated: "Shared it"
         case .thrownOut: "Threw it away"
         }
     }
@@ -18,32 +18,23 @@ extension RemoveOutcome {
     }
 }
 
-/// One 68 pt outcome tile (`RemoveSheet` artboard). *Used it* is filled forest; the others are
-/// outlined. A checkmark scales in (0.8 → 1, `quick`; a fade under Reduce Motion) once tapped.
+/// One 68 pt outcome tile (`RemoveSheet` artboard): icon chip and title, no caption. Outlined on
+/// `surface`; once chosen it turns `limeTint` with a 2 pt `forest` border, a filled chip and a
+/// checkmark that scales in (0.8 → 1, `quick`; a fade under Reduce Motion).
 struct RemoveOutcomeTile: View {
     let outcome: RemoveOutcome
-    let subtitle: String
     let isChosen: Bool
     /// Shows a chevron: this tile leads to another step instead of finishing.
     var leadsOn = false
     let action: () -> Void
 
-    private var filled: Bool { outcome == .used }
-    private var titleInk: Color { filled ? Theme.Colors.onForest : Theme.Colors.ink }
-    private var subtitleInk: Color { filled ? Theme.Colors.onForestMuted : Theme.Colors.muted }
     private var chipFill: Color {
-        switch outcome {
-        case .used: Theme.Colors.forestChip
-        case .donated: Theme.Colors.limeTint
-        case .thrownOut: Theme.Colors.urgentBg
-        }
+        if isChosen { return Theme.Colors.forest }
+        return outcome == .thrownOut ? Theme.Colors.urgentBg : Theme.Colors.limeTint
     }
     private var chipInk: Color {
-        switch outcome {
-        case .used: Theme.Colors.lime
-        case .donated: Theme.Colors.forest
-        case .thrownOut: Theme.Colors.urgentInk
-        }
+        if isChosen { return Theme.Colors.lime }
+        return outcome == .thrownOut ? Theme.Colors.urgentInk : Theme.Colors.forest
     }
 
     var body: some View {
@@ -58,35 +49,28 @@ struct RemoveOutcomeTile: View {
                             .foregroundStyle(chipInk)
                     }
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                    Text(outcome.tileTitle)
-                        .font(Theme.Fonts.tileTitle)
-                        .foregroundStyle(titleInk)
-                    Text(subtitle)
-                        .font(Theme.Fonts.meta)
-                        .foregroundStyle(subtitleInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(outcome.tileTitle)
+                    .font(Theme.Fonts.tileTitle)
+                    .foregroundStyle(Theme.Colors.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 trailing
             }
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.vertical, Theme.Spacing.sm)
             .frame(minHeight: Theme.Size.removalOption)
-            .background(filled ? Theme.Colors.forest : Theme.Colors.surface,
+            .background(isChosen ? Theme.Colors.limeTint : Theme.Colors.surface,
                         in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             .overlay {
-                if !filled {
-                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                        .strokeBorder(Theme.Colors.border, lineWidth: Theme.Stroke.hairline)
-                }
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .strokeBorder(isChosen ? Theme.Colors.forest : Theme.Colors.border,
+                                  lineWidth: isChosen ? Theme.Stroke.selected : Theme.Stroke.hairline)
             }
             .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
         .buttonStyle(.plain)
+        .motionAnimation(Theme.Motion.quick, value: isChosen)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(outcome.tileTitle)
-        .accessibilityHint(subtitle)
         .accessibilityAddTraits(isChosen ? [.isSelected] : [])
         .accessibilityIdentifier(AccessibilityID.Remove.outcome(outcome.rawValue))
     }
@@ -102,7 +86,7 @@ struct RemoveOutcomeTile: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: Theme.Size.tileCheckmark, height: Theme.Size.tileCheckmark)
-                .foregroundStyle(filled ? Theme.Colors.lime : Theme.Colors.forest)
+                .foregroundStyle(Theme.Colors.forest)
                 .checkmarkScaleIn(isChosen)
                 .accessibilityHidden(true)
                 .accessibilityIdentifier(AccessibilityID.Remove.checkmark(outcome.rawValue))

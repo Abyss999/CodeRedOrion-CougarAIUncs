@@ -1,5 +1,7 @@
 """Visibility primitives for the social layer. Everything a user may see flows through here."""
+import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, or_
 
@@ -128,3 +130,39 @@ def caller_active_items_filter(uid):
     member_of = db.select(GroupMember.group_id).where(GroupMember.user_id == uid)
     return and_(Item.owner_id == uid, Item.removed_at.is_(None),
                 or_(Item.group_id.is_(None), Item.group_id.in_(member_of)))
+
+
+# ---------- friend QR codes (opaque, server-side, 10-minute) ----------
+FRIEND_CODE_TTL = timedelta(minutes=10)
+
+
+def make_friend_code(uid, now=None):
+    """-> (code, expires_at). A random opaque code stored in `friend_codes`; it encodes nothing about
+    the user. Reuse the newest code with at least two minutes left; prune this user's expired rows."""
+    from ..models import FriendCode
+    now = now or datetime.now(timezone.utc)
+    FriendCode.query.filter(FriendCode.user_id == uid, FriendCode.expires_at <= now).delete(
+        synchronize_session=False)
+    existing = (FriendCode.query.filter(FriendCode.user_id == uid, FriendCode.expires_at > now)
+                .order_by(FriendCode.expires_at.desc()).first())
+    if existing is not None and existing.expires_at >= now + timedelta(minutes=2):
+        db.session.commit()
+        return existing.code, existing.expires_at.replace(microsecond=0)
+    expires_at = now + FRIEND_CODE_TTL
+    code = secrets.token_urlsafe(12)  # 16 chars
+    db.session.add(FriendCode(code=code, user_id=uid, expires_at=expires_at))
+    db.session.commit()
+    return code, expires_at.replace(microsecond=0)
+
+
+def parse_friend_code(code, now=None):
+    """-> the issuing user's uuid, or None for an unknown / expired / malformed code."""
+    from ..models import FriendCode
+    if not isinstance(code, str) or not 0 < len(code) <= 64 or not code.isascii():
+        return None
+    row = db.session.get(FriendCode, code)
+    if row is None or not hmac.compare_digest(row.code.encode(), code.encode()):
+        return None
+    if (now or datetime.now(timezone.utc)) >= row.expires_at:
+        return None
+    return row.user_id

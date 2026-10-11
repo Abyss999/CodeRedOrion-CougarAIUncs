@@ -68,6 +68,9 @@ final class AuthStore {
     private(set) var session: AuthSession?
     /// True if the last sign-in could not be stored; the session lives in memory only (signed out on relaunch).
     private(set) var persistenceFailed = false
+    /// True after a global 401 (`expireSession()`), cleared by the next sign-in or a deliberate sign-out.
+    /// The app root reads it to show the "You were signed out" state instead of the plain landing.
+    private(set) var sessionExpired = false
     private let storage: SessionStorage
 
     var token: String? { session?.token }
@@ -80,12 +83,24 @@ final class AuthStore {
     }
 
     func signIn(_ session: AuthSession) {
+        sessionExpired = false
         self.session = session
         persistenceFailed = !storage.save(session)
     }
 
+    /// Deliberate sign-out (Settings > Log out, account deletion): clears the Keychain token.
     func signOut() {
+        sessionExpired = false
         session = nil
         storage.clear()
+    }
+
+    /// A 401 on an authenticated call: clears the token like `signOut()`, and tells the app root the
+    /// session ran out (only when there was a session to lose).
+    func expireSession() {
+        let hadSession = session != nil
+        session = nil
+        storage.clear()
+        if hadSession { sessionExpired = true }
     }
 }

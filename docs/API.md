@@ -1,6 +1,6 @@
 # API (v0 contract)
 
-Status: ✅ = implemented and merged on `main` (backend core, social, items wave 2, insights wave 2, Google sign-in, multi-audience requests; migrations `0001`-`0006`). Base URL:
+Status: ✅ = implemented and merged on `main` (backend core, social, items wave 2, insights wave 2, Google sign-in, multi-audience requests; migrations `0001`-`0008`). Base URL:
 `http://127.0.0.1:5055`. JSON in/out, `snake_case`, ISO-8601 UTC timestamps (`...Z`). Auth:
 `Authorization: Bearer <jwt>` (HS256, 30-day expiry) on everything except `/health`, `/auth/signup`, `/auth/login` and `/auth/oauth/google` (`DELETE /auth/me` needs the token).
 Errors always: `{"error": {"code": "...", "message": "..."}}` (including 404/405/413/500).
@@ -8,7 +8,7 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 
 | Status | `code` values | Meaning |
 |---|---|---|
-| 400 | `validation_error` | Bad/missing fields, any string containing a NUL (`\u0000`) anywhere in a JSON body, over-long strings (limits below), e.g. `waste_reason` on a non-`thrown_out` removal |
+| 400 | `validation_error`, `invalid_code` | Bad/missing fields, any string containing a NUL (`\u0000`) anywhere in a JSON body, over-long strings (limits below), e.g. `waste_reason` on a non-`thrown_out` removal; `invalid_code` = an expired, forged or malformed friend code |
 | 401 | `unauthorized`, `invalid_credentials`, `invalid_token` | `unauthorized`: missing/invalid/expired bearer token (the only code the auth guard emits); `invalid_credentials`: bad login; `invalid_token`: rejected Google ID token (`POST /auth/google` only) |
 | 403 | `forbidden`, `email_not_verified` | Authenticated but not your item / not a member of that group / not the owner or author; Google account email not verified |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
@@ -291,7 +291,11 @@ post it straight back.
   - *Log.* One INFO line on `app.enrich` per request: status, reason, source, facets and counts only, never a food
     name or an image. The Gemini call itself writes the usual `gemini_usage` line.
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [item…], total, categorized_by:
-  "gemini"|"heuristic"}` via `ML_SERVICE_URL`/ocr; `502` when unset or failing. Each candidate is a full
+  "gemini"|"heuristic", source: "ocr"|"gemini"}`. **Reader and fallback** (like `/items/from-photo`): the ML
+  service's `/ocr` (`ML_SERVICE_URL`) is tried first and gives `source: "ocr"`; if it is unset or fails, Gemini
+  vision reads the image directly (`gemini.receipt_from_image`, one call, JSON schema, `purpose=receipt_read` in
+  the `gemini_usage` log) and gives `source: "gemini"`. `502 upstream_unavailable` only when both are
+  unavailable; the message names both reasons. `source` is additive: older clients ignore it. Each candidate is a full
   item like the other add paths (`name, category, food_group, storage, quantity, unit, est_price,
   predicted_expiry, expiry_source`) plus `price` (= `est_price`, kept for older clients) and
   `receipt_text` (the line as printed), so it can be posted straight back to `POST /items`.
@@ -324,8 +328,22 @@ post it straight back.
 
 ## Share / Food Pantry
 `listing` = `{id, item_id, owner_id, group_id, status (open|fulfilled|cancelled), recipient_id,
-claimed_by, created_at, fulfilled_at}`.
-- ✅ `POST /share` `{item_id, group_id?}` → `201 {listing}` (`status=open`; writes a `share` event).
+claimed_by, created_at, fulfilled_at, pickup, pickup_set}`.
+
+**Pickup spot** (optional, set by the sharer): `pickup` = `{note: string|null, lat: number|null, lng: number|null,
+place_name: string|null} | null`. Rules: a note (trimmed, 1-120 chars) or a pin (`lat`+`lng` pair) is required, so an empty object `{}` (or one with only `place_name`) is `400 validation_error`; `pickup: null` removes it; `lat`/`lng`
+come together (lat -90..90, lng -180..180, finite numbers); `place_name` is optional (trimmed, <=120 chars); a blank
+string counts as absent. **Visibility:** `pickup` is populated only for the listing's **owner** and its **claimer**;
+everyone else gets `pickup: null` plus `pickup_set: true|false`, so the Food Pantry can say a spot exists without
+revealing it. `pickup_set` is on every listing JSON. The same applies to the `GET /share` entries and to the owner's
+`item.share` object (which carries `pickup`, always visible to the owner). Pickup never writes events and never
+affects Impact; cancel and restore keep it, as does removing as donated.
+```json
+"pickup": {"note": "Left on the porch shelf", "lat": 29.7604, "lng": -95.3698, "place_name": "12 Elm St"}
+```
+- ✅ `POST /share` `{item_id, group_id?, pickup?}` → `201 {listing}` (`status=open`; writes a `share` event).
+  `pickup` (see above) with neither a note nor a lat+lng pair, a lone lat or lng, an out-of-range value or an
+  over-long string → `400 validation_error`, nothing written.
   No `group_id` = shared to the owner's accepted friends; `group_id` = shared to that group only.
   `403` not your item / not a member of `group_id`; `404` unknown item or group; `409
   already_removed` / `already_shared`; `400` for a group-pantry item (those cannot be shared).
@@ -335,7 +353,10 @@ claimed_by, created_at, fulfilled_at}`.
   you claimed show with `claimed_by_me: true`. Each entry: `{id, item_id, owner_id, owner_name,
   group_id, status, claimed_by_me, created_at, source: {type: "friend"|"group", name}, item: {name,
   category, quantity, unit, predicted_expiry}}` (`source.name` = owner's display name for `friend`,
-  group name for `group`).
+  group name for `group`). Entries also carry `pickup` (non-null only on a listing **you claimed**) and `pickup_set`.
+- ✅ `PATCH /share/:id` `{pickup: {...} | null}` → `200 {listing}`. Sets, replaces or (`null`) clears the pickup spot.
+  Allowed while the listing is `open`, whether or not it has been claimed. Owner only: `403 forbidden` for a viewer who can see it, `404` if invisible/unknown, `409 listing_closed` if the listing is not
+  `open` (fulfilled or cancelled), `400 validation_error` for a missing `pickup` key or an invalid object (lat/lng range-checked).
 - ✅ `DELETE /share/:id` → `200 {listing}` (`status=cancelled`). Owner only: `403` for a viewer who
   can see it, `404` if invisible/unknown, `409 listing_closed` if not open.
 - ✅ `POST /share/:id/claim` → `200 {listing}` (`claimed_by` = you). `404` if you cannot see the
@@ -349,6 +370,20 @@ Friendship is one row, requester → target; once accepted it is symmetric. Entr
 `{user_id (the other person), display_name, status, created_at}`.
 - ✅ `POST /friends` `{email}` → `201 {friend}` (`status=pending`). `404` unknown email, `400` self /
   missing email, `409 already_friends` / `409 request_pending` (in either direction).
+- ✅ `POST /friends` `{code}` (a scanned friend QR code, alternative to `email`; send **exactly one** of the two,
+  else `400 validation_error`) → `201 {friend}` with `status=accepted` immediately (no accept step). If a pending
+  request already exists between you and the code's owner, in either direction, it becomes accepted and the
+  response is `200`. Already friends: `200` with the existing friend (idempotent, no `409`). Errors: `400
+  invalid_code` ("That code isn't valid any more.", identical for expired, bad signature and malformed), `400
+  validation_error` your own code. The email flow is unchanged (`409 already_friends` there).
+- ✅ `GET /friends/code` → `200 {code, expires_at, url}`. `code` is an **opaque** random URL-safe code
+  (16 chars, `secrets.token_urlsafe`) stored server-side with its owner and expiry; it encodes nothing about the
+  user (no id, no email), and neither does the response. Valid for 10 minutes. Each call prunes the caller's
+  expired codes and reuses their newest unexpired code if it has at least 2 minutes left; otherwise it issues
+  a new code. Older unexpired codes keep working. `url` = `bitedown://friend/<code>` is what the QR encodes.
+  ```json
+  {"code": "Xk3v9Qw1ZpT7mR2a", "expires_at": "2026-10-11T18:10:00Z", "url": "bitedown://friend/Xk3v9Qw1ZpT7mR2a"}
+  ```
 - ✅ `POST /friends/:user_id/accept` → `200 {friend}` (`status=accepted`). Only the target can accept:
   `404` when there is no pending request *from* `:user_id` to you.
 - ✅ `GET /friends` → `200 {friends: [...], incoming: [...], outgoing: [...]}` (accepted; pending
