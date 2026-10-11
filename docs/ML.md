@@ -8,19 +8,20 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 **Gate: do not run it until ML QA has re-verified ML-21 on the session-grouped split** (the notebook also stops itself unless
 `dataset_report.json` has `split_grouping: "session"` and `ml/eval/leakage_check.py` reports 0 held-out images within 300 s of a train/val image).
 1. Runtime -> Change runtime type -> **T4 GPU**.
-2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped). AgriFreshNET needs no secret.
+2. Add the 2 Colab Secrets (key icon, Notebook access on): `ROBOFLOW_API_KEY` (**the PRIVATE key** from Roboflow Settings -> API Keys; the `rf_`-prefixed publishable key cannot download) and `KAGGLE_API_TOKEN` (Kaggle access token, sent as a Bearer token; optional, without it the Kaggle source is skipped). AgriFreshNET, MeatScan and DaFiF need no secret.
 3. **Dry run first.** Cell 1 has a checkbox `DRY_RUN` (**default on**) and the `RUN_ID` field. **Runtime -> Run all** with `DRY_RUN` on: download, prepare, all gates,
    Drive cache, then **1 epoch on a deterministic 5% subset** (`ml/yolo/make_subset.py`: every 20th file per split / class folder, symlinks; all three freshness
-   classes kept) for detector and classifier, then the export, then it stops with **`DRY RUN OK`** (about 15 min). Its checkpoints go to `MyDrive/fwr_runs/<RUN_ID>_dry/`,
-   so the real run can never resume them. The dataset cache (`<RUN_ID>/fwr_data.tar`) is shared. (Ultralytics' own `fraction=0.05` exists in 8.4.175 but takes the *first*
+   classes kept) for detector and classifier, then the export, then it stops with **`DRY RUN OK`** (about 15 min). Its checkpoints go to `MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>_dry/`,
+   so the real run can never resume them. The dataset cache (`<RUN_ID>/data_<DATA_VER>/fwr_data.tar`) is shared. `DATA_VER` is the first 8 hex digits of the SHA-256 of
+   `ml/yolo/sources.json`, so adding or editing a source always triggers a fresh download + prepare instead of reusing an older cached dataset. (Ultralytics' own `fraction=0.05` exists in 8.4.175 but takes the *first*
    5% of the sorted file list, i.e. one source or one class folder, which would not test the 3-class head.)
 4. **Real run:** untick `DRY_RUN`, keep the **same `RUN_ID`**, **Runtime -> Run all**. The prepared dataset is restored from Drive (no downloads), the gates re-run, then
-   detector 80 ep + classifier 30 ep. Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/`.
+   detector 80 ep + classifier 30 ep. Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>/`.
    **If you got disconnected: reconnect, keep the same `RUN_ID` and `DRY_RUN` setting, Runtime -> Run all; it resumes from the last epoch on Drive.**
    Write the `RUN_ID` down: left at the default it is today's date, so resuming after midnight needs it typed in.
 5. Download `export.zip` from the last cell and hand it to the team. Cell 5 also has a `SEMI_FRESH_THRESHOLD` field (default 0.5), passed through
    `train.py --semi-fresh-threshold` (env `SEMI_FRESH_THRESHOLD`) to `export_predictions.py`, so predictions can be re-labelled without retraining.
-The notebook downloads VegQual (figshare), the two Roboflow sets (API), raghavrpotdar (if Kaggle creds exist) and **AgriFreshNET from the public Mendeley release**
+The notebook downloads VegQual (figshare), every non-pending Roboflow set with a pinned version (API), raghavrpotdar (if Kaggle creds exist), **MeatScan** (cell 3e: `python -m pipeline fetch-meatscan` range-reads 450 originals per class from the 25.4 GB Zenodo RAR, then `ingest-dataset --adapter meatscan --max-per-cell 300`; needs `unrar-cffi`, installed in cell 1), **DaFiF fish** (cell 3f: `fetch-dafif` then `ingest-dataset --adapter dafif --max-per-cell 300`; see `docs/PIPELINE.md` for both) and **AgriFreshNET from the public Mendeley release**
 (file selected by name from `data.mendeley.com/public-api/datasets/42m5tb7yv9`; both requests send a browser-like `User-Agent` because Mendeley returns 403 to urllib's default; the zip is always verified against the hardcoded SHA-256 `6607a48b...3f11`; a `RUN_ID` ending in `_dry` is rejected), ingests it with `python -m pipeline --data-root /content/pipeline_data
 ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300` (4,754 images, same as the local a2b run), derives a
 `sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (yolo26s 80 ep +
@@ -52,6 +53,10 @@ or whose root is missing, drops unmapped labels (listed in `dataset_report.json`
 | fridge/pantry items | Fridge objects (wajeeha-workspace) https://universe.roboflow.com/wajeeha-workspace/fridge-objects-mtmmo | **CC BY 4.0** | ~963 imgs; lemon, milk, cheese, avocado, butter, pepper, yogurt, bacon, eggs, tomatoes | downloaded: v1 (963), see Status below |
 | fridge/pantry items | Hien_Fridge (gracelearning) https://universe.roboflow.com/gracelearning/hien_fridge-tathx | **CC BY 4.0** | 1,912 imgs (v12); apple, egg, milk_carton, others, soda_can, yogurt_container (`others` dropped) | downloaded: v12 |
 | fresh vs stale fruit/veg (whole image) | raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle) | **CC0** | ~1.5 GB, 14,683 files; fresh_/stale_ x apple, banana, bitter_gourd, capsicum, orange, tomato | downloaded; replaces sriramr |
+| fresh vs spoiled **cow meat** (whole image) | MeatScan, Zenodo 16764338 (Data in Brief 2025) | **CC BY 4.0** | 6,995 originals (3,487 fresh / 3,508 spoiled) + 4,005 author augmentations, one 25.4 GB RAR | enabled 2026-10-10 (`meatscan`): originals only, range-read, 300 per cell. First non-produce freshness source (ML-16) |
+| fresh vs spoiled **fish** (whole image) | DaFiF, Mendeley vx4ptwk3pb v1 (Data in Brief 57, 2024) | **CC BY 4.0** | 2,536 photos of mackerel, tilapia, tuna over 11 days on ice | enabled 2026-10-10 (`dafif`): days 1-3 fresh, 9-11 spoiled, 4-8 dropped (owner rule), 300 per cell |
+| fresh vs spoiled produce (polygons -> boxes) | Roboflow food-monitoring/food-spoilage-status-ds1sc **v1** | **CC BY 4.0** | 276 imgs; fresh/spoiled x apple, banana, capsicum, orange, potato, bitter gourd | enabled 2026-10-10 (`food_spoilage_status`) |
+| bananas / oranges (boxes) | Roboflow fruit-and-vegetable-objection-by-yolo/food-hvk7g | **CC BY 4.0** | 696 imgs; `2`, orange, oranges, Platano; **no freshness labels** | **pending**: 0 generated versions (not downloadable until forked into our workspace) |
 
 **Dropped: `sriramr/fruits-fresh-and-rotten-for-classification`** - the Kaggle API reports its licence as
 "Unknown", so it is not usable. Replacement is the CC0 raghavrpotdar set above.
@@ -88,6 +93,15 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
   relabelled into our taxonomy (bitter melon -> `bitter_melon`; cucumber, papaya, pineapple, banana, orange, tomato,
   eggplant), semi-fresh stage kept as `semi_fresh`, day-range suffixes dropped, re-split by inferred specimen.
   Ingestion code ported from @LemurTech22's pipeline (#21 -> #26).
+- **MeatScan: An image dataset for machine learning-based classification of fresh and spoiled cow meat** - Data in Brief
+  (2025), doi 10.1016/j.dib.2025.112045; Zenodo, doi 10.5281/zenodo.16764338. Licence CC BY 4.0. Changes: only the
+  authors' originals (augmented copies excluded), subsampled per class, downscaled to 1280 px, relabelled `beef`.
+- **Food Spoilage Status** - Roboflow Universe, workspace `food-monitoring`,
+  https://universe.roboflow.com/food-monitoring/food-spoilage-status-ds1sc (v1). Licence CC BY 4.0. Changes: polygons
+  converted to boxes, relabelled into our taxonomy (capsicum -> `bell_pepper`, bitter gourd -> `bitter_melon`).
+- **DaFiF: Dataset for Fish's Freshness Problems** - Prasetyo, Suciati, Sutramiani, Adiananda, Dewi; Mendeley Data v1,
+  doi 10.17632/vx4ptwk3pb.1 (article: Data in Brief 57 (2024) 111016). Licence CC BY 4.0. Changes: labelled fresh/spoiled
+  from the storage day (days 1-3 / 9-11; 4-8 dropped), subsampled, downscaled to 1280 px, relabelled `fish`.
 
 **Status 2026-10-10 (feat/ml-full-data): all four sources are downloaded and enabled** (no `pending`), under
 `mldata/raw/`:
@@ -229,7 +243,7 @@ sweep thresholds) by `export_predictions.py`, or at the end of `train.py`.
 CLI equivalent of the notebook: `train.py`. Same code path: `infer.TwoStage` is used for export and serving.
 
 ### 5a. Surviving Colab disconnects (checkpoints on Drive + auto resume)
-- **Layout** (`RUN_DIR = /content/drive/MyDrive/fwr_runs/<RUN_ID>`, passed as `train.py --project`): `det/weights/{last,best}.pt`,
+- **Layout** (`RUN_DIR = /content/drive/MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>` (+`_dry` for the dry run), passed as `train.py --project`): `det/weights/{last,best}.pt`,
   `cls/weights/{last,best}.pt`, `det/results.csv`, `export/`, plus `fwr_data.tar` (prepared dataset), `fwr_data/` (small readable copy of
   `dataset_report.json`, `data.yaml`, `class_names.json`, `heldout_manifest.csv`) and `fwr_data.sha256`.
 - **Per-epoch save cost.** Ultralytics writes `last.pt` every epoch (`trainer.save_model`, `engine/trainer.py` ~L780-835) and `best.pt` when

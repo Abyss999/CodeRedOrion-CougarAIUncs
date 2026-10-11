@@ -30,6 +30,11 @@ needs editing then, and the tests that assume a third class (marked `needs_semi`
 Run these from the repo root with the project venv (`.venv/bin/pip install -r pipeline/requirements.txt`).
 ```bash
 .venv/bin/python -m pipeline ingest-dataset --zip "~/Downloads/AgriFreshNET ....zip" --name agrifreshnet --adapter agrifreshnet
+# MeatScan (cow meat) and DaFiF (fish): fetch first (see their sections), then ingest the fetched folder
+.venv/bin/python -m pipeline fetch-meatscan --out ../mldata/raw/meatscan --per-class 450      # needs: pip install unrar-cffi==0.2.2
+.venv/bin/python -m pipeline ingest-dataset --dir ../mldata/raw/meatscan --name meatscan --adapter meatscan --max-per-cell 300
+.venv/bin/python -m pipeline fetch-dafif --out ../mldata/raw/dafif --max-per-cell 300
+.venv/bin/python -m pipeline ingest-dataset --dir ../mldata/raw/dafif --name dafif --adapter dafif --max-per-cell 300
 .venv/bin/python -m pipeline prepare                     # all staged datasets -> pipeline/data/prepared
 .venv/bin/python -m pipeline prepare --extra-sources ml/yolo/sources.json --replace   # + the Roboflow/Kaggle sets
 .venv/bin/python -m pipeline augment-lighting --per-image 2   # -> pipeline/data/augmented (cool,bright,shadow,spot)
@@ -59,7 +64,8 @@ Data lives under `pipeline/data/`, which is gitignored. Override it with `--data
   - `folders` is generic: any folder-per-class drop whose folder names `taxonomy.split_freshness` can read (the `(a-b)` day range is stripped first).
   - **Semi-fresh folders** (`Semi fresh ...`, `Semi_Fresh ...`) keep a `semi_fresh` label only if the taxonomy has that class. On a 2-class taxonomy they are staged as **`fresh`**, never dropped: the manifest keeps the original label in `source_freshness`, the ingest report counts them as `semi_fresh_mapped_to_fresh` and adds a `notes` entry. Fresh/Semi-fresh duplicates are still judged on the source labels, so they stay label conflicts.
   - **Produce the taxonomy has no class for** (papaya, pineapple and bitter melon until the `semi_fresh` PR adds them) is not staged. Those folders are listed under `unmapped_dirs` with their image counts.
-  - To add a dataset with odd naming, write a module with `parse_dir()`, `group_of()`, `LICENCE` and `URL`, and register it in `datasets.ADAPTERS`.
+  - `meatscan` and `dafif`: see their sections below. Both are fed by a `fetch-*` command, not a zip.
+  - To add a dataset with odd naming, write a module with `parse_dir()`, `group_of()`, `LICENCE` and `URL`, and register it in `datasets.ADAPTERS`. Two optional hooks: `setup(raw_root) -> dict` runs once before staging (e.g. read a metadata CSV; its result lands in the ingest report as `adapter_setup`), and `include(path) -> bool` drops files the adapter rejects (counted as `excluded_by_adapter`).
 - **Safety:** extraction rejects paths that escape the target folder ("zip slip") and archives that declare more than `PIPELINE_MAX_EXTRACT_GB` (20 GB). Nested zips can go at most 3 levels deep. Every image is opened before staging. JPEG/RGB files are copied byte for byte; anything else is re-encoded to JPEG.
 - **Duplicates and label conflicts:**
   - Identical files within one class are staged once (`duplicates_in_drop`).
@@ -108,6 +114,51 @@ Data lives under `pipeline/data/`, which is gitignored. Override it with `--data
 | tomato | 1768 | 4 (tightened) | 899 | 539 | 223 (12.6%) | 77.6% | 86% |
 
 Dataset-wide capture sessions (<= 300 s, milliseconds read): 11471 timestamped files in 73 sessions, largest 569. Union of specimen components and sessions: largest unit 6227 files (44% of the dataset; 86-100% of six classes), so the fallback applies: **timestamped files are grouped by session (`sess_<id>`), untimestamped files (WhatsApp `IMG-YYYYMMDD-WA`, `Banana (3).jpeg`, 11471 of 14,103 are timestamped) by specimen component**. Final: 893 units, largest 569 files (4.0%).
+
+### MeatScan (cow meat, fresh / spoiled)
+| | |
+|---|---|
+| Source | MeatScan, Zenodo record 16764338, doi [10.5281/zenodo.16764338](https://doi.org/10.5281/zenodo.16764338); article: Data in Brief (2025), doi [10.1016/j.dib.2025.112045](https://doi.org/10.1016/j.dib.2025.112045). **CC BY 4.0.** |
+| Content | Raw cow meat photographed with phones at two Kumasi (Ghana) markets, 14-16 Feb 2024. 6,995 originals (3,487 fresh, 3,508 spoiled) + 4,005 augmented copies made by the authors, all in **one 25.4 GB RAR5**. `MeatScan_Metadata.csv` lists the originals (`fresh_meat_N.jpg`) with date, time (to the minute) and market. |
+| Why it matters | The first **non-produce** freshness source: before it, milk/meat/fish had no spoiled examples at all (ML-16). |
+| Fetch | `fetch-meatscan` never downloads the archive (Zenodo serves it at about 1.6 MB/s, about 4 h). The RAR is **non-solid** and has a **QuickOpen** index at the end that caches every file header with its offset, so the fetch reads that index (about 1 MB), the CSV and only the chosen images with HTTP range requests; each range (header + packed data) is wrapped in a one-file RAR5 container and decompressed by `unrar-cffi` (the official UnRAR code, which checks each file's CRC32; Debian/Ubuntu `7z` has no RAR codec). Each header is compared with the indexed copy first, so a changed release fails loudly. Only **originals** are fetched (in the CSV; `Fresh (N)` = `fresh_meat_N`, the authors' copies are N above 3,487 / 3,508), 450 per class, spread round-robin over date x market x hour, downscaled to 1280 px. |
+| Ingest | `--adapter meatscan --max-per-cell 300`. `include()` keeps CSV-listed originals only. `group_of()` writes the capture time into the staged name (`beef__fresh__IMG_20240214_073000_Fresh_1.rf.<sha>.jpg`) so prepare_dataset's 300 s session split keeps photos of the same stall and cut together. |
+| Result (local run, 2026-10-10) | Fetched 900 originals (450 per class, 24 date x market x hour buckets each) in 14.7 min, 249 MB; 3,770 augmented copies skipped; the archive was never downloaded. Staged **600** (300 fresh, 300 spoiled), every one with its capture time (`adapter_setup.timestamped` = 6,995 of 6,995 CSV rows). In `prepare`, pHash <= 6 links all 600 into one split unit (close-ups of raw meat look alike), so beef is **train-only / not measurable on held-out** until ML QA rules on whether those pairs are true duplicates (PL-5 and the ML QA log). |
+| Caveat | Whole-frame boxes (one subject per photo); market stalls, not fridges. Minute-resolution times make sessions coarse (conservative). |
+
+### DaFiF (fish, fresh / spoiled by days on ice)
+| | |
+|---|---|
+| Source | Dataset for Fish's Freshness Problems, Mendeley Data v1, doi [10.17632/vx4ptwk3pb.1](https://doi.org/10.17632/vx4ptwk3pb.1); article: Prasetyo et al., Data in Brief 57 (2024) 111016. **CC BY 4.0.** |
+| Content | Mackerel, tilapia and tuna (10 fish each) kept on ice for 11 days (19-29 Jan 2024), both sides photographed in two sessions a day: 2,536 single JPEGs of about 11 MB, plus gas-sensor workbooks. **No freshness labels for images**, only the storage day. |
+| Label rule (data owner, 2026-10-10) | Days **1-3 = fresh**, days **9-11 = spoiled**, days 4-8 **dropped** as ambiguous. The companion paper (Ecological Informatics 80, 2024, doi 10.1016/j.ecoinf.2024.102533) derives per-species class boundaries by clustering organoleptic scores, but it is paywalled; revisit the cut-offs if someone gets the full text. |
+| Fetch | `fetch-dafif` reads the Mendeley file list; each folder holds one sensor workbook named like `24-01-2024(MakarelSesi1).xlsx` or `Rekap Tongkol 28 Sesi 2.xlsx`, which gives the folder's date, species and session (upstream typos `Muajir`, `t(Tongkol`, `Tongkol_Sesi2` are handled). Only the kept days are downloaded, 300 per freshness round-robin over species x session x day, every file checked against the API's SHA-256, downscaled to 1280 px, named `<species>_s<session>_d<day>__<original>.jpg`. |
+| Ingest | `--adapter dafif --max-per-cell 300`. The same ten fish of a species appear on every day, so `group_of()` groups by **species + session across days**: a batch's fresh and spoiled photos always land in one split (6 groups). |
+| Result (local run, 2026-10-10) | 63 workbook folders parsed (0 unparsed); candidates 620 fresh / 716 spoiled (days 4-8: 1,200 images skipped); fetched **600** (300 / 300) in 6.4 min, 171 MB, 0 SHA mismatches, 0 failures; staged 600 in 6 batch groups. In `prepare` (with MeatScan and food_spoilage_status): train 404 / val 108 / held-out 88, all from different batches. |
+| Caveat | Labels are time-based, not visual: a day-3 fish that already looks tired is still "fresh". Whole-frame boxes on a plain background. |
+
+### Named risks of the 2026-10-10 sources (data owner: keep them in, risks labelled)
+The data owner ruled on 2026-10-10 that MeatScan, DaFiF and food_spoilage_status go into the Colab run with these risks
+**labelled on every metric that touches them** (the orchestrator records the ruling in `docs/DECISIONS.md`):
+
+| Source | Risk (ML QA id) | What it means for results | Label to use |
+|---|---|---|---|
+| MeatScan | ML-52: the spoiled class is mostly one pale piece of meat in a black bag; the near-duplicate pass links all 600 photos into one unit | beef is **train-only**, so there is **no held-out beef metric**; a model can learn the scene, not spoilage | "beef: train-only, not measurable on held-out; spoiled class scene-confounded" |
+| DaFiF | ML-55: 296 of 300 spoiled fish lie on green trays; pink/red trays hold only fresh fish | fish freshness can be predicted from tray colour, so fish metrics are optimistic | "fish: tray colour confounded with label" |
+| DaFiF | ML-51: held-out is one unseen species-batch (tuna, session 2) | the held-out score measures an unseen batch, not a different fish of a seen batch | "fish: unseen-batch held-out" |
+| food_spoilage_status | ML-50 (fixed): Roboflow's own rotated / cropped copies are now grouped with their source photo | none after the fix; QA re-verifies with `ml/eval/parent_sibling_check.py` | - |
+| food_spoilage_status | white-background product shots with the publisher's augmentation baked in | a separate domain from fridge photos | "food_spoilage_status: product-shot domain" |
+
+**Quoting spoiled recall (ML QA, 2026-10-10):** with these three sources, held-out spoiled examples exist only for fish (48,
+all tuna) and potato (2); apple, banana, bell_pepper, orange and bitter_melon spoiled are train-only (N/A). A pooled
+spoiled-recall number would be carried almost entirely by tuna, so report it **per source with Wilson confidence
+intervals** and don't quote the 2-image potato figure.
+
+### food_spoilage_status (Roboflow, enabled 2026-10-10)
+Roboflow `food-monitoring/food-spoilage-status-ds1sc` v1, **CC BY 4.0**, 276 images (train 193 / valid 55 / test 28), 12 classes: fresh / spoiled x apple, banana, capsicum (`bell_pepper`), orange, potato, bitter gourd (`bitter_melon`). It is an **instance-segmentation** project, so the yolov8 export has polygon labels; `prepare_dataset.yolo_line_to_box` converts each polygon to its enclosing box (detection lines are unchanged). File names carry capture times (`20190809_165458_jpg.rf.<hash>`), so the 300 s session split applies. The notebook downloads it in the Roboflow loop like the other Roboflow sources (needs the **private** key).
+
+### Pending: food_hvk7g (Roboflow)
+`fruit-and-vegetable-objection-by-yolo/food-hvk7g` (CC BY 4.0, 696 images, object detection) **cannot be downloaded as published**: it has **0 generated versions**, and Roboflow serves only generated versions (only the owner can generate one). Its classes are `2`, `orange`, `oranges`, `Platano` with **no freshness labels**. To use it: fork it into our Roboflow workspace (Universe, Fork Project), generate a version, map `Platano` -> banana, `orange(s)` -> orange, drop `2`, and either hand-label freshness or keep it detector-only with freshness excluded from metrics.
 
 ## Receipt inbox
 - **Engines:**
@@ -158,6 +209,8 @@ The parameter ranges are in `pipeline/shots/presets.json`, and every variant is 
 - The category cleanup is a lookup table. Unknown brand abbreviations come out as `match: none` / `other` until they're added to `abbreviations.json`. The backend and Gemini do their own expansion when items are added.
 
 ## Attributions
+- **MeatScan**: "MeatScan: An image dataset for machine learning-based classification of fresh and spoiled cow meat", Data in Brief (2025), doi [10.1016/j.dib.2025.112045](https://doi.org/10.1016/j.dib.2025.112045); data on Zenodo, doi [10.5281/zenodo.16764338](https://doi.org/10.5281/zenodo.16764338). Licensed **CC BY 4.0**. Changes: originals only (authors' augmentations excluded), subsampled, downscaled to 1280 px, relabelled to `beef` fresh/spoiled.
+- **DaFiF, Dataset for Fish's Freshness Problems**: Prasetyo, Suciati, Sutramiani, Adiananda, Dewi. Mendeley Data, v1, doi [10.17632/vx4ptwk3pb.1](https://doi.org/10.17632/vx4ptwk3pb.1). Licensed **CC BY 4.0**. Changes: images labelled fresh/spoiled from the storage day (days 1-3 / 9-11; 4-8 dropped), subsampled, downscaled to 1280 px, relabelled to `fish`.
 - **AgriFreshNET Freshness and Shelf-Life Image Dataset**: Risdin, Salauddin, Tufa, Hossain. Mendeley Data, v1, DOI [10.17632/42m5tb7yv9.1](https://doi.org/10.17632/42m5tb7yv9.1), <https://data.mendeley.com/datasets/42m5tb7yv9>. Licensed **CC BY 4.0**. Any model or result built on it must credit it. The adapter writes the licence into every `manifest.csv` row and `source.json`. `docs/ML.md`'s Attributions section needs the same entry.
 
 ## Abbreviations moved to the backend table

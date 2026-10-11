@@ -89,6 +89,9 @@ ALIASES: dict[str, str] = {
     "sweetpotato": "sweet_potato", "bittergourd": "bitter_melon", "bitter_gourd": "bitter_melon",
     "bittermelon": "bitter_melon", "karela": "bitter_melon", "papayas": "papaya", "pineapples": "pineapple",
     "eggplants": "eggplant", "okra": "other",
+    # MeatScan (cow meat) and DaFiF (mackerel/tilapia/tuna; Indonesian names as in its file names)
+    "cowmeat": "beef", "cow_meat": "beef", "meat_beef": "beef",
+    "mackerel": "fish", "tilapia": "fish", "tuna": "fish", "makarel": "fish", "mujair": "fish", "tongkol": "fish",
 }
 # Freshness classes (output values). Sidecar codes are FRESHNESS_CODE (0/1 kept for old data).
 FRESHNESS = ("fresh", "semi_fresh", "spoiled")

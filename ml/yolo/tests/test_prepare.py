@@ -343,3 +343,13 @@ def test_split_dirs_always_exist(tmp_path):
     for sp in ("train", "val", "heldout"):
         for sub in ("images", "labels", "freshness"):
             assert (out / sub / sp).is_dir()
+
+
+def test_yolo_line_to_box_detection_and_polygon():
+    assert P.yolo_line_to_box("3 0.5 0.5 0.2 0.4".split()) == (3, 0.5, 0.5, 0.2, 0.4)
+    c, xc, yc, w, h = P.yolo_line_to_box("2 0.1 0.2 0.3 0.2 0.3 0.6 0.1 0.6".split())   # polygon -> enclosing box
+    assert c == 2 and abs(xc - 0.2) < 1e-9 and abs(yc - 0.4) < 1e-9 and abs(w - 0.2) < 1e-9 and abs(h - 0.4) < 1e-9
+    assert P.yolo_line_to_box("1 -0.1 0.2 1.2 0.2 0.5 0.9".split())[1:] == (0.5, 0.55, 1.0, 0.7)   # clipped to the image
+    assert P.yolo_line_to_box("2 0.1 0.2 0.3".split()) is None                                    # too short
+    assert P.yolo_line_to_box("1 0.5 0.5 0.5 0.5 0.5 0.5".split()) is None                        # degenerate polygon
+    assert P.yolo_line_to_box("1 0.1 0.2 0.3 0.4 0.5".split()) is None                            # odd coordinate count

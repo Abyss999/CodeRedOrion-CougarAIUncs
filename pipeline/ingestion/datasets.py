@@ -27,10 +27,12 @@ from PIL import Image, UnidentifiedImageError
 
 from .. import config
 from .ledger import Ledger, sha1_file
-from . import agrifreshnet, generic, specimens
+from . import agrifreshnet, dafif, generic, meatscan, specimens
 import taxonomy as T  # noqa: E402  (on sys.path via config)
 
-ADAPTERS = {"agrifreshnet": agrifreshnet, "folders": generic}
+ADAPTERS = {"agrifreshnet": agrifreshnet, "folders": generic, "meatscan": meatscan, "dafif": dafif}
+# Optional adapter hooks: setup(raw_root) -> dict runs once before staging (e.g. read a metadata CSV);
+# include(path) -> bool drops files the adapter rejects (e.g. a release's own low-res augmented copies).
 MANIFEST_COLS = ["image", "source_dir", "source_file", "item", "canonical", "freshness", "category",
                  "source_freshness", "age_days_min", "age_days_max", "group", "is_source_aug", "sha1", "width", "height", "licence"]
 
@@ -111,6 +113,8 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
     class_map: dict[str, str] = {}
     if (out / "source.json").exists():
         class_map = json.loads((out / "source.json").read_text()).get("class_map", {})
+    setup_report = ad.setup(raw_root) if hasattr(ad, "setup") else None
+    include = getattr(ad, "include", None)
     # pass 1: parse folders + hash files, so duplicates and cross-class label conflicts are known up front
     plan: list[tuple[Path, str, dict, str, str]] = []  # (file, sha, parsed, canonical, cls_dir)
     src_cls: dict[Path, str] = {}  # file -> class by the SOURCE label (before any semi_fresh->fresh mapping)
@@ -118,6 +122,10 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
         parsed = ad.parse_dir(d.name)
         canonical = T.canonical_name(parsed["item"]) if parsed else None
         files = [p for p in sorted(d.iterdir()) if p.suffix.lower() in config.IMG_EXT]
+        if include is not None and canonical:
+            kept_files = [p for p in files if include(p)]
+            counts["excluded_by_adapter"] += len(files) - len(kept_files)
+            files = kept_files
         if not canonical:
             unmapped[d.name] += len(files)
             continue
@@ -223,6 +231,8 @@ def ingest(raw_root: Path, name: str, adapter: str, staged_root: Path, ledger: L
               "label_conflicts_cross_drop_files": cross_conflicts, "classes": len(class_map)}
     if spec_report:
         report["specimen_grouping"] = spec_report
+    if setup_report:
+        report["adapter_setup"] = setup_report
     if curation:
         report["curation"] = curation
     if counts.get("semi_fresh_mapped_to_fresh"):

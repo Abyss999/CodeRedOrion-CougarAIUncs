@@ -26,8 +26,10 @@ def test_dry_run_wiring_and_safety_properties():
     assert "fwr_data.tar" in code and "{CACHE_DIR}/fwr_data.tar" in code       # dataset cache is shared, checkpoints are not
     assert code.count("check=True") >= 3 and "RUN_ID must start with a letter or digit" in code and "run_check(" in code
     assert "--specimen-groups" in code and "--exclude-source-augs" in code and "--max-per-cell" in code and "pipeline/requirements.txt" in code
-    assert "--semi-fresh-threshold {SEMI_FRESH_THRESHOLD}" in code
-    assert "DRY RUN OK" in code and "--epochs 1 --cls-epochs 1" in code
+    assert '"--semi-fresh-threshold", str(SEMI_FRESH_THRESHOLD)' in code
+    assert "DRY RUN OK" in code and 'run_train("/content/fwr_data_dry", 1, 1)' in code and 'run_train("/content/fwr_data", 80, 30)' in code
+    # ML-57: training runs with check=True (never `!python train.py`), and a stale RUN_DIR/export is dropped before it
+    assert "!python train.py" not in code and 'shutil.rmtree(f"{RUN_DIR}/export", ignore_errors=True)' in code
     assert "if DATA_ON_DRIVE" in code and "skipping all downloads" in code
 
 

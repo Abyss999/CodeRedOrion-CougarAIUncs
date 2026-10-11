@@ -25,13 +25,17 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-SOURCES = ("agrifreshnet", "fresh_stale_fruits_veg", "fridge_objects", "hien_fridge", "vegqual")
+SOURCES = ("agrifreshnet", "fresh_stale_fruits_veg", "fridge_objects", "hien_fridge", "vegqual",
+           "meatscan", "dafif", "food_spoilage_status")  # ML-48: new3 sources were invisible to the gate
 SPLITS = ("train", "val", "heldout")
 PHASH_T = 6
 
 _EPOCH = re.compile(r"(?<!\d)(1[4-9]\d{11})(?!\d)")                       # 13-digit epoch ms (2014-2033)
 _COMPACT = re.compile(r"(?<!\d)(20\d{6})[_-]?([0-2]\d[0-5]\d[0-5]\d)(?:\d{3})?(?!\d)")  # IMG_20200727_223202
 _SHOT = re.compile(r"(20\d\d-\d\d-\d\d)_at_(\d{1,2})[_.](\d\d)[_.](\d\d)(?:_(AM|PM))?")  # Screen_Shot_2020-07-29_at_8_31_22_PM
+
+
+_HYPHEN = re.compile(r"(20\d\d-\d\d-\d\d)-at-(\d{1,2})-(\d\d)-(\d\d)(?:-(AM|PM))?")  # Roboflow-sanitised: Screen-Shot-2018-06-08-at-5-09-10-PM (ML-49)
 
 
 def stamp(name: str):
@@ -46,6 +50,13 @@ def stamp(name: str):
         except ValueError:
             pass
     m = _SHOT.search(name)
+    if m:
+        h = int(m.group(2)) % 12 + (12 if m.group(5) == "PM" else 0) if m.group(5) else int(m.group(2))
+        try:
+            return "shot", datetime.strptime(f"{m.group(1)} {h:02d}:{m.group(3)}:{m.group(4)}", "%Y-%m-%d %H:%M:%S").timestamp()
+        except ValueError:
+            pass
+    m = _HYPHEN.search(name)
     if m:
         h = int(m.group(2)) % 12 + (12 if m.group(5) == "PM" else 0) if m.group(5) else int(m.group(2))
         try:
