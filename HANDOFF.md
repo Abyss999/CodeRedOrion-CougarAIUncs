@@ -122,7 +122,8 @@ are merged. **Gemini:** no live calls from agents or QA (quota, #100).
 
 ## Honesty list (what the demo fakes; say so in the demo script)
 - **Photo detection:** the Gemini fallback (`source: "gemini"`) until the teammate's YOLO lands. "Check again" works the same way.
-- **Receipt OCR:** no OCR engine is deployed. Once #95 merges, receipts fall back to Gemini vision (`source: "gemini"`); until then live returns 502, and the demo uses Mock or shows the receipt tile as unavailable.
+- **Receipt OCR:** with no OCR service the API now reads the receipt with Gemini vision (`source: "gemini"`); it returns 502 only if Gemini is also unavailable. The iOS receipt screen (Add 2b) is not built, so in the app the tile stays unavailable or Mock.
+- **Gemini quota (2026-10-11):** both the original and the second key returned 429 RESOURCE_EXHAUSTED on `gemini-3.8-flash` (free-tier limits). The owner kept `GEMINI_MODEL=gemini-3.8-flash` (cheapest at full quality); live Gemini needs a billing-enabled key. Until then, pace the demo, skip `enrich=`, or use Mock.
 - **Barcode:**
   - **Scanner:** `DataScannerViewController` doesn't run on the Simulator, so the Simulator uses a DEBUG manual-code field.
   - **Lookup:** Open Food Facts is real.
@@ -239,6 +240,12 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
   - IOS-2/3: glass tab bar inactive colours accepted as system.
   - The Impact screen scrolls (its waste-reasons section is below the fold).
   - Jose's (LemurTech22) optional answers on closed #21.
+
+## Open items from the 2026-10-11 OCR session
+- **Mac status unknown:** no Add photo / Home / Impact / Auth / Fridge polish branch was pushed to `origin` as of 09:05 CDT; ask `food-main-mac` for status and to push.
+- **Bake-off follow-ups** (`mldata/ocr_bakeoff`, outside git): RapidOCR is a free CPU option (~0.7 s per receipt, 85.7% word recall on 100 CORD v2 test photos, CC-BY-4.0, Indonesian receipts); Gemini was measured on 4 receipts only. Resume commands are in the harness report.
+- **Contract notes:** `source` on `from-receipt` is additive; `test_receipt_yolo_parity.py` pins three known name-heuristic gaps as strict xfails (apples/carrots `produce_leafy` vs YOLO `produce_hardy`, rice `bakery`).
+- **Not done:** `detect_from_image` has no timeout (photo add can hold a request ~80 s while Gemini fails); `GlmOcrEngine` rewrite; backend OCR timeout split; Apple Vision on-device option (spec in the session notes).
 
 ## QA status
 - **Backend:** PASS on `main` after #94 (2313 passed, 98%) and #102 (independent PASS). BE-8 … BE-28 resolved; BE-29/30/31 open on #95 (FAIL). Earlier: BE-8 … BE-22 resolved (BE-21 accepted as documented; #84 re-verified BE-19–22). Open: BE-7 (info). Follow-up only if memory gets tight: lower `ENRICH_MAX_PIXELS` to about 25 MP.

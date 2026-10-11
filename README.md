@@ -40,7 +40,7 @@ This is an active hackathon prototype. The backend is ahead of the iOS interface
 | Impact | Timestamped food events, outcome totals, weekly trends, and waste tips | Build the dashboard UI and validate the integrated flow |
 | iOS | Foundation merged: design tokens and fonts, `APIClient` with Live and Mock clients, Keychain, glass tab bar, motion and test conventions (display name BiteDown) | Implement functional screens (Fridge is in review) and API connectivity |
 | Guided onboarding | Idea only (deferred for v1) | Food catalog, checklist UI, and completion/resume state |
-| Vision and receipts | Training pipeline, a first trained model (FAST profile, 2026-10-11), the inference service as an opt-in Docker service, receipt-text parser, and evaluation tools | Score the model on the held-out split (ML QA) and validate real image-to-text performance |
+| Vision and receipts | Training pipeline, a first trained model (FAST profile, 2026-10-11), the inference service as an opt-in Docker service, receipt-text parser, and evaluation tools. Receipts are read by Gemini vision (with the ML service's OCR used first when one is configured) | Score the YOLO model on the held-out split (ML QA); run the receipt OCR gate on real photographed receipts; finish the GLM-OCR engine fix; build the iOS receipt screen |
 
 Current test counts and QA verdicts live in the [QA log](docs/QA.md), and the work in progress is
 in the [handoff](HANDOFF.md). The [area QA reports](docs/qa/) distinguish component checks from full
@@ -65,7 +65,7 @@ product verification. YOLO accuracy and the complete phone demo still need valid
 | Data | PostgreSQL with TimescaleDB | App state and timestamped food events |
 | AI | Google Gemini | Photo fallback, text parsing, recipe suggestions, and shelf-life estimates |
 | Vision | Ultralytics YOLO pipeline | Experimental food detection and freshness classification |
-| Receipts | GLM-OCR integration and a deterministic parser | Receipt image extraction and line-item parsing |
+| Receipts | Gemini vision (default reader); optional ML-service OCR (GLM-OCR, not yet fixed) plus a deterministic parser | Receipt image extraction and line-item parsing |
 | Local runtime | Docker Compose | API, database and (opt-in `ml` profile) the YOLO service |
 
 ## Run locally
@@ -82,7 +82,8 @@ cp .env.example .env
 
 Edit `.env`: set the database credentials and a strong `JWT_SECRET`; configure
 `GEMINI_API_KEY` and `GEMINI_MODEL` (the id ruled in [DECISIONS.md](docs/DECISIONS.md), currently `gemini-3.8-flash`;
-the `.env.example` placeholder makes every Gemini call fail) for AI features. For Google sign-in set `GOOGLE_IOS_CLIENT_IDS` (steps in the [setup guide](docs/SETUP.md)). Keep database passwords
+the `.env.example` placeholder makes every Gemini call fail) for AI features. Free-tier keys allow only about
+2 requests per minute per model and a daily cap, so use a billing-enabled key for demos. For Google sign-in set `GOOGLE_IOS_CLIENT_IDS` (steps in the [setup guide](docs/SETUP.md)). Keep database passwords
 consistent with the database URLs. Keep real credentials out of commits.
 
 ```bash
@@ -95,8 +96,8 @@ With the default API port, the health response is `{"status":"ok"}`. Database mi
 automatically when the API container starts. The API binds to `127.0.0.1:5055` and the database
 to `127.0.0.1:5433`; a phone needs a separately configured route to the API.
 
-Leave `ML_SERVICE_URL` empty to use Gemini for photos. Receipts require a configured OCR
-service. The standalone ML service defaults to fake backends for development; configure real
+Leave `ML_SERVICE_URL` empty to use Gemini for photos and receipts (`/items/from-receipt` reports
+`source: "gemini"`; with an ML service that answers `/ocr` it reports `source: "ocr"`). The standalone ML service defaults to fake backends for development; configure real
 backends before presenting its output as live recognition. See [ML setup](docs/ML.md).
 
 ### Photo detection with the trained YOLO model (optional)
@@ -117,7 +118,7 @@ docker compose --profile ml ps
 
 A photo then goes YOLO (`source: "yolo"`) → Gemini enrichment of each detected item (expiry, nutrition) → the review
 list in the app. If the `ml` service is down or errors, `/items/from-photo` falls back to Gemini vision. Receipt OCR
-stays off in this service (`/ocr` answers 503 and the API returns its usual 502). Plain `docker compose up -d` leaves
+stays off in this service (`/ocr` answers 503), so the API reads receipts with Gemini vision instead. Plain `docker compose up -d` leaves
 `ml` off. Until ML QA scores the model, treat its freshness calls as unverified.
 
 ### Train the model (Colab)

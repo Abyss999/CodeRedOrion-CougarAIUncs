@@ -283,7 +283,11 @@ post it straight back.
   - *Log.* One INFO line on `app.enrich` per request: status, reason, source, facets and counts only, never a food
     name or an image. The Gemini call itself writes the usual `gemini_usage` line.
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [item…], total, categorized_by:
-  "gemini"|"heuristic"}` via `ML_SERVICE_URL`/ocr; `502` when unset or failing. Each candidate is a full
+  "gemini"|"heuristic", source: "ocr"|"gemini"}`. **Reader and fallback** (like `/items/from-photo`): the ML
+  service's `/ocr` (`ML_SERVICE_URL`) is tried first and gives `source: "ocr"`; if it is unset or fails, Gemini
+  vision reads the image directly (`gemini.receipt_from_image`, one call, JSON schema, `purpose=receipt_read` in
+  the `gemini_usage` log) and gives `source: "gemini"`. `502 upstream_unavailable` only when both are
+  unavailable; the message names both reasons. `source` is additive: older clients ignore it. Each candidate is a full
   item like the other add paths (`name, category, food_group, storage, quantity, unit, est_price,
   predicted_expiry, expiry_source`) plus `price` (= `est_price`, kept for older clients) and
   `receipt_text` (the line as printed), so it can be posted straight back to `POST /items`.

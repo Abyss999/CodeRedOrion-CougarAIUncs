@@ -593,18 +593,41 @@ def from_photo():
     return jsonify(**body)
 
 
+RECEIPT_CATEGORIZE_BUDGET_S = 40  # worst case then: ML 60 + read 45 = 105 s, or read 91.5 s alone, or read <= 40 s + categorize 61.5 s
+
+
+def _read_receipt(data, filename, mime):
+    """(body, source): the ML service's OCR first; Gemini vision on the image if the service is unset
+    or fails. Both unavailable -> 502 naming both."""
+    ml_reason, ml_tried = "ML service is not configured", False
+    if ml.is_configured():
+        ml_tried = True
+        try:
+            return ml.ocr(data, filename, mime), "ocr"
+        except ml.MLUnavailable as e:
+            ml_reason = str(e)
+    gemini_reason = "Gemini is not configured"
+    if gemini.is_configured():
+        try:
+            # After a failed ML call (up to 60 s) a retried read could pass gunicorn's 120 s: read once (BE-31).
+            return gemini.receipt_from_image(data, mime, retry=not ml_tried), "gemini"
+        except gemini.UpstreamError as e:
+            gemini_reason = str(e)
+    raise upstream_unavailable(f"Receipt OCR unavailable ({ml_reason}) and Gemini fallback unavailable ({gemini_reason}).")
+
+
 @bp.post("/from-receipt")
 @require_auth
 def from_receipt():
+    started = time.monotonic()
     data, filename, mime = _image_upload()
-    try:
-        body = ml.ocr(data, filename, mime)
-    except ml.MLUnavailable as e:
-        raise upstream_unavailable(f"Receipt OCR unavailable: {e}")
+    body, source = _read_receipt(data, filename, mime)
     lines = [l for l in body["lines"] if isinstance(l, dict) and str(l.get("name") or "").strip()
              and not candidates.is_receipt_noise(l.get("name"), l.get("price"))]
     enriched = None
-    if lines and gemini.is_configured():
+    # Reading can take up to 2 x 45 s + retry delay; a second slow call would pass gunicorn's 120 s timeout,
+    # so after a slow read keep the printed names and the food-group heuristic.
+    if lines and gemini.is_configured() and time.monotonic() - started <= RECEIPT_CATEGORIZE_BUDGET_S:
         try:
             enriched = gemini.categorize_receipt_lines([str(l["name"]).strip() for l in lines])
         except gemini.UpstreamError:
@@ -613,7 +636,8 @@ def from_receipt():
     total = candidates._money(body.get("total"))
     applied = any(isinstance(e, dict) and e.get(k) for e in enriched or []
                   for k in ("display_name", "category", "food_group", "storage"))
-    return jsonify(candidates=out, total=total, categorized_by="gemini" if applied else "heuristic")
+    return jsonify(candidates=out, total=total, categorized_by="gemini" if applied else "heuristic",
+                   source=source)
 
 
 @bp.get("/barcode/<code>")
