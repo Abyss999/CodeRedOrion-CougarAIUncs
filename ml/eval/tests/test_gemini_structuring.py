@@ -123,7 +123,7 @@ def test_no_key_returns_none_without_network(calls, monkeypatch):
 def test_model_default_alias(calls):
     rp.gemini_structure("x")
     url = calls.reqs[0].full_url
-    assert "/models/gemini-flash-latest:generateContent" in url
+    assert "/models/gemini-3.8-flash:generateContent" in url
     assert "gemini-2.5-flash" not in url
 
 
@@ -136,7 +136,7 @@ def test_model_env(calls, monkeypatch):
 def test_model_empty_env_falls_back(calls, monkeypatch):
     monkeypatch.setenv("GEMINI_MODEL", "")
     rp.gemini_structure("x")
-    assert "/models/gemini-flash-latest:" in calls.reqs[0].full_url
+    assert "/models/gemini-3.8-flash:" in calls.reqs[0].full_url
 
 
 def test_model_argument_beats_env(calls, monkeypatch):
@@ -246,7 +246,7 @@ def test_ocr_gemini_disabled_makes_no_request(calls):
 
 def test_ocr_request_uses_env_model_and_default(calls, monkeypatch):
     post_ocr()
-    assert "/models/gemini-flash-latest:" in calls.reqs[-1].full_url
+    assert "/models/gemini-3.8-flash:" in calls.reqs[-1].full_url
     monkeypatch.setenv("GEMINI_MODEL", "gemini-x")
     post_ocr()
     assert "/models/gemini-x:" in calls.reqs[-1].full_url

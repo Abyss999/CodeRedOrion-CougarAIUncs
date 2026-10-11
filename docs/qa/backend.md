@@ -243,6 +243,7 @@ New file: `backend/tests/test_receipt_candidates_qa.py`.
 | BE-11 | low | `POST /items/from-receipt` passes every OCR line through, so a line named `TOTAL`, `SUBTOTAL`, `TAX`... becomes a candidate whose price is the receipt total (`backend/app/routes/items.py:405`). ml/serve's deterministic parser drops these lines, but its Gemini-structuring path (`ml/ocr/receipt_pipeline.py:291`, `gemini_structure` -> `clean_structured`) excludes them only by prompt wording, and that path overrides the deterministic parse whenever it returns lines. Repro: stub `ml.ocr` -> `{"lines":[{"name":"MILK","price":3.48},{"name":"TOTAL","price":4.21}],"total":4.21}`; the response has 2 candidates. Fix in either layer (a total/tax/subtotal/balance/change/coupon name guard in `candidates.from_receipt_lines` or `clean_structured`); needs an owner ruling. Test: `test_total_and_tax_lines_do_not_become_items` (now passing). | **fixed on #54** (ported fix, 7044932) |
 | BE-12 | low | `categorized_by` says `"gemini"` when Gemini categorised nothing. `categorize_receipt_lines` pads its answer to `len(names)` with `{}` (`backend/app/services/gemini.py:153`), so `[]`, `{}`, `{"items":[]}` or `[1,2,3]` produce a truthy list of empty dicts and the route reports gemini (`backend/app/routes/items.py:414`) while every line used the heuristic and kept the printed name. Fix: report gemini only if at least one entry contributed a valid field. Test: `test_empty_gemini_answer_is_not_reported_as_gemini` (now passing). | **fixed on #54** (ported fix, 7044932) |
 | BE-13 | low | Valid JSON that is neither a list nor a dict (`null`, `"a string"`, `42`, `true`) reaches `data.get("items", [])` at `backend/app/services/gemini.py:151` -> `AttributeError`, which is outside `_generate`'s `try` and is not an `UpstreamError`, so the route's fallback (`items.py:410`) does not catch it and `/items/from-receipt` returns 500. The response schema makes this unlikely, but the documented contract is "if that call fails, heuristic". The same pre-existing pattern is in `parse_text` (`gemini.py:112`), `detect_from_image` and `suggest_recipes`. Fix: treat a non-list/non-dict answer as `[]` or raise `UpstreamError`. Test: `test_non_container_gemini_answer_is_not_500` (xfail strict, 4 cases). | open, pending the rebase of #54 onto PR 2 |
+| BE-14 | low/medium | Coupon/discount lines (`COUPON -0.50`, `MFR COUPON`, `INSTANT SAVINGS`) passed through `from-receipt` as candidates with a negative `est_price`. `POST /items` rejects a negative price, so posting the Add batch back failed with 400 for every item. Repro: OCR `[MILK 3.48, COUPON -0.50]` -> 2 candidates, and posting them back -> 400. Fix: `candidates.is_receipt_noise(name, price)` drops any negative price and coupon/discount/savings/mfr names under the same tail rule, with `off` added as a tail word. It runs in `from_receipt_lines` and in the route before Gemini. Tests: `test_be14_*`, `test_route_negative_price_dropped_not_500`. | **found and fixed on #54** (ported fix) |
 
 Notes (not bugs, for the builder):
 - `_is_transient` also retries 504 / `DEADLINE_EXCEEDED`, and any exception whose first 300 chars contain `UNAVAILABLE`, `RESOURCE_EXHAUSTED` or `DEADLINE_EXCEEDED`. A client-side `TimeoutError` is not retried. A daily-quota 429 is retried once too (harmless, adds 1.5 s).
@@ -272,3 +273,23 @@ Verified on top of the earlier cases (targeted: `test_receipt_candidates_qa.py` 
 - The earlier 16 drop cases and 14 food-name keeps still hold.
 
 **Note for the orchestrator:** a bare card-network line is treated as a payment line and dropped. This covers "MC", "DISCOVER" and "Discover", and also "MC 1234". It is intended under the ruling, because a product named only "Discover" or "MC" is not expected on a grocery receipt. Any brand that is exactly a keyword plus tail words (e.g. a product printed as "TOTAL SAVINGS") would also be dropped.
+
+### BE-14 (coupon/discount lines) found and fixed on #54
+Found in the orchestrator's review and fixed by the builder (ported fix). `candidates.is_receipt_noise` drops a line if its price is negative, or if its name is a coupon/discount line under the tail rule. That means an optional `instant`/`mfr` prefix, then `coupon|discount|savings|mfr`, then only amounts, `%`, punctuation or tail words (now including `off`).
+
+Targeted runs, from `backend/` on `fwr_test`:
+
+| File | Result |
+|---|---|
+| `test_receipt_candidates_qa.py` | 166 passed, 4 xfailed (BE-13, strict) |
+| `test_receipt_candidates.py` | 57 passed |
+| `test_gemini_retry.py` | 20 passed |
+
+- **Repro:** OCR `[MILK 3.48, COUPON -0.50]` now gives 1 candidate, and posting the candidates back to `POST /items` gives 201.
+- **Dropped:** MFR COUPON (with a positive and a negative price), INSTANT SAVINGS, `INSTANT SAVINGS 1.00 OFF`, `COUPON $1.00 OFF`, `DISCOUNT 10%`, SAVINGS, and MILK at -0.5, `"-1.00"` and -0.01.
+- **Kept:** Savings Bread, Discount Ham, Coupon Cookies and `Coupon Cookies 2.00`. MILK at price 0, None or junk is also kept.
+- **End to end:** the keeps come back, the drops don't, and posting back gives 201.
+- **Never sent to Gemini:** in the stubbed request, the contents are exactly `["GV 2% MLK GAL", "Coupon Cookies"]`.
+- **Changed test:** `test_route_price_never_500[-1.00--1.0]` is removed from that parametrisation. A negative price is now dropped, not returned, and `test_route_negative_price_dropped_not_500` checks this for `"-1.00"`, -0.5, `"$-1.00"` and `"-$1.00"`.
+
+**Verdict for #54 backend: PASS pending the full suite.** BE-11, BE-12 and BE-14 are fixed. BE-13 is tracked (strict xfail) until the rebase onto PR 2.

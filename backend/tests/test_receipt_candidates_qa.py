@@ -278,7 +278,7 @@ def test_money_parsing(raw, want):
 
 
 @pytest.mark.parametrize("price, want", [
-    ("$3.48", 3.48), ("abc", None), ("1,29", 1.29), ("9" * 400, None), (1e308, 1e308), ("-1.00", -1.0),
+    ("$3.48", 3.48), ("abc", None), ("1,29", 1.29), ("9" * 400, None), (1e308, 1e308),
     ([1, 2], None), ({"a": 1}, None),
 ])
 def test_route_price_never_500(client, user, monkeypatch, ml_on, price, want):
@@ -289,6 +289,14 @@ def test_route_price_never_500(client, user, monkeypatch, ml_on, price, want):
     json.loads(r.get_data(as_text=True), parse_constant=lambda c: pytest.fail(f"non-JSON constant {c}"))
     c = b["candidates"][0]
     assert c["price"] == c["est_price"] == want and b["total"] == want and c["quantity"] == 2.0
+
+
+@pytest.mark.parametrize("price", ["-1.00", -0.5, "$-1.00", "-$1.00"])
+def test_route_negative_price_dropped_not_500(client, user, monkeypatch, ml_on, price):
+    """BE-14: a negative price is a discount line; it is dropped (was returned as est_price -1.0)."""
+    set_ocr(monkeypatch, [{"name": "MILK", "quantity": "2", "price": price}], total=3.0)
+    r = post_receipt(client, user)
+    assert r.status_code == 200 and r.get_json()["candidates"] == []
 
 
 @pytest.mark.parametrize("qty, want", [("abc", 1.0), ("0", 1.0), (-3, 1.0), ("2.5", 2.5), (None, 1.0),
@@ -510,3 +518,57 @@ def test_partial_gemini_answer_counts_as_gemini(client, user, monkeypatch, gem_o
     FakeGenai(monkeypatch, [json.dumps([{}, {"category": "meat"}])])
     set_ocr(monkeypatch, LINES[:2])
     assert post_receipt(client, user).get_json()["categorized_by"] == "gemini"
+
+
+# ---------- BE-14: coupon / discount lines ---------------------------------------------------
+def test_be14_coupon_repro_posts_back_201(client, user, monkeypatch, ml_on):
+    set_ocr(monkeypatch, [{"name": "MILK", "price": 3.48}, {"name": "COUPON", "price": -0.50}], total=2.98)
+    b = post_receipt(client, user).get_json()
+    assert [c["name"] for c in b["candidates"]] == ["MILK"] and b["total"] == 2.98
+    r = client.post("/items", json={"items": [dict(c, source="receipt") for c in b["candidates"]]},
+                    headers=user["headers"])
+    assert r.status_code == 201, r.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("name, price", [
+    ("MFR COUPON", 0.75), ("INSTANT SAVINGS", 1.00), ("COUPON $1.00 OFF", 1.00), ("DISCOUNT 10%", 0.35),
+    ("SAVINGS", 2.00), ("MFR COUPON", -0.75), ("INSTANT SAVINGS 1.00 OFF", None), ("MILK", -0.5),
+    ("MILK", "-1.00"), ("MILK", -0.01),
+])
+def test_be14_noise_dropped(name, price):
+    assert candidates.is_receipt_noise(name, price)
+
+
+@pytest.mark.parametrize("name, price", [
+    ("Savings Bread", 2.50), ("Discount Ham", 4.99), ("Coupon Cookies", 2.00), ("Coupon Cookies 2.00", 2.00),
+    ("MILK", 0), ("MILK", None), ("MILK", "abc"),
+])
+def test_be14_food_kept(name, price):
+    assert not candidates.is_receipt_noise(name, price)
+
+
+def test_be14_end_to_end(client, user, monkeypatch, ml_on):
+    keep = [{"name": "Savings Bread", "price": 2.5}, {"name": "Discount Ham", "price": 4.99},
+            {"name": "Coupon Cookies 2.00", "price": 2.0}]
+    drop = [{"name": "MFR COUPON", "price": -0.75}, {"name": "INSTANT SAVINGS", "price": -1.0},
+            {"name": "COUPON $1.00 OFF", "price": None}, {"name": "DISCOUNT 10%", "price": -0.35},
+            {"name": "SAVINGS", "price": 2.0}, {"name": "EGGS", "price": "-1.00"}]
+    set_ocr(monkeypatch, keep + drop, total=7.0)
+    b = post_receipt(client, user).get_json()
+    assert [c["name"] for c in b["candidates"]] == [k["name"] for k in keep]
+    assert all(c["est_price"] is None or c["est_price"] >= 0 for c in b["candidates"])
+    r = client.post("/items", json={"items": [dict(c, source="receipt") for c in b["candidates"]]},
+                    headers=user["headers"])
+    assert r.status_code == 201, r.get_data(as_text=True)
+
+
+def test_be14_coupons_never_sent_to_gemini(client, user, monkeypatch, gem_on, ml_on):
+    lines = [{"name": "GV 2% MLK GAL", "price": 3.48}, {"name": "MFR COUPON", "price": -0.75},
+             {"name": "Coupon Cookies", "price": 2.0}, {"name": "INSTANT SAVINGS", "price": -1.0},
+             {"name": "COUPON $1.00 OFF", "price": 1.0}, {"name": "EGGS", "price": "-1.00"}]
+    fake = FakeGenai(monkeypatch, [json.dumps(ENRICHED[:2])])
+    set_ocr(monkeypatch, lines, total=4.73)
+    b = post_receipt(client, user).get_json()
+    assert len(fake.calls) == 1
+    assert json.loads(fake.calls[0]["contents"]) == ["GV 2% MLK GAL", "Coupon Cookies"]
+    assert len(b["candidates"]) == 2 and b["categorized_by"] == "gemini"

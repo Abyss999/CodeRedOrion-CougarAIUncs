@@ -651,3 +651,26 @@ Scope: the notebook changes (AgriFreshNET download + ingest, `DRY_RUN`, `make_su
 
 ### 2026-10-10 re-verification: ML-45, ML-46, ML-47 **fixed / verified**
 xfail markers removed (now plain assertions) plus one added test for `"1,29"` and `"-1,299.50"`. `ml/eval/tests` 206 passed, 1 skipped; serve 14, ocr 89, yolo 63 passed. ML-45 (thousands separator), ML-46 (non-finite -> None) and ML-47 (Gemini null total keeps parser total) all closed. Note: `receipt_from_image` total merge was not separately tested (it needs a real OCR engine); the `/ocr` route is. **Verdict: PASS.**
+
+## 2026-10-10 - PR #54 receipt-gemini-link (independent ML QA)
+
+_Independent QA (food-main-mac, backend QA acting for ML on #54). This supersedes the self-signed author section above for the merge gate; that section is kept as the author's record._
+
+**Result: PASS.** CPU only (`CUDA_VISIBLE_DEVICES=""`, `HF_HUB_OFFLINE=1`, `GEMINI_API_KEY` unset), no downloads and no training. Run from `ml/` with `.venv-ml/bin/python -m pytest -q`:
+
+| Suite | Result |
+|---|---|
+| `serve/tests` | 14 passed |
+| `ocr/tests` | 89 passed |
+| `eval/tests` | 206 passed, 1 skipped |
+| All three in one invocation | 309 passed, 1 skipped (no conftest collisions) |
+
+- **Skipped:** `eval/tests/test_variant_dup_check.py` is skipped because `imagehash` is not installed in `.venv-ml` (`importorskip`).
+- **Not run:** the `ml/yolo` tests, because they were out of scope for this check (they need weights or training tooling).
+- **No network:** none of these suites touch the network. In `test_gemini_structuring.py`, `urlopen` is monkeypatched in every case.
+
+Changes checked on #54:
+- **(b) dead code removed.** `_to_num` in `ml/ocr/receipt_pipeline.py:306` now has a single body: `bool` -> None, non-finite -> None, `$`/space stripping, thousands vs comma-decimal handling. The unreachable second block is gone. ML-45 and ML-46 behaviour still passes.
+- **(c) model fallback.** `gemini_structure` falls back to `gemini-3.8-flash` (`receipt_pipeline.py:289`) when neither an argument nor `GEMINI_MODEL` is set. I updated three assertions in `ml/eval/tests/test_gemini_structuring.py` from `gemini-flash-latest` to `gemini-3.8-flash`: `test_model_default_alias` (line 126), `test_model_empty_env_falls_back` (line 139) and `test_ocr_request_uses_env_model_and_default` (line 249). That file has 63 passed.
+
+**Note:** `clean_structured` still passes negative prices (coupon lines) through. The backend now drops them (BE-14, `docs/qa/backend.md`), so this is not an ML bug.
