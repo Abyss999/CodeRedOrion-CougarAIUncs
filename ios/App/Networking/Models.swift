@@ -100,6 +100,30 @@ struct ItemShare: Codable, Hashable, Sendable {
     let id: String
     let status: ShareStatus  // open | fulfilled
     let claimedBy: Claimant?
+    /// Who the open listing is offered to (owner only; absent from older backends).
+    var audience: ListingAudience?
+
+    init(id: String, status: ShareStatus, claimedBy: Claimant?, audience: ListingAudience? = nil) {
+        self.id = id; self.status = status; self.claimedBy = claimedBy; self.audience = audience
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, status, claimedBy, audience }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        status = try c.decode(ShareStatus.self, forKey: .status)
+        claimedBy = try c.decodeIfPresent(Claimant.self, forKey: .claimedBy)
+        audience = try c.decodeIfPresent(ListingAudience.self, forKey: .audience)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(status, forKey: .status)
+        try c.encodeIfPresent(claimedBy, forKey: .claimedBy)
+        try c.encodeIfPresent(audience, forKey: .audience)
+    }
 }
 
 struct Item: Codable, Identifiable, Hashable, Sendable {
@@ -284,6 +308,8 @@ struct ImpactTotals: Codable, Hashable, Sendable {
     var kg: Double
     var money: Double
     var co2eKg: Double
+
+    static let zero = ImpactTotals(count: 0, kg: 0, money: 0, co2eKg: 0)
 }
 
 struct WeeklyBucket: Codable, Hashable, Sendable {
@@ -292,11 +318,81 @@ struct WeeklyBucket: Codable, Hashable, Sendable {
     var wasted: Int
 }
 
-struct Impact: Codable, Hashable, Sendable {
+/// `last_6_weeks` entry: always 6, oldest first, zero-filled (counts only).
+struct WeekCounts: Codable, Hashable, Sendable, Identifiable {
+    var week: Date
+    var used: Int
+    var donated: Int
+    var saved: Int
+    var wasted: Int
+    var id: Date { week }
+}
+
+/// One of the four waste reasons with its totals and `share` of `wasted.count` (0...1).
+struct WasteReasonStat: Codable, Hashable, Sendable, Identifiable {
+    var reason: WasteReason
+    var count: Int
+    var kg: Double
+    var money: Double
+    var co2eKg: Double
+    var share: Double
+    var id: WasteReason { reason }
+}
+
+/// Totals for the window of equal length just before the current one. Clients compute deltas.
+struct ImpactPrevious: Codable, Hashable, Sendable {
     var saved: ImpactTotals
     var wasted: ImpactTotals
+    var used: ImpactTotals
+    var donated: ImpactTotals
     var wasteRate: Double
+}
+
+/// `GET /impact` (wave-2 shape). `used`, `donated`, `waste_reasons` and `last_6_weeks` default to
+/// zero / empty when absent, so an older payload still decodes.
+struct Impact: Codable, Hashable, Sendable {
+    var range: String?
+    /// used + donated.
+    var saved: ImpactTotals
+    /// thrown_out.
+    var wasted: ImpactTotals
+    var used: ImpactTotals
+    var donated: ImpactTotals
+    var wasteRate: Double
+    /// Always the 4 reasons, sorted by count desc.
+    var wasteReasons: [WasteReasonStat]
+    /// Nil for `range=all`.
+    var previous: ImpactPrevious?
+    /// Range-filtered, only weeks with data.
     var weekly: [WeeklyBucket]
+    /// Always 6, oldest first, independent of range.
+    var last6Weeks: [WeekCounts]
+
+    init(range: String? = nil, saved: ImpactTotals, wasted: ImpactTotals, used: ImpactTotals = .zero,
+         donated: ImpactTotals = .zero, wasteRate: Double, wasteReasons: [WasteReasonStat] = [],
+         previous: ImpactPrevious? = nil, weekly: [WeeklyBucket], last6Weeks: [WeekCounts] = []) {
+        self.range = range; self.saved = saved; self.wasted = wasted; self.used = used; self.donated = donated
+        self.wasteRate = wasteRate; self.wasteReasons = wasteReasons; self.previous = previous
+        self.weekly = weekly; self.last6Weeks = last6Weeks
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case range, saved, wasted, used, donated, wasteRate, wasteReasons, previous, weekly, last6Weeks
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        range = try c.decodeIfPresent(String.self, forKey: .range)
+        saved = try c.decode(ImpactTotals.self, forKey: .saved)
+        wasted = try c.decode(ImpactTotals.self, forKey: .wasted)
+        used = try c.decodeIfPresent(ImpactTotals.self, forKey: .used) ?? .zero
+        donated = try c.decodeIfPresent(ImpactTotals.self, forKey: .donated) ?? .zero
+        wasteRate = try c.decode(Double.self, forKey: .wasteRate)
+        wasteReasons = try c.decodeIfPresent([WasteReasonStat].self, forKey: .wasteReasons) ?? []
+        previous = try c.decodeIfPresent(ImpactPrevious.self, forKey: .previous)
+        weekly = try c.decodeIfPresent([WeeklyBucket].self, forKey: .weekly) ?? []
+        last6Weeks = try c.decodeIfPresent([WeekCounts].self, forKey: .last6Weeks) ?? []
+    }
 }
 
 struct Tip: Codable, Hashable, Sendable, Identifiable {
@@ -313,11 +409,37 @@ struct Macros: Codable, Hashable, Sendable {
     var fatG: Double
 }
 
+/// `uses_items` entry: the caller's own item a recipe uses. Decodes a bare string too
+/// (the pre-wave-2 shape), with an empty `itemId` and no expiry.
+struct RecipeItem: Codable, Hashable, Sendable, Identifiable {
+    var itemId: String
+    var name: String
+    var predictedExpiry: Date?
+    var id: String { itemId.isEmpty ? name : itemId }
+
+    init(itemId: String, name: String, predictedExpiry: Date? = nil) {
+        self.itemId = itemId; self.name = name; self.predictedExpiry = predictedExpiry
+    }
+
+    private enum CodingKeys: String, CodingKey { case itemId, name, predictedExpiry }
+
+    init(from decoder: Decoder) throws {
+        if let name = try? decoder.singleValueContainer().decode(String.self) {
+            self = RecipeItem(itemId: "", name: name)
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self = RecipeItem(itemId: try c.decode(String.self, forKey: .itemId), name: try c.decode(String.self, forKey: .name),
+                          predictedExpiry: try c.decodeIfPresent(Date.self, forKey: .predictedExpiry))
+    }
+}
+
 struct Recipe: Codable, Hashable, Sendable, Identifiable {
     var title: String
     var minutes: Int
-    /// Item names today. Gap-analysis #12 asks for structured refs (item id + expiry) later.
-    var usesItems: [String]
+    /// 1...20 from Gemini, else nil.
+    var servings: Int?
+    var usesItems: [RecipeItem]
     var missingItems: [String]
     var steps: [String]
     var macros: Macros?

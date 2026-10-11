@@ -32,6 +32,32 @@ enum AccessibilityID {
         static let sheet = "add.sheet"
     }
 
+    // Namespaces for the upcoming screens. Each PR adds its element ids inside its own enum
+    // (convention `screen.element[.id]`); `screen` is the screen's root id.
+    enum Home { static let screen = "home" }
+    enum PhotoReview { static let screen = "photoreview" }
+    enum ItemDetail { static let screen = "itemdetail" }
+    enum Impact { static let screen = "impact" }
+    enum Recipes { static let screen = "recipes" }
+    enum Social { static let screen = "social" }
+    enum Auth { static let screen = "auth" }
+    enum Settings { static let screen = "settings" }
+
+    // Shared components. Per-instance ids (banner, form field) are passed in by the owning screen.
+    enum Permission {
+        /// `kind` is a `PermissionKind` raw value: camera | microphone | speech.
+        static func card(_ kind: String) -> String { "permission.\(kind)" }
+        static func openSettings(_ kind: String) -> String { "permission.\(kind).settings" }
+        static func alternative(_ kind: String) -> String { "permission.\(kind).alternative" }
+    }
+
+    enum Audience {
+        static let list = "audience.list"
+        static let friends = "audience.friends"
+        static func group(_ id: String) -> String { "audience.group.\(id)" }
+        static let hint = "audience.hint"
+    }
+
     enum Remove {
         static let sheet = "remove.sheet"
         static let outcomeUsed = "remove.outcome.used"

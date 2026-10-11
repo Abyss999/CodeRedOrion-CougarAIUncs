@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Placeholder Home tab content. Hosts the version label (Debug settings entry) and the
+/// Home tab entry (placeholder until the Home screen lands; that PR edits only this folder). Hosts the version label (Debug settings entry) and the
 /// `-UITestShowToast` hook: the Undo toast is attached here, inside the tab's content, as real
 /// screens will do.
-struct HomePlaceholderView: View {
+struct HomeView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var toast: UndoToastItem?
     @State private var undoTapped = false

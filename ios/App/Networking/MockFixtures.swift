@@ -86,28 +86,30 @@ enum MockData {
         ]
     }
 
-    static func impact(range: ImpactRange, now: Date = Date()) -> Impact {
-        let weeks = (0..<4).map { i in
-            WeeklyBucket(week: Calendar.current.date(byAdding: .day, value: -7 * (3 - i), to: Calendar.current.startOfDay(for: now))!,
-                         saved: [4, 6, 5, 8][i], wasted: [2, 1, 2, 1][i])
-        }
-        return Impact(saved: ImpactTotals(count: 23, kg: 14.2, money: 61.4, co2eKg: 38.6),
-                      wasted: ImpactTotals(count: 6, kg: 3.1, money: 14.2, co2eKg: 8.4),
-                      wasteRate: 0.21, weekly: range == .week ? Array(weeks.suffix(1)) : weeks)
-    }
-
     static let tips: [Tip] = [
         Tip(code: "forgot_leafy", message: "Spinach was forgotten twice before, so next time we'll remind you on day 3."),
     ]
 
-    static let recipes: [Recipe] = [
-        Recipe(title: "Chicken and spinach skillet", minutes: 25, usesItems: ["Chicken thighs", "Baby spinach"],
-               missingItems: ["Garlic"], steps: ["Sear the chicken.", "Wilt the spinach.", "Serve."],
-               macros: Macros(kcal: 520, proteinG: 42, carbsG: 14, fatG: 30), macrosEstimated: true),
-        Recipe(title: "Banana oat pancakes", minutes: 20, usesItems: ["Bananas", "Oat milk"], missingItems: [],
-               steps: ["Mash bananas.", "Mix with oats and milk.", "Pan fry."],
-               macros: Macros(kcal: 380, proteinG: 11, carbsG: 62, fatG: 9), macrosEstimated: true),
-        Recipe(title: "Yogurt berry bowl", minutes: 5, usesItems: ["Greek yogurt", "Strawberries"], missingItems: ["Granola"],
-               steps: ["Spoon yogurt into a bowl.", "Top with fruit."], macros: nil, macrosEstimated: true),
-    ]
+    static var recipes: [Recipe] { recipes() }
+
+    static func recipes(now: Date = Date(), calendar: Calendar = .current) -> [Recipe] {
+        func day(_ n: Int) -> Date { calendar.date(byAdding: .day, value: n, to: calendar.startOfDay(for: now))! }
+        return [
+            Recipe(title: "Chicken and spinach skillet", minutes: 25, servings: 2,
+                   usesItems: [RecipeItem(itemId: "item-chicken", name: "Chicken thighs", predictedExpiry: day(0)),
+                               RecipeItem(itemId: "item-spinach", name: "Baby spinach", predictedExpiry: day(1))],
+                   missingItems: ["Garlic"], steps: ["Sear the chicken.", "Wilt the spinach.", "Serve."],
+                   macros: Macros(kcal: 520, proteinG: 42, carbsG: 14, fatG: 30), macrosEstimated: true),
+            Recipe(title: "Banana oat pancakes", minutes: 20, servings: 3,
+                   usesItems: [RecipeItem(itemId: "item-bananas", name: "Bananas", predictedExpiry: day(3)),
+                               RecipeItem(itemId: "item-oatmilk", name: "Oat milk", predictedExpiry: day(6))],
+                   missingItems: [], steps: ["Mash bananas.", "Mix with oats and milk.", "Pan fry."],
+                   macros: Macros(kcal: 380, proteinG: 11, carbsG: 62, fatG: 9), macrosEstimated: true),
+            Recipe(title: "Yogurt berry bowl", minutes: 5, servings: nil,
+                   usesItems: [RecipeItem(itemId: "item-yogurt", name: "Greek yogurt", predictedExpiry: day(3)),
+                               RecipeItem(itemId: "item-strawberries", name: "Strawberries", predictedExpiry: day(2))],
+                   missingItems: ["Granola"], steps: ["Spoon yogurt into a bowl.", "Top with fruit."],
+                   macros: nil, macrosEstimated: true),
+        ]
+    }
 }

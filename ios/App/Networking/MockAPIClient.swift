@@ -14,18 +14,27 @@ actor MockAPIClient: APIClient {
         var failFirst: [String: Int] = [:]
         /// Per-method delay overriding `delay` (key = method name), e.g. a slow remove.
         var delays: [String: Duration] = [:]
+        /// `removeItem` throws this for `thrown_out` only (`-UITestTossFails`).
+        var failThrownOut: APIError?
+        /// Every authenticated call signs the user out and throws `unauthorized` (`-UITestExpiredSession`).
+        var expiredSession = false
+        /// `fromPhoto` finds nothing (`-UITestPhotoNone`).
+        var photoFindsNothing = false
     }
 
     private(set) var behavior: Behavior
-    private var items: [Item]
-    private let auth: AuthStore?
-    private var signedInUser: User?
+    var items: [Item]
+    let auth: AuthStore?
+    var signedInUser: User?
     private var callCounts: [String: Int] = [:]
-    private var nextID = 1
+    var nextID = 1
+    /// Friends, groups, Food Pantry, requests and people (see `MockSocialFixtures.swift`).
+    var social: MockSocialState
 
     init(fixture: MockFixture = .fridge, behavior: Behavior = Behavior(), auth: AuthStore? = nil,
          signedIn: Bool = false, now: Date = Date()) {
         self.items = MockData.items(for: fixture, now: now)
+        self.social = MockData.social(for: fixture, now: now)
         self.behavior = behavior
         self.auth = auth
         self.signedInUser = signedIn ? MockData.priya : nil
@@ -38,7 +47,7 @@ actor MockAPIClient: APIClient {
     func calls(to method: String) -> Int { callCounts[method, default: 0] }
     func currentItems() -> [Item] { items }
 
-    private func gate(_ method: String, authenticated: Bool = true) async throws {
+    func gate(_ method: String, authenticated: Bool = true) async throws {
         callCounts[method, default: 0] += 1
         let delay = behavior.delays[method] ?? behavior.delay
         if delay > .zero { try await Task.sleep(for: delay) }
@@ -48,11 +57,18 @@ actor MockAPIClient: APIClient {
             throw APIError.network("Simulated failure")
         }
         if let e = behavior.failures[method] { throw e }
+        if authenticated, behavior.expiredSession {
+            signedInUser = nil
+            await auth?.signOut()
+            throw APIError.unauthorized
+        }
         if authenticated, auth != nil, signedInUser == nil, await auth?.isSignedIn == false { throw APIError.unauthorized }
     }
 
-    private func validation(_ message: String) -> APIError { .server(status: 400, code: "validation_error", message: message) }
-    private func notFound() -> APIError { .server(status: 404, code: "not_found", message: "Item not found.") }
+    func validation(_ message: String) -> APIError { .server(status: 400, code: "validation_error", message: message) }
+    func notFound(_ what: String = "Item") -> APIError { .server(status: 404, code: "not_found", message: "\(what) not found.") }
+    func conflict(_ code: String, _ message: String) -> APIError { .server(status: 409, code: code, message: message) }
+    func forbidden(_ message: String = "Not allowed.") -> APIError { .server(status: 403, code: "forbidden", message: message) }
 
     // MARK: Auth
 
@@ -81,6 +97,27 @@ actor MockAPIClient: APIClient {
         signedInUser = s.user
         await auth?.signIn(s)
         return s
+    }
+
+    func health() async throws -> Bool {
+        try await gate("health", authenticated: false)
+        return true
+    }
+
+    func me() async throws -> Me {
+        try await gate("me")
+        return Me(user: signedInUser ?? MockData.priya, hasPassword: true, providers: [])
+    }
+
+    /// `new-google-user` creates an account (`created: true`); any other non-empty token signs in Priya.
+    func googleSignIn(idToken: String) async throws -> GoogleAuthResult {
+        try await gate("googleSignIn", authenticated: false)
+        guard !idToken.isEmpty else { throw validation("id_token is required.") }
+        if idToken == "new-google-user" {
+            let user = User(id: "user-google-new", email: "new.cougar@gmail.com", displayName: "New Cougar", createdAt: Date())
+            return GoogleAuthResult(session: await finishAuth(AuthSession(token: "mock-token", user: user)), created: true)
+        }
+        return GoogleAuthResult(session: await finishAuth(AuthSession(token: "mock-token", user: MockData.priya)), created: false)
     }
 
     func deleteAccount() async throws {
@@ -155,23 +192,50 @@ actor MockAPIClient: APIClient {
         return items[i]
     }
 
-    func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipientId: String?) async throws -> Item {
+    func removeItem(id: String, outcome: RemoveOutcome, wasteReason: WasteReason?, recipient: RecipientChoice) async throws -> Item {
         try await gate("removeItem")
+        if outcome == .thrownOut, let e = behavior.failThrownOut { throw e }
         if outcome == .thrownOut && wasteReason == nil { throw validation("waste_reason is required when thrown_out.") }
         if outcome != .thrownOut && wasteReason != nil { throw validation("waste_reason is only allowed when thrown_out.") }
-        if outcome != .donated && recipientId != nil { throw validation("recipient_id is only allowed when donated.") }
+        if outcome != .donated && recipient != .default { throw validation("recipient_id is only allowed when donated.") }
         guard let i = items.firstIndex(where: { $0.id == id }) else { throw notFound() }
         if items[i].isRemoved { throw APIError.server(status: 409, code: "already_removed", message: "Already removed.") }
-        let now = Date()
+        let recipientId = try resolveRecipient(recipient, outcome: outcome, itemIndexes: [i])
+        applyRemoval(at: i, outcome: outcome, wasteReason: wasteReason, now: Date(), recipientId: recipientId)
+        return items[i]
+    }
+
+    /// Soft-deletes `items[i]`; a donated removal fulfils the item's open listing (docs/API.md).
+    /// Mirrors the backend's recipient rules: `.default` is the claimer of an open listing, `.none` nobody,
+    /// `.user` must be someone reachable (not yourself).
+    func resolveRecipient(_ choice: RecipientChoice, outcome: RemoveOutcome, itemIndexes: [Int]) throws -> String?? {
+        guard outcome == .donated else { return nil }
+        switch choice {
+        case .default: return nil
+        case .none: return .some(nil)
+        case .user(let uid):
+            if uid == (signedInUser ?? MockData.priya).id { throw validation("You can't give food to yourself.") }
+            guard social.people.contains(where: { $0.id == uid }) else { throw notFound("Recipient") }
+            return .some(uid)
+        }
+    }
+
+    func applyRemoval(at i: Int, outcome: RemoveOutcome, wasteReason: WasteReason?, now: Date, recipientId: String?? = nil) {
         items[i].removedAt = now
         items[i].outcome = outcome
         items[i].wasteReason = wasteReason
         items[i].removedAfterExpiry = items[i].predictedExpiry.map { Calendar.current.startOfDay(for: now) > $0 }
-        // A donated removal fulfils the item's open listing (docs/API.md).
         if outcome == .donated, let share = items[i].share, share.status == .open {
-            items[i].share = ItemShare(id: share.id, status: .fulfilled, claimedBy: share.claimedBy)
+            items[i].share = ItemShare(id: share.id, status: .fulfilled, claimedBy: share.claimedBy, audience: share.audience)
+            if let l = social.listings.firstIndex(where: { $0.id == share.id }) {
+                social.listings[l].status = .fulfilled
+                social.listings[l].fulfilledAt = now
+                switch recipientId {
+                case .none: social.listings[l].recipientId = social.listings[l].claimedBy
+                case .some(let r): social.listings[l].recipientId = r
+                }
+            }
         }
-        return items[i]
     }
 
     func restoreItem(id: String) async throws -> Item {
@@ -179,18 +243,57 @@ actor MockAPIClient: APIClient {
         guard let i = items.firstIndex(where: { $0.id == id }) else { throw notFound() }
         guard let removedAt = items[i].removedAt else { throw APIError.notRemoved }
         if Date().timeIntervalSince(removedAt) > 600 { throw APIError.restoreWindowExpired }
+        applyRestore(at: i)
+        return items[i]
+    }
+
+    func applyRestore(at i: Int) {
         // Undo reopens a listing that the removal fulfilled (claimed_by kept).
         if items[i].outcome == .donated, let share = items[i].share, share.status == .fulfilled {
-            items[i].share = ItemShare(id: share.id, status: .open, claimedBy: share.claimedBy)
+            items[i].share = ItemShare(id: share.id, status: .open, claimedBy: share.claimedBy, audience: share.audience)
+            if let l = social.listings.firstIndex(where: { $0.id == share.id }) {
+                social.listings[l].status = .open
+                social.listings[l].fulfilledAt = nil
+                social.listings[l].recipientId = nil
+            }
         }
         items[i].removedAt = nil; items[i].outcome = nil; items[i].wasteReason = nil; items[i].removedAfterExpiry = nil
-        return items[i]
+    }
+
+    func removeBatch(ids: [String], outcome: RemoveOutcome, recipient: RecipientChoice) async throws -> [Item] {
+        try await gate("removeBatch")
+        guard (1...100).contains(ids.count), Set(ids).count == ids.count else { throw validation("Send 1-100 unique item ids.") }
+        guard outcome != .thrownOut else { throw validation("thrown_out is not allowed in a batch.") }
+        guard recipient == .default || outcome == .donated else { throw validation("recipient_id is only allowed when donated.") }
+        let indexes = try ids.map { id -> Int in
+            guard let i = items.firstIndex(where: { $0.id == id }) else { throw notFound() }
+            return i
+        }
+        if indexes.contains(where: { items[$0].isRemoved }) { throw conflict("already_removed", "Already removed.") }
+        let now = Date()
+        let recipientId = try resolveRecipient(recipient, outcome: outcome, itemIndexes: indexes)
+        for i in indexes { applyRemoval(at: i, outcome: outcome, wasteReason: nil, now: now, recipientId: recipientId) }
+        return indexes.map { items[$0] }
+    }
+
+    func restoreBatch(ids: [String]) async throws -> [Item] {
+        try await gate("restoreBatch")
+        guard (1...100).contains(ids.count), Set(ids).count == ids.count else { throw validation("Send 1-100 unique item ids.") }
+        let indexes = try ids.map { id -> Int in
+            guard let i = items.firstIndex(where: { $0.id == id }) else { throw notFound() }
+            return i
+        }
+        if indexes.contains(where: { !items[$0].isRemoved }) { throw APIError.notRemoved }
+        if indexes.contains(where: { Date().timeIntervalSince(items[$0].removedAt ?? Date()) > 600 }) { throw APIError.restoreWindowExpired }
+        for i in indexes { applyRestore(at: i) }
+        return indexes.map { items[$0] }
     }
 
     // MARK: Adding food
 
     func fromPhoto(imageData: Data, mode: PhotoMode) async throws -> CandidatesResponse {
         try await gate("fromPhoto")
+        if behavior.photoFindsNothing { return CandidatesResponse(candidates: [], source: "mock") }
         let all = MockData.candidates()
         return CandidatesResponse(candidates: mode == .single ? Array(all.prefix(1)) : all, source: "mock")
     }
@@ -205,6 +308,19 @@ actor MockAPIClient: APIClient {
             Candidate(name: $0.capitalized, category: .other, foodGroup: .other, confidence: nil, freshness: nil, bbox: nil,
                       storage: .fridge, quantity: 1, unit: "piece", estPrice: nil, predictedExpiry: expiry, expirySource: "default")
         }
+    }
+
+    func fromReceipt(imageData: Data) async throws -> ReceiptResponse {
+        try await gate("fromReceipt")
+        if behavior.photoFindsNothing { return ReceiptResponse(candidates: [], total: nil, categorizedBy: "heuristic") }
+        return MockData.receipt()
+    }
+
+    func barcode(_ code: String) async throws -> BarcodeResult {
+        try await gate("barcode")
+        guard (6...14).contains(code.count), code.allSatisfy(\.isNumber) else { throw validation("Barcode must be 6-14 digits.") }
+        guard let r = MockData.barcode(code) else { throw notFound("Product") }
+        return r
     }
 
     // MARK: Insights

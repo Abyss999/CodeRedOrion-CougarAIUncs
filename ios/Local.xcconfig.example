@@ -6,3 +6,9 @@ DEVELOPMENT_TEAM = <YOUR_TEAM_ID>
 APP_BUNDLE_ID = com.<owner>.foodwastereducer
 // Optional: point a Release/demo build at a fixed API.
 // API_BASE_URL = https:/$()/your-host.example
+
+// Google Sign-In (optional). Leave unset and the Google button stays hidden.
+// Create an iOS OAuth client in Google Cloud Console, then copy both values from its plist.
+// GOOGLE_IOS_CLIENT_ID = 1234567890-abcdefg.apps.googleusercontent.com
+// GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.1234567890-abcdefg
+// The same client id must be in the backend's GOOGLE_IOS_CLIENT_IDS.

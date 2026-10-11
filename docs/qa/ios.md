@@ -377,3 +377,45 @@ On the 17 Pro, the first full run had one unit failure. It came from my own edit
 | iPhone SE QA, AX5 | **27 run, 0 failed** |
 
 The SE was reset to `large` and shut down.
+
+
+## 2026-10-11: Shared foundation (feat/ios-shared)
+Mac: Apple M4 Pro, Xcode 26.6. Simulators: iPhone 17 Pro and iPhone SE QA (iOS 26.5). Focus: the contract and decoding. Tests were written while the builder worked and run against the tree as of ~03:45. Backend shapes follow `docs/API.md` on main, plus the coordinator's confirmed shapes from `feat/backend-gaps` for `GET /auth/me`, `GET /requests?mine=1`, `item.share.audience` and `GET /people/reachable` (none of these four is in main's API.md yet).
+
+### Tests added (`ios/Tests/UnitTests`)
+| File | Tests | What it covers |
+|---|---|---|
+| `ContractDecodingTests.swift` | 45 | Friends (incoming/outgoing), groups and detail, listings with and without owner `audience`, Food Pantry entries, requests (audiences, hidden_count, fulfilled_by, unknown source), recipes (`uses_items` objects, servings null), wave-2 impact (split, waste_reasons, previous null vs present, last_6_weeks Mondays), tips, receipt, barcode, Google sign-in, `Me`, people with `is_claimer`. Timestamps in `Z`, `+00:00` and 6-digit fractions |
+| `LiveRequestShapeTests.swift` | 40 | Method, path, query (`mine=1`, `range=`) and body for every new Live method via `StubURLProtocol`. `RecipientChoice` on remove and remove-batch: `.default` omits `recipient_id`, `.none` sends a literal `null`, `.user` sends the id. No `recipient_id` with used or thrown_out |
+| `MockFoundationTests.swift` | 48 | Every new Mock method, API error rules, all-or-nothing batches, `Behavior` failNetwork / per-method failure / failFirst / delay / cancellation reach all 28 new methods |
+| `LaunchConfigurationTests.swift` | 25 | All 13 new flags: parsing, implies-mock, `mockBehavior` mapping, end to end against the Mock, AppEnvironment wiring |
+| `WeightFormatterTests.swift` | 15 | kg to lb/oz and kg/g, rounding boundaries, 0, tiny, negative, 100,000 kg, spoken form, units preference switching |
+| `ComponentAccessibilityTests.swift` | 34 | BannerView, FormField / FormTextField, PermissionCard, AudienceChecklist, WeightText: labels, values, traits, ids, 44 pt targets, AX5 at 320 pt wide, activation callbacks |
+`SpyAPIClient` in `FridgeModelTests.swift` was updated to forward the new protocol methods (the old file no longer compiled against the expanded `APIClient`).
+
+### Results
+| Run | Result |
+|---|---|
+| iPhone 17 Pro, full suite (unit + UI) | UI 51/51 pass (Fridge, Remove, Motion, Launch, TabShell, BaseURL). Unit: 354 run, 3 skipped (Keychain in an unsigned host, pre-existing), 11 assertion failures in 6 tests, all of them pinned bugs below. Existing suites (Fridge, Remove, Motion, Theme, APIDate, Models, MockAPIClient, LiveAPIClient) all pass; the `Recipe.usesItems` and `Impact` changes broke nothing |
+| iPhone SE, `ComponentAccessibilityTests` | 34 run, 1 failure (IOS-15); all 44 pt and AX5 targets pass |
+| `RecipientChoice` | Live client correct in all 3 cases for remove and remove-batch; `Me` keeps `has_password` and `providers` |
+
+### Bugs
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| IOS-14 | medium | `ItemShare` has no `audience`. The owner's `item.share` carries `{friends, groups}` per the backend, and decoding silently drops it, so a screen cannot show who an item is shared with. Tests: `testOwnerItemShareCarriesAudience`, `testOwnerItemShareAudienceWithGroups` | fixed, verified |
+| IOS-15 | low | `FormField` marks the inline error `accessibilityHidden(true)` while giving it id `<identifier>.error`. Hidden elements leave the tree, so XCUITest can never find that id (VoiceOver is covered by the control's hint). Test: `testFormFieldErrorIdentifierIsQueryable`. Fix: drop the id or expose the text | fixed, verified |
+| IOS-16 | low | `MockAPIClient` ignores `RecipientChoice` values: `.none` still sets the claimer as recipient, `.user(id)` is ignored, and donating to yourself or a stranger is not rejected (donation-recipient contract: null stays null, own id 400, non-friend 404). UI tests for "Someone else" will pass for the wrong reason. Tests: `testDonatedRecipientCases`, `testDonatingToYourselfOrAStrangerIsRejected` | fixed, verified |
+| IOS-17 | low | `WeightFormatter.spoken` turns "<1 oz" into "<1 ounces" (and "<1 grams"). Wrong grammar and a bare "<" for VoiceOver; say "less than 1 ounce". Test: `testSpokenNeverContainsAbbreviationOrSymbol` | fixed, verified |
+| IOS-18 | low | Path ids are double-encoded: `LiveAPIClient+More.ids()` percent-encodes, then `comps.path +=` encodes the `%` again (`a/b c` becomes `a/b%2520c`). Harmless for UUIDs and barcodes, wrong for any id with a space; `/` is not escaped at all. Test: `testIdsAreEscapedInPaths` | fixed, verified |
+
+Not covered: the Mock 10-minute restore window cannot be tested without a clock hook; `GET /people/reachable`, `?mine=1` and `/auth/me` are only checked against the coordinator's shapes until the backend PR updates main's API.md. The new screens are not built yet, so no UI tests exist for the components.
+
+### Re-verify after the builder's fixes
+| Run | Result |
+|---|---|
+| iPhone 17 Pro, `FoodWasteReducerTests` | 354 run, 3 skipped (Keychain, unsigned host), **0 failures** |
+| iPhone SE, `ComponentAccessibilityTests` | 34 run, **0 failures** |
+IOS-14 to IOS-18 are fixed and each has a passing test. IOS-18 note: `barcode()` now strips non-alphanumerics before encoding; accepted, since barcodes are 6-14 digits and the UI validates that. UI suite (51/51) was green on the earlier full run and the fixes touched no UI code.
+
+### Verdict: PASS. No open bugs.
