@@ -5,11 +5,11 @@ file, so change both together. Views never use ad-hoc values. These values come 
 in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 
 ## Principles (owner feedback, 2026-10-11)
-1. **One status per item, in one place.** The badge carries expiry or freshness ("Use soon", "Looks off", "2–3 days", "Expired"). The meta line is the quantity only ("8 left", "5 oz bag"). No "Photo check:" text, no "added …" on rows.
+1. **One status per item, in one place.** The badge carries expiry or freshness ("Use soon", "Looks off", "2–3 days", "Expired"). The meta line is the quantity only ("8 left", "5 oz bag"). Where a list isn't grouped by food group (Home, the add-review lists), the group name follows the quantity, so the icon colour is never the only cue. No "Photo check:" text, no "added …" on rows.
 2. **No helper captions.** Labels say it. Explanations go in VoiceOver hints or on detail screens.
 3. **Predictions read as estimates.** An estimated expiry 2+ days out shows a range ending at the predicted date ("2–3 days", "4–5 days", "6–7 days", "1–2 weeks" for 8–14, "2–3 weeks" for 15–21, "3+ weeks" for 22 or more). Today / Tomorrow / Expired and user-entered dates stay exact. Never show data we don't have, e.g. freshness for an item no photo has assessed.
 4. **Units follow Settings** (default US: lb / oz). The API stays metric, and the client converts.
-5. **Every screen keeps a route to Settings and to Impact.**
+5. **Home routes to Settings (avatar) and Impact (saved pill), and every tab reaches Home in one tap.** Fridge, Recipes and Social don't repeat those buttons.
 6. **Prefer inline choices over chained alerts** (e.g. spoiled items in Photo review get Toss it / Keep it buttons in place).
 
 ## Color
@@ -24,7 +24,8 @@ in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 | `border` | `#D3E0BF` | Outlined tiles, inputs |
 | `forest` | `#1F4D2B` | Primary: buttons, active tab, hero cards |
 | `forestMid` | `#3B7046` | Secondary filled button (Log in) |
-| `forestChip` | `#2F6B3C` | Icon chip on a forest surface |
+| `forestChip` | `#2F6B3C` | Icon chip or expiring-item chip on a forest surface |
+| `onForestChip` | `#F4F8E8` | Text on `forestChip` (5.9:1). Light in both modes, unlike `onForest` |
 | `ink` | `#13261A` | Primary text (never pure black) |
 | `inkSecondary` | `#2B3D30` | Body text on tinted surfaces |
 | `muted` | `#45584A` | Secondary text (7.1:1 on ground) |
@@ -38,7 +39,9 @@ in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 | `chartWasted` | `#E8A04C` | Chart: thrown out, waste-reason bars |
 
 ### Dark mode
-Dark artboards for every screen are on the canvas's **Dark** page (`screens/*.dark.dc.html`). They're generated from the light artboards by `docs/design/tools/mkdark.py`, a property-aware token mapping (backgrounds to dark grounds, text and strokes to dark inks, dark text kept on lime cards). The light artboards stay the source.
+Dark artboards for every screen are on the canvas's **Dark** page (`screens/*.dark.dc.html`). They're generated from the light artboards by `docs/design/tools/mkdark.py`, a property-aware token mapping (backgrounds to dark grounds, text and strokes to dark inks, dark text kept on lime cards, light colours kept on the camera surface `#1B2A1F`, light `onForestChip` text kept on `forestChip`). The generator exits non-zero with a list when a light-only token survives unmapped: a colour passed as a positional argument or built by concatenation, a short hex, a named colour or a light rgba. So in a light artboard's JS, keep colours under keyed properties (`bg`, `*Bg`, `stroke`, `*Stroke`, `*Fill`, `*Color`) or inside CSS strings. The light artboards stay the source.
+
+**Theme.swift (iOS builder):** add `onForestChip` (light `0xF4F8E8`, dark `0xE8F0DA`) and use it for the Recipes hero chips. `onForest` turns dark in dark mode, so it fails on `forestChip` there (1.6:1).
 
 Every token above is **adaptive**. `Theme.swift` resolves each one per trait collection, so a view
 never branches on color scheme. In dark mode the brand flips: **the lime family is the action
@@ -57,6 +60,7 @@ and its `onForest` text turns dark.
 | `forest` (primary action, active tab) | `#1F4D2B` | `#B9D871` |
 | `forestMid` | `#3B7046` | `#8FB45A` |
 | `forestChip` | `#2F6B3C` | `#2C4A26` |
+| `onForestChip` (text on `forestChip`) | `#F4F8E8` | `#E8F0DA` |
 | `ink` | `#13261A` | `#E8F0DA` |
 | `inkSecondary` | `#2B3D30` | `#C9D6BC` |
 | `muted` | `#45584A` | `#9DB09F` |
@@ -73,7 +77,7 @@ The dark scrim is near-black, not dark `ink`: a light-ink scrim would *brighten*
 sheet in dark mode. On device the system dimming handles both modes.
 
 Dark contrast was computed, not eyeballed. Ink on ground is 15.2:1. Muted on surface is 6.9:1.
-Tab-inactive on surface is 5.9:1. Forest on surface is 9.9:1. onForest on forest is 9.9:1. Urgent
+Tab-inactive on surface is 5.9:1. Forest on surface is 9.9:1. onForest on forest is 9.9:1. onForestChip on forestChip is 8.5:1. Urgent
 is 8.0:1. The lowest pair is muted on a yellow note, at 5.2:1. The dark chart pair passes every
 colorblind validator check against a dark surface: lightness band 0.48-0.67, protan ΔE 9.2, and
 3:1 against the surface.
@@ -135,19 +139,19 @@ Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped
 | `GoogleSignInButton` | Sign in, Sign up, Log in | The official Google button, 50 pt. See `README.md` › Sign-in. There is no Apple button |
 | `FormField` | Sign up, Log in | Label above (14 / semibold), a 50 pt field with a `border` hairline, focus ring 2 pt `forest`, error ring 2 pt `urgentInk` with an icon and message below (`role=alert`) |
 | `ValuePoints` | Sign in | A card of three icon + title + one-line rows between the headline and the buttons |
-| `ExpiryBadge` | Home, Fridge | Today / 1 day use `urgent`; 2+ days use `limeTint`/`forest` |
-| `SpoilageFlag` | Fridge | Meta line in `urgentInk`: "Photo check: looks spoiled" |
+| `ExpiryBadge` | Home, Fridge, Food Pantry, Group, review lists | Today / Tomorrow / Expired / "Looks off" use `urgent`; ranges ("2–3 days" … "3+ weeks", Principle 3) use `limeTint`/`forest`. The same vocabulary everywhere, chips included ("Spinach · Tomorrow") |
+| `SpoilageFlag` | Fridge | No separate flag: spoiled shows as the urgent badge "Looks off" (Principle 1) |
 | `StorageSegmented` | Fridge | Fridge / Pantry / Freezer |
-| `RemoveSheet` | Remove | 3 outcome tiles. *Used it* is filled forest; the others are outlined |
+| `RemoveSheet` | Remove | 3 outcome tiles, all outlined on `surface`; the selected one (Shared it, with its Given-to row) fills `limeTint`. *Used it* acts in one tap |
 | `WasteReasonList` | Remove | A grouped list of four 56 pt one-tap rows (icon + title): Expired, Forgot about it, Didn't like it, Other |
 | `AddSheet` | Add | Hero tile (fridge photo) + 2×2 tiles (one item, type/say, barcode, receipt) |
-| `PantryWidget` | Social | `lime` card: 3 food tiles (group icon + name, no quantities) plus a "+N more" tile, expands in place |
+| `PantryWidget` | Social | `lime` card: 3 food tiles (group icon + name, no quantities) plus a "+N more" tile. The whole card is a link that pushes Food Pantry (row 18) |
 | `RequestNote` | Social | Sticky note: source header, text, who/when, an **Offer** button that opens the Offer confirmation |
-| `DetectedItemRow` | Photo review | Checkbox (44 pt row) + name + category/storage or a warning meta line + `ExpiryBadge` |
+| `DetectedItemRow` | Photo review, Type or say it, Receipt review | One row for every add-review list: a 24 pt circular checkbox (the `FridgeSelect` one: filled `forest` with an `onForest` tick, else a 2 pt `muted` ring) inside a 44 pt tappable row (`role=checkbox`); the name; a meta line of food group (plus quantity where there's no stepper, or the raw receipt line above it) followed by one status badge (`ExpiryBadge`, `UseSoonBadge`, or "Not sure" when confidence < 0.5). Trailing slot: `QuantityStepper` (photo) or price (receipt). Non-food receipt lines read "Not food", with no badge, unticked |
 | `FilterChip` | Recipes | 36 pt pill. Selected uses `forest`/`onForest`; unselected is outlined |
-| `RecipeHero`, `RecipeRow` | Recipes, Home | Hero on `forest` with expiring-item chips (`forestChip`); rows with a "Uses N" badge |
-| `UseSoonBadge` | Fridge, Photo review | Shown when `freshness == semi_fresh` (ripe or starting to turn). Pill with `useSoonBg`/`useSoonInk`: 6.7:1 light, 9.5:1 dark. Text is "Use soon". It's distinct from the expiry badges and from the urgent "Check" (spoiled). In photo review the meta line reads "ripe, use soon" in `useSoonInk` |
-| `StatTile`, `ImpactHero` | Impact | Hero on forest showing **food saved (lb/oz)**, with CO₂e as a secondary line; tiles on surface |
+| `RecipeHero`, `RecipeRow` | Recipes, Home | Hero on `forest` with expiring-item chips (`forestChip` with `onForestChip` text, "Chicken · Today"); rows with a "Uses N" badge |
+| `UseSoonBadge` | Fridge, Photo review | Shown when `freshness == semi_fresh` (ripe or starting to turn). Pill with `useSoonBg`/`useSoonInk`: 6.7:1 light, 9.5:1 dark. Text is "Use soon". It's distinct from the expiry badges and from the urgent "Looks off" (spoiled). In photo review it's the row's badge, like everywhere else |
+| `StatTile`, `ImpactHero` | Impact | Hero on forest showing **food saved (lb/oz)**, with CO₂e as a secondary line in the same units ("41 lb CO₂e … about a 46-mile drive"); tiles on surface. Donated reads "shared" |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |
 

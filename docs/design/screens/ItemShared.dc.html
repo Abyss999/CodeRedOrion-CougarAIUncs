@@ -36,7 +36,7 @@ a{color:#1F4D2B}a:hover{color:#13261A}
     <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 0 16px; border-bottom: 1px solid #E6EDD6">
         <span style="font-size: 16px; color: #2B3D30">{{r.label}}</span>
-        <span style="display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; color: #13261A">{{r.value}}
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; color: #13261A">{{r.value}}<span style="{{r.chipStyle}}">{{r.chip}}</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#45584A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
       </div>
     </sc-for>
@@ -75,12 +75,14 @@ a{color:#1F4D2B}a:hover{color:#13261A}
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":864}}'>
 class Component extends DCLogic {
 renderVals() {
+const est = 'font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px; background: #EEF5D6; color: #1F4D2B';
+const none = 'display: none';
 return {
 rows: [
-{ label: 'Quantity', value: '5 oz bag' },
-{ label: 'Food group', value: 'Veggies' },
-{ label: 'Stored in', value: 'Fridge' },
-{ label: 'Use by', value: 'Oct 11' }
+{ label: 'Quantity', value: '5 oz bag', chip: '', chipStyle: none },
+{ label: 'Food group', value: 'Veggies', chip: '', chipStyle: none },
+{ label: 'Stored in', value: 'Fridge', chip: '', chipStyle: none },
+{ label: 'Use by', value: 'Oct 11', chip: 'estimated', chipStyle: est }
 ]
 };
 }

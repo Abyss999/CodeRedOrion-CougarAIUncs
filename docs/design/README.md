@@ -16,11 +16,11 @@ system body type).
 | Sign in (sign up / log in, green buttons with light text) | `screens/Main.dc.html` | approved 2026-10-10 |
 | Home + tab bar (Home, Recipes, + Add, Fridge, Social) | `screens/Home.dc.html` | approved 2026-10-10 |
 | Fridge / Pantry list (segmented storage, expiry badges, swipe to remove, spoilage flag) | `screens/Fridge.dc.html` | approved 2026-10-10 |
-| Removal sheet, step 1: outcome (used / gave away / threw away) | `screens/RemoveSheet.dc.html` | approved 2026-10-10 |
+| Removal sheet, step 1: outcome (used / shared, with Given to / threw away) | `screens/RemoveSheet.dc.html` | approved 2026-10-10 |
 | Removal sheet, step 2: waste reason (one tap) | `screens/RemoveReason.dc.html` | approved 2026-10-10 |
 | Add sheet (fridge photo, one item, type/say, barcode, receipt) | `screens/AddSheet.dc.html` | approved 2026-10-10 |
 | Social (Food Pantry widget, sticky-note requests, + friends/groups) | `screens/Social.dc.html` | approved 2026-10-10 |
-| Impact Dashboard (CO₂e hero, saved/money, weekly chart, waste reasons) | `screens/Impact.dc.html` | approved 2026-10-10 |
+| Impact Dashboard (food-saved hero in lb, CO₂e line, saved/money, weekly chart, waste reasons) | `screens/Impact.dc.html` | approved 2026-10-10 |
 | Add: review photo results (detected items, predicted expiry, spoilage flag, untick to skip) | `screens/PhotoReview.dc.html` | approved 2026-10-10 |
 | Recipes tab (filters, best match using expiring items, more suggestions) | `screens/Recipes.dc.html` | approved 2026-10-10 |
 | Sign up (Google / email) | `screens/SignUp.dc.html` | added 2026-10-10 |
@@ -56,21 +56,24 @@ These need two backend additions (see `docs/API.md` once built):
 The **orchestrator owns the canvas** and `docs/design/`, so there's a single writer and no publish conflicts. When an iOS PR deviates from an artboard, for a platform reason or a new state, the PR description includes a **"Design delta"** section: the artboard, what changed and why, plus a Simulator screenshot in `docs/qa/ios/`. The orchestrator updates the canvas and `screens/` to match when it merges the PR.
 
 ## Interaction notes for iOS
+[`SCREENS.md`](SCREENS.md) is the per-screen contract and wins over this section; these are the cross-screen patterns.
 - **Removal is one or two taps.** Swipe left on a row to reveal **Remove**, which opens the sheet.
-  *Used it* and *Gave it away* finish immediately. *Threw it away* goes to the reason grid, where
-  one tap finishes. *Gave it away* shows a "Gave it to" picker only when the item has an open Share
-  listing.
+  *Used it* finishes in one tap. *Shared it* shows a **Given to** menu (the claimer, friends, fellow
+  group members, or "Someone not on BiteDown"; it defaults to the claimer, else "Someone not on
+  BiteDown"), then Done. *Threw it away* pushes the reason list, where one tap finishes. A 5 s Undo
+  follows. The Fridge's **Select** button opens multi-select (Used them / Shared them).
 - **Tab bar (decided):** the native iOS 26 glass `TabView`. **Add is a tab** that presents the Add sheet and doesn't change the selected tab. There's no raised button.
 - **Photo review** is the demo path's middle step. Snap your fridge → `POST /items/from-photo` →
-  this screen → `POST /items`. Every detected item starts ticked, except ones the classifier flags
-  as spoiled, which start unticked with "Looks spoiled. Toss it?". Low-confidence items say "not
-  sure, tap to fix". Expiry badges come from the candidate's `predicted_expiry`. The footer
-  explains that dates are estimates and can be edited, and the primary button counts the ticked
-  items.
-- **Recipes** come from `POST /recipes/suggest`. The best match is the hero card, with chips naming
-  each expiring item it uses and how soon it expires. The other suggestions are rows with a
-  "Uses N" badge and anything you'd need to buy.
-- The **Food Pantry** widget is collapsed by default (chips preview) and expands in place.
+  this screen → `POST /items`. Spoiled items sit in a **Looks spoiled** section with inline **Toss
+  it** / **Keep it**, and "Add N" stays disabled until each is decided. Every other item is a
+  `DetectedItemRow`, ticked by default, with one badge (an expiry range, "Use soon", or "Not sure"
+  for low confidence) and a quantity stepper. No footer caption about estimates: the ranges already
+  read as estimates. The primary button counts the ticked items.
+- **Recipes** come from `POST /recipes/suggest`, opening on **Only what I have**. The best match is
+  the hero card, with chips naming each expiring item it uses and how soon it expires ("Spinach ·
+  Tomorrow"). The other suggestions are rows with a "Uses N" badge. A "You'll need" line shows only
+  once "Only what I have" is off.
+- The **Food Pantry** widget previews three food tiles and "+N more". Tapping it pushes Food Pantry.
 - **Request notes** use two alternating fills and a slight rotation (±1.2° max). The header row
   always names the source (friend or group).
 - The **Impact** chart is a stacked bar per week: saved (bottom) and thrown out (top), with a 2 pt
