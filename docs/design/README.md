@@ -23,6 +23,8 @@ system body type).
 | Impact Dashboard (CO₂e hero, saved/money, weekly chart, waste reasons) | `screens/Impact.dc.html` | approved 2026-10-10 |
 | Add: review photo results (detected items, predicted expiry, spoilage flag, untick to skip) | `screens/PhotoReview.dc.html` | approved 2026-10-10 |
 | Recipes tab (filters, best match using expiring items, more suggestions) | `screens/Recipes.dc.html` | approved 2026-10-10 |
+| Sign up (Apple / Google / email form) | `screens/SignUp.dc.html` | added 2026-10-10 (owner request) |
+| Log in (Apple / Google / email, inline error state) | `screens/LogIn.dc.html` | added 2026-10-10 (owner request) |
 
 **Approval:** ✅ **Approved by the owner on 2026-10-10** (relayed through the Mac session), including feedback rounds 1–2, the native glass tab bar, "Use soon" and the colourful food-group icons. Wave 2 (iOS) has started. Changes requested
 on the canvas get mirrored back into `screens/` and `DESIGN_SYSTEM.md`.
@@ -42,6 +44,15 @@ These need two backend additions (see `docs/API.md` once built):
 - **`semi_fresh` is a product feature.** Food that's fine but should be eaten soon gets a **"Use soon"** badge on the Fridge, and "ripe, use soon" on photo review.
 - **Food-group icons are colourful**, and the removal sheet header uses them too.
 - **Approved on 2026-10-10.** Wave 2 started.
+
+## Sign-in (owner request, 2026-10-10)
+- The landing screen keeps **Sign up / Log in** (green, as in the brief) and adds **"or continue with" Apple | Google**. The Sign up and Log in screens offer Apple and Google first, then email.
+- **Use the official buttons, not the mockup's drawing.** The mockups show **dashed placeholders** where the logos go, because we don't redraw brand marks.
+  - **Apple:** `SignInWithAppleButton` / `ASAuthorizationAppleIDButton`, black style in light mode and white in dark, with the label variant matching the screen (Sign up / Sign in / Continue).
+  - **Google:** the button from the Google Sign-In SDK, or one built strictly to Google's branding guidelines: white, a `#747775` border, `#1F1F1F` text and the official "G" mark.
+  - Apple and Google buttons are the **same size and prominence** (App Store guideline 4.8).
+- **Sign in with Apple needs a paid Apple Developer Program team.** The capability can't be signed with the free Personal Team we use for the demo. So the Apple button sits behind a feature flag and is **hidden in Personal-Team builds**. It turns on once a paid team exists, and the backend supports it either way. Google works with a free Google Cloud OAuth client.
+- Email: labels above inputs, a show-password toggle, the hint "At least 8 characters", and inline errors below the field (Log in shows the error state). "Forgot password" is **deferred**, because there's no email sending yet.
 
 ## Keeping the canvas in sync during Wave 2
 The **orchestrator owns the canvas** and `docs/design/`, so there's a single writer and no publish conflicts. When an iOS PR deviates from an artboard, for a platform reason or a new state, the PR description includes a **"Design delta"** section: the artboard, what changed and why, plus a Simulator screenshot in `docs/qa/ios/`. The orchestrator updates the canvas and `screens/` to match when it merges the PR.
