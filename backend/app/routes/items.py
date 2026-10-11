@@ -555,14 +555,15 @@ def from_photo():
     return jsonify(**body)
 
 
-RECEIPT_CATEGORIZE_BUDGET_S = 40  # worst case then: read 91.5 s at most, or read <= 40 s + categorize 61.5 s
+RECEIPT_CATEGORIZE_BUDGET_S = 40  # worst case then: ML 60 + read 45 = 105 s, or read 91.5 s alone, or read <= 40 s + categorize 61.5 s
 
 
 def _read_receipt(data, filename, mime):
     """(body, source): the ML service's OCR first; Gemini vision on the image if the service is unset
     or fails. Both unavailable -> 502 naming both."""
-    ml_reason = "ML service is not configured"
+    ml_reason, ml_tried = "ML service is not configured", False
     if ml.is_configured():
+        ml_tried = True
         try:
             return ml.ocr(data, filename, mime), "ocr"
         except ml.MLUnavailable as e:
@@ -570,7 +571,8 @@ def _read_receipt(data, filename, mime):
     gemini_reason = "Gemini is not configured"
     if gemini.is_configured():
         try:
-            return gemini.receipt_from_image(data, mime), "gemini"
+            # After a failed ML call (up to 60 s) a retried read could pass gunicorn's 120 s: read once (BE-26).
+            return gemini.receipt_from_image(data, mime, retry=not ml_tried), "gemini"
         except gemini.UpstreamError as e:
             gemini_reason = str(e)
     raise upstream_unavailable(f"Receipt OCR unavailable ({ml_reason}) and Gemini fallback unavailable ({gemini_reason}).")

@@ -406,7 +406,7 @@ def test_route_ml_unset_uses_gemini_full_candidates(route):
     assert set(body) == {"candidates", "total", "categorized_by", "source"}
     assert body["source"] == "gemini" and body["total"] == 6.96 and body["categorized_by"] == "gemini"
     route.ocr.assert_not_called()
-    route.vision.assert_called_once_with(IMAGE, "image/jpeg")
+    route.vision.assert_called_once_with(IMAGE, "image/jpeg", retry=True)
     route.categorize.assert_called_once_with(["GV WHL MILK GAL"])
     assert len(body["candidates"]) == 1
     c = body["candidates"][0]
@@ -442,7 +442,7 @@ def test_route_ml_unavailable_falls_back_to_gemini(route):
     response = route.post()
     assert response.status_code == 200 and response.get_json()["source"] == "gemini"
     route.ocr.assert_called_once_with(IMAGE, "receipt.jpg", "image/jpeg")
-    route.vision.assert_called_once_with(IMAGE, "image/jpeg")
+    route.vision.assert_called_once_with(IMAGE, "image/jpeg", retry=False)
 
 
 def test_route_gemini_empty_receipt_is_200_with_no_candidates(route):

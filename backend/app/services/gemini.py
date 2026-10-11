@@ -245,7 +245,7 @@ def _to_num(v):
     return None
 
 
-def receipt_from_image(data: bytes, mime: str) -> dict:
+def receipt_from_image(data: bytes, mime: str, retry: bool = True) -> dict:
     """Read a receipt photo directly (fallback when the OCR service is down or unset). Returns
     {"lines": [{name, quantity, price}], "total"} with real numbers or None; the same shape as
     `ml.ocr`, so the route treats both alike. A reply that is not an object with a `lines` list is an
@@ -254,7 +254,7 @@ def receipt_from_image(data: bytes, mime: str) -> dict:
 
     part = types.Part.from_bytes(data=data, mime_type=mime)
     d = _generate([part, "Read this receipt."], _RECEIPT_READ_HINT, _RECEIPT_READ_SCHEMA,
-                  purpose="receipt_read", list_key="lines", timeout_s=45.0, as_object=True)
+                  purpose="receipt_read", list_key="lines", timeout_s=45.0, retry=retry, as_object=True)
     if not isinstance(d, dict) or not isinstance(d.get("lines"), list):
         raise UpstreamError("Gemini returned an unusable response: no receipt lines")
     lines = []
