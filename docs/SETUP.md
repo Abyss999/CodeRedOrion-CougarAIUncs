@@ -74,6 +74,19 @@ accessibility-extra-extra-extra-large`). UI-test launch arguments (`-UITestMockA
 `-UITestSignedIn`, `-UITestFailNetwork`, `-UITestSlowNetwork`, `-UITestShowToast`, `-UITestReduceMotion`)
 and the accessibility-ID convention are in `ios/README.md` and `ios/Tests/README.md`.
 
+### Google Sign-In client (once, by the owner)
+1. In https://console.cloud.google.com, create or select a project (e.g. "BiteDown").
+2. Google Auth Platform → Branding: app name **BiteDown**, support and developer emails. Audience:
+   **External**, left in **Testing**. Add every demo Google account under **Test users** (only they can
+   sign in while testing). Scopes: the defaults `openid`, `email` and `profile` only. They're non-sensitive, so no verification is needed.
+3. Clients → Create client → **iOS**. Bundle ID: exactly the one the app is signed with (the default
+   `com.coderedorion.FoodWasteReducer`, or your `APP_BUNDLE_ID` from `ios/Local.xcconfig`).
+4. Copy the **Client ID** (`…apps.googleusercontent.com`) and the **iOS URL scheme** (the reversed ID,
+   `com.googleusercontent.apps.…`). iOS clients have no secret.
+5. Put the Client ID in `.env` as `GOOGLE_IOS_CLIENT_IDS` (comma-separated if there are several bundle IDs), and both
+   values in `ios/Local.xcconfig`. Neither is a secret, but both are per-owner, so keep them out of git.
+   A new bundle ID needs another iOS client, with its ID added to the list.
+
 ### Run on your own iPhone (free Personal Team, no TestFlight)
 No paid Apple Developer program is needed. Free-team builds are valid for 7 days, then re-run.
 1. Copy `ios/Local.xcconfig.example` to `ios/Local.xcconfig` (gitignored) and set your Team ID and a unique
