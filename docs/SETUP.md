@@ -110,6 +110,13 @@ No paid Apple Developer program is needed. Free-team builds are valid for 7 days
 3. Plug in the phone, pick it as the run destination, Run. First time: on the phone, Settings → General →
    VPN & Device Management → trust your developer certificate.
 The app uses no capability a free team can't sign (no push, iCloud, App Groups or Sign in with Apple).
+Before the first run and before a demo:
+- **Developer Mode** (iOS 16+): on the phone, Settings › Privacy & Security › Developer Mode → on. The phone restarts.
+- **Free-team limits:** at most 3 sideloaded apps per device, and 10 new App IDs per 7 days. Reuse one bundle id.
+- **Sign-in:** the live API needs a signed-in user. Until the Auth screen merges (`feat/ios-auth`), a device build from
+  `main` can only run against the Mock client, not the live API.
+- **Gemini:** check that `.env` has a real `GEMINI_MODEL` (see `docs/DECISIONS.md`), not the placeholder, before
+  starting the tunnel.
 
 ### Demo on a phone (Cloudflare quick tunnel)
 The API stays bound to `127.0.0.1`; a quick tunnel gives the phone an HTTPS URL to it (no account, no ATS
