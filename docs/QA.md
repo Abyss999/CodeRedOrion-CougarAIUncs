@@ -23,7 +23,7 @@ orchestrator folds results in here.
 - App builds cleanly (zero errors); screens match approved designs in `docs/design/`.
 
 ### ML QA (`ml/eval/`)
-- YOLO on a held-out set: precision/recall per class (fresh vs spoiled), and under normal / low /
+- YOLO on a held-out set: precision/recall per class (spoiled vs not-spoiled, with semi_fresh counted as not-spoiled; the 3×3 matrix is informational), and under normal / low /
   warm lighting.
 - OCR on sample receipts: line items, prices, totals.
 
@@ -37,7 +37,7 @@ dashboard updates.
 | Backend | Tests passing | 100% |
 | Backend | Route coverage (`pytest --cov=app`) | ≥ 80% |
 | YOLO | Detection mAP@0.5 | ≥ 0.60 |
-| YOLO | Precision, per class (fresh, spoiled) | ≥ 0.80 |
+| YOLO | Precision, per class (not-spoiled, spoiled), where not-spoiled = fresh + semi_fresh | ≥ 0.80 |
 | YOLO | **Recall, spoiled** (a missed spoiled item is the costly error) | ≥ 0.85 |
 | YOLO | Recall drop, low or warm light vs normal | ≤ 10 points |
 | OCR | Line-item recall (≥ 20 receipts) | ≥ 85% |
