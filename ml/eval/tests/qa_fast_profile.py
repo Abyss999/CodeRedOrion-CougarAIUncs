@@ -411,10 +411,14 @@ def _main(train, tmp_path, monkeypatch, *extra):
     (("--cache", "none", "--no-epoch-val"), False, False),
 ])
 def test_speed_kwargs_reach_both_stages(fake_ultra, tmp_path, monkeypatch, extra, cache, val):
+    """--cache is for the DETECTOR only; the classifier never caches, for every --cache value (ML-69: Ultralytics'
+    ClassificationDataset.cache_images decodes crops at full resolution, 9.4 GB for 14k crops, OOM on Colab).
+    --no-epoch-val still reaches both stages."""
     stages = _main(fake_ultra, tmp_path, monkeypatch, *extra)
     assert [s[0] for s in stages] == ["det", "cls"]
-    for _, _, kw in stages:
-        assert kw["cache"] == cache and kw["val"] is val
+    (_, _, det), (_, _, cls) = stages
+    assert det["cache"] == cache and det["val"] is val
+    assert cls["cache"] is False and cls["val"] is val
 
 
 def test_fast_profile_flags_parse(fake_ultra, tmp_path, monkeypatch):
@@ -430,18 +434,81 @@ def test_bad_cache_value_rejected(fake_ultra):
         fake_ultra.main(["--data", "x", "--cache", "true"])
 
 
-def test_resume_branch_ignores_speed_kwargs(fake_ultra, tmp_path, monkeypatch):
-    """Ultralytics resume re-reads cache/val from the checkpoint args; train_stage's resume call must not break or
-    forward them (same profile per RUN_DIR, so the checkpoint already has them)."""
+# Ultralytics 8.4.175 engine/trainer.py check_resume (L1039-1062): keys a resume may override, and keys it never
+# reports as ignored. Anything else passed on resume is silently replaced by the checkpoint value (with a warning).
+UL_RESUME_ALLOWED = {"imgsz", "batch", "device", "close_mosaic", "augmentations", "save_period", "workers", "cache",
+                     "patience", "time", "freeze", "val", "plots", "channels_last", "distill_model", "save_dir"}
+UL_RESUME_EXEMPT = {"model", "data", "mode", "resume", "pretrained"}
+
+
+def _ul_allowed_from_source():
+    """The real allowed set, if an ultralytics install is around (e.g. ../mldata/.venv-train); else None."""
+    import glob, re
+    tail = Path("lib") / "python3*" / "site-packages" / "ultralytics" / "engine" / "trainer.py"
+    roots = (REPO.parent / "mldata", REPO.parent.parent / "mldata")
+    for f in sorted({f for r in roots for pat in ("*", ".*") for f in glob.glob(str(r / pat / tail))}):   # venvs are dot-dirs
+        m = re.search(r"allowed = \{[^}]*\}", Path(f).read_text())
+        if m:
+            return set(re.findall(r'"(\w+)"', m.group(0)))
+    return None
+
+
+def test_pinned_allowed_set_matches_installed_ultralytics():
+    real = _ul_allowed_from_source()
+    if real is None:
+        pytest.skip("no local ultralytics install to read")
+    assert real == UL_RESUME_ALLOWED
+
+
+@pytest.mark.parametrize("cache,val", [("ram", False), ("disk", True), (False, True), (False, False)])
+def test_resume_branch_overrides_cache_and_val(fake_ultra, tmp_path, monkeypatch, cache, val):
+    """ML-69: resume passes cache/val so a checkpoint saved with cache=ram can't bring the RAM cache back; every key it
+    passes is one Ultralytics' check_resume accepts (allowed or exempt), so none is silently ignored."""
     train = fake_ultra
     w = tmp_path / "proj" / "det" / "weights"; w.mkdir(parents=True); (w / "last.pt").write_text("x")
     monkeypatch.setattr(train, "ckpt_status", lambda p: ("partial", 3, 30))
-    kw = dict(data="d.yaml", epochs=30, imgsz=512, batch=32, cache="ram", val=False)
+    kw = dict(data="d.yaml", epochs=30, imgsz=512, batch=32, cache=cache, val=val)
     last, best, how = train.train_stage("det", "yolo26n.pt", str(tmp_path / "proj"), True, "cpu", **kw)
     assert how == "resumed"
     (path, call), = _FakeYOLO.calls
     assert path == str(w / "last.pt")
-    assert call == {"resume": True, "data": "d.yaml", "device": "cpu", "batch": 32, "imgsz": 512}
+    assert call == {"resume": True, "data": "d.yaml", "device": "cpu", "batch": 32, "imgsz": 512, "cache": cache, "val": val}
+    assert set(call) <= UL_RESUME_ALLOWED | UL_RESUME_EXEMPT
+    assert "epochs" not in call                                   # epochs come from the checkpoint (not overridable)
+
+
+def test_resume_branch_defaults_without_speed_kwargs(fake_ultra, tmp_path, monkeypatch):
+    """A caller that passes no cache/val (pre-FAST signature) resumes with no cache and per-epoch val."""
+    train = fake_ultra
+    (tmp_path / "proj" / "cls" / "weights").mkdir(parents=True)
+    monkeypatch.setattr(train, "ckpt_status", lambda p: ("partial", 1, 10))
+    train.train_stage("cls", "m", str(tmp_path / "proj"), True, "cpu", data="cls", epochs=10, imgsz=224, batch=128)
+    (_, call), = _FakeYOLO.calls
+    assert call["cache"] is False and call["val"] is True
+
+
+def test_resumed_classifier_never_gets_ram_cache_end_to_end(fake_ultra, tmp_path, monkeypatch):
+    """main() --resume --cache ram with both stages mid-training: the detector resumes with cache=ram, the classifier
+    with cache=False (its checkpoint from the OOM'd run says cache=ram; the override must win)."""
+    train = fake_ultra
+    data = build_fixture(tmp_path / "d")
+    for st in ("det", "cls"):
+        (tmp_path / "proj" / st / "weights").mkdir(parents=True)
+    monkeypatch.setattr(train, "ckpt_status", lambda p: ("partial", 2, 30))
+    monkeypatch.chdir(tmp_path)                                   # _FakeYOLO.trainer.last/best are "L"/"B"
+    (tmp_path / "L").write_text("pt"); (tmp_path / "B").write_text("pt")
+    train.main(["--data", str(data), "--project", str(tmp_path / "proj"), "--resume", "--cache", "ram", "--no-epoch-val",
+                "--epochs", "30", "--cls-epochs", "10"])
+    resumes = [(p, c) for p, c in _FakeYOLO.calls if c.get("resume")]
+    assert len(resumes) == 2
+    (dp, det), (cp, cls) = resumes
+    assert "/det/" in dp and det["cache"] == "ram" and det["val"] is False
+    assert "/cls/" in cp and cls["cache"] is False and cls["val"] is False and cls["imgsz"] == 224
+
+
+def test_resume_branch_skip_and_fresh_paths(fake_ultra, tmp_path, monkeypatch):
+    train = fake_ultra
+    kw = dict(data="d.yaml", epochs=30, imgsz=512, batch=32, cache="ram", val=False)
     # done checkpoint: skipped, extra kwargs harmless
     _FakeYOLO.calls = []
     monkeypatch.setattr(train, "ckpt_status", lambda p: ("done", -1, 30))
