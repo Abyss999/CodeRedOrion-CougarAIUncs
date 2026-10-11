@@ -2,6 +2,7 @@
 import logging
 
 from flask import jsonify
+from sqlalchemy.exc import DataError
 from werkzeug.exceptions import HTTPException
 
 log = logging.getLogger(__name__)
@@ -48,6 +49,13 @@ def register_error_handlers(app):
     def _http(e):
         code = _HTTP_CODES.get(e.code, "http_error")
         return error_response(e.code or 500, code, e.description or e.name)
+
+    @app.errorhandler(DataError)
+    def _data(e):
+        from .extensions import db
+
+        db.session.rollback()
+        return error_response(400, "validation_error", "Invalid value.")
 
     @app.errorhandler(Exception)
     def _unhandled(e):

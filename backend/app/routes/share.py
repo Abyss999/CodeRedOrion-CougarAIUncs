@@ -23,7 +23,7 @@ def _visible_to(listing, uid) -> bool:
 
 def _visible_listing(listing_id, *, lock=False) -> ShareListing:
     """404 for unknown ids AND for listings the caller may not see (no existence leak)."""
-    q = db.select(ShareListing).where(ShareListing.id == path_uuid(listing_id))
+    q = db.select(ShareListing).where(ShareListing.id == path_uuid(listing_id, "Listing"))
     if lock:
         q = q.with_for_update()
     listing = db.session.execute(q).scalar_one_or_none()

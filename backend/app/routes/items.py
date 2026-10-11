@@ -11,7 +11,7 @@ from ..models import (CATEGORIES, EXPIRY_SOURCES, FOOD_GROUPS, OUTCOMES, SOURCES
                       ShareListing, User)
 from ..services import (barcode, candidates, enrich, expiry, food_group, gemini, impact, ml, nutrition,
                         social)
-from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item,
+from ._util import (check_len, json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item,
                     share_summaries)
 
 bp = Blueprint("items", __name__, url_prefix="/items")
@@ -26,6 +26,9 @@ def _owned(item_id, *, lock=False) -> Item:
         raise not_found("Item not found.")
     if item.owner_id != g.user.id:
         raise ApiError(403, "forbidden", "This item belongs to another user.")
+    # A group-pantry item is only editable while the owner is still in the group (ex-member -> 403).
+    if item.group_id is not None and social.membership(item.group_id, g.user.id) is None:
+        raise ApiError(403, "forbidden", "You are no longer a member of that group.")
     return item
 
 
@@ -36,9 +39,10 @@ def _removable(item_id) -> Item:
                               ).scalar_one_or_none()
     if item is None:
         raise not_found("Item not found.")
-    if item.owner_id == g.user.id:
-        return item
-    if item.group_id is not None and social.membership(item.group_id, g.user.id) is not None:
+    if item.group_id is not None:  # group pantry: CURRENT membership required, owner or not
+        if social.membership(item.group_id, g.user.id) is not None:
+            return item
+    elif item.owner_id == g.user.id:
         return item
     raise ApiError(403, "forbidden", "This item belongs to another user.")
 
@@ -138,6 +142,8 @@ def _validate_new(raw: dict) -> dict:
         raise validation_error("unit must be a non-empty string.")
     fg = raw.get("food_group")
     fg = _check_food_group(fg) if fg is not None else food_group.derive(category, name)
+    check_len(name.strip(), "name", 200)
+    check_len(unit.strip(), "unit", 32)
     out = {
         "name": name.strip(), "category": category, "food_group": fg, "storage": storage, "source": source,
         "quantity": parse_number(raw.get("quantity", 1), "quantity", positive=True),
@@ -233,11 +239,11 @@ def patch_item(item_id):
     if "name" in body:
         if not isinstance(body["name"], str) or not body["name"].strip():
             raise validation_error("name must be a non-empty string.")
-        item.name = body["name"].strip()
+        item.name = check_len(body["name"].strip(), "name", 200)
     if "unit" in body:
         if not isinstance(body["unit"], str) or not body["unit"].strip():
             raise validation_error("unit must be a non-empty string.")
-        item.unit = body["unit"].strip()
+        item.unit = check_len(body["unit"].strip(), "unit", 32)
     if "quantity" in body:
         item.quantity = parse_number(body["quantity"], "quantity", positive=True)
     if "storage" in body:
@@ -401,11 +407,11 @@ def _batch_items(ids) -> list:
     rows = db.session.execute(db.select(Item).where(Item.id.in_(ids)).order_by(Item.id)
                               .with_for_update()).scalars().all()
     by_id = {i.id: i for i in rows}
-    groups = set(social.my_groups(g.user.id)) if any(
-        i.owner_id != g.user.id and i.group_id is not None for i in rows) else set()
+    groups = set(social.my_groups(g.user.id)) if any(i.group_id is not None for i in rows) else set()
     for iid in ids:
         it = by_id.get(iid)
-        if it is None or not (it.owner_id == g.user.id or (it.group_id is not None and it.group_id in groups)):
+        # Group items need CURRENT membership (even for the owner); personal items need ownership.
+        if it is None or not ((it.group_id in groups) if it.group_id is not None else it.owner_id == g.user.id):
             raise not_found("Item not found.")
     return [by_id[i] for i in ids]
 
