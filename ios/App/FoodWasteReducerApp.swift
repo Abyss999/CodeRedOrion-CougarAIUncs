@@ -13,6 +13,7 @@ struct FoodWasteReducerApp: App {
                 .environment(\.reduceMotionOverride, env.launch.reduceMotion ? true : nil)
                 .environment(\.undoWindowOverride, env.launch.undoWindow)
                 .onOpenURL { GoogleSignInConfig.handleOpenURL($0) }
+                .handlesFriendLinks()
         }
     }
 }
