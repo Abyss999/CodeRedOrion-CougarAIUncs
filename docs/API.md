@@ -13,7 +13,7 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 | 403 | `forbidden` | Authenticated but not your item / not a member of that group / not the owner or author |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
 | 405 | `method_not_allowed` | |
-| 409 | `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed` | Conflict |
+| 409 | `not_removed`, `restore_window_expired`, `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed` | Conflict |
 | 413 | `payload_too_large` | Upload over 10 MB |
 | 500 | `internal_error` | Unhandled error |
 | 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts unavailable or not configured |
@@ -26,13 +26,36 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
   `409 email_taken`. Emails are case-insensitive.
 - ✅ `POST /auth/login` `{email, password}` → `200 {token, user}`; `401 invalid_credentials`.
 - `user` = `{id, email, display_name, created_at}`.
+- ✅ `DELETE /auth/me` (Bearer) → `204` (App Store account deletion). One transaction. **Deleted:** the
+  user, their items (including ones in group pantries), every listing on those items and their own
+  listings, friendships (both directions), group memberships, requests they wrote. **Detached:** listings
+  they claimed/received elsewhere get `claimed_by`/`recipient_id` null (open again); requests they
+  fulfilled are reopened; ownership of groups they owned passes to the longest-standing remaining
+  member and `groups.created_by` becomes null (`created_by: null` in group responses). **Anonymised:**
+  their `food_events` keep every number but `user_id` becomes the nil UUID
+  `00000000-0000-0000-0000-000000000000`, so aggregates survive with no personal link. The same JWT
+  then fails with `401 unauthorized`; login fails with `401 invalid_credentials`.
 
 ## Items
 An **item** is `{id, owner_id, group_id, name, category, storage, quantity, unit, est_weight_kg,
 est_price, source, added_at, predicted_expiry (date), expiry_source, removed_at, outcome,
-waste_reason, removed_after_expiry}`. `category` ∈ `produce_leafy, produce_hardy, dairy, meat,
+waste_reason, removed_after_expiry, freshness, freshness_checked_at, confidence, share}`
+(`expiry_source` ∈ `default|gemini|ml|user`). `category` ∈ `produce_leafy, produce_hardy, dairy, meat,
 seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fridge|pantry|freezer`;
 `source` ∈ `photo|single_photo|text|barcode|receipt|manual`.
+- **Numeric bounds** (create and `PATCH`, BE-9): `est_price` 0..99,999,999.99 (column is
+  `numeric(10,2)`), `quantity` >0..1,000,000, `est_weight_kg` 0..100,000. Out of range, negative,
+  non-numeric or non-finite → `400 validation_error`, nothing written (never a 500).
+- `freshness` (`fresh|semi_fresh|spoiled|null`) and `freshness_checked_at` (timestamp of the last
+  assessment, null iff `freshness` is null): stored when a create payload carries `freshness`
+  (validated via `candidates.normalize_freshness`: variants such as `rotten` map, unknown strings become
+  `fresh` with a WARNING, a non-string is `400`); `freshness_checked_at` = now. `confidence` is the
+  detector's 0..1 score (create only; `400` outside 0..1), null for manual items. All three are on
+  every item response.
+- `share` is present on the **owner's own** items (`GET /items`, also with `group_by`; create, `PATCH`,
+  `remove`, `restore` responses) and is `{id, status (open|fulfilled), claimed_by: {id, name} | null}` for
+  the item's most recent **non-cancelled** listing, else `null`. Loaded with a single query for the whole
+  list (no N+1). The group pantry (`GET /groups/:id/pantry`) and other users' views do **not** include it.
 
 - ✅ `GET /items?storage=fridge|pantry|freezer&include_removed=false` → `200 {items}` sorted by
   `predicted_expiry`, then `added_at`. Only the caller's **personal** items (`group_id` null; group-pantry items are listed by `GET /groups/:id/pantry`). Invalid `storage` → 400.
@@ -43,8 +66,16 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   backend predicts it: Gemini batch estimate when configured (`expiry_source=gemini`), else the
   default shelf-life table (`default`); a client-supplied expiry is stored as `user`.
   `est_weight_kg` is estimated from quantity/unit/category when absent.
-- ✅ `PATCH /items/:id` — body may contain `name, quantity, unit, storage, category,
-  predicted_expiry, est_price, est_weight_kg` (unknown fields → 400). Changing the expiry sets
+  **Candidate round trip:** post a candidate back as-is, including `expiry_source`
+  (`default|gemini|ml`), and that source is **kept** when `predicted_expiry` is sent. Edit detection is
+  client-driven and the server trusts the enum: the client sends `expiry_source: "user"` (or omits the
+  field, which defaults to `user`) once the person changed the date. Invalid value → `400`; a
+  `expiry_source` sent without `predicted_expiry` is ignored (the backend predicts and sets it).
+  `freshness` and `confidence` from the candidate are stored (see above).
+- ✅ `PATCH /items/:id` — body may contain `name, quantity, unit, storage, category, food_group,
+  predicted_expiry, est_price, est_weight_kg, freshness` (unknown fields → 400, so `confidence` is not
+  editable). `freshness` set → stored and `freshness_checked_at` = now; `freshness: null` clears **both**
+  (null means "never assessed"). Changing the expiry sets
   `expiry_source=user`. Changing quantity/unit/category re-estimates `est_weight_kg` unless sent.
   → `200 {item}`; `403` other user's item; `404` unknown or already removed.
 - ✅ `POST /items/:id/remove` — **the core endpoint**
@@ -63,6 +94,32 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   the item's `group_id`, so impact is credited to whoever removed it. Personal items of other users
   stay `403`; non-members of the group get `403`. `PATCH` stays owner-only. If the item's open
   listing was claimed and `recipient_id` is omitted, the claimer becomes `recipient_id`.
+
+- ✅ `POST /items/:id/restore` (no body) → `200 {item}`. Undoes a removal made less than **10 minutes**
+  ago (same permission as remove: owner, or any member for a group-pantry item). `409 not_removed` if
+  the item is active, `409 restore_window_expired` after 10 minutes, `403`/`404` as for remove. One
+  transaction under the row lock: clears `removed_at`, `outcome`, `waste_reason`,
+  `removed_after_expiry`; **deletes the item's `remove` event** (by id + time) so `/impact`, `/tips` and
+  any other event query are automatically correct; and if the removal fulfilled a listing
+  (`fulfilled_at == removed_at`) the listing goes back to `open` with `fulfilled_at` and `recipient_id`
+  cleared (`claimed_by` kept). The `share` event from listing creation is untouched.
+
+- ✅ `POST /items/remove-batch` `{"item_ids": ["uuid", …] (1-100, unique), "outcome": "used" | "donated"}`
+  → `200 {items: [item…]}` (request order; `share` on the caller's own items). **All or nothing.**
+  `thrown_out` is not allowed here (it needs a per-item `waste_reason`; use the single endpoint), and so
+  are `waste_reason` / `recipient_id` / any other field (`400`). Order of checks: body validation (400:
+  empty/oversized/duplicate/malformed ids, bad outcome, unknown field) → lookup + visibility (**`404
+  not_found` for the whole batch** if any id is unknown or not removable by the caller: another user's
+  personal item, or a group-pantry item of a group you are not in) → `409 already_removed` if any item is
+  already removed. Otherwise one transaction with all rows locked (`FOR UPDATE`, id order): same per-item
+  effects as `POST /items/:id/remove` (one `remove` event each, `user_id` = caller, same `removed_at` for
+  the batch); `donated` fulfils each item's open listing with `recipient_id` = its `claimed_by`. A 4xx
+  writes nothing. Constant query count regardless of batch size.
+- ✅ `POST /items/restore-batch` `{"item_ids": [...]}` (same id rules) → `200 {items}`. All or nothing:
+  `404` as above, `409 not_removed` if any item is active, `409 restore_window_expired` if any removal is
+  older than 10 minutes. Otherwise mirrors `POST /items/:id/restore` per item (deletes its `remove`
+  event, reopens a listing that removal fulfilled). `remove-batch` then `restore-batch` leaves `/impact`
+  exactly as before. Items removed singly can be restored in a batch and vice versa.
 
 ## Food groups (`food_group`)
 `food_group` is the user-facing grouping: `protein | veggies | fruit | dairy | grains | pantry |
@@ -104,7 +161,8 @@ post it straight back.
   and `rotten`/`stale`/`moldy`/`overripe`/`decayed`/… → `spoiled` (case/hyphen/space-insensitive; the word
   lists mirror `SEMI_WORDS`/`SPOILED_WORDS` in `ml/yolo/taxonomy.py`, and `ripe` is fresh in both); anything unknown or
   missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). It is
-  informational only: not stored, and it does not change `predicted_expiry`.
+  informational on the candidate and does not change `predicted_expiry`; post it back with
+  `POST /items` to store it on the item (`freshness`, `freshness_checked_at`).
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [{name, quantity, price}], total}`
   via `ML_SERVICE_URL`/ocr; `502` when unset or failing. `quantity` defaults to 1.
 - ✅ `GET /items/barcode/:code` (6-14 digits, else 400) → `200 {candidate}` (Open Food Facts, adds
@@ -183,16 +241,49 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
 
 ## Recipes, impact, tips
 - ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str]}` → `200 {recipes: [{title,
-  minutes, uses_items, missing_items, steps, macros, macros_estimated}]}` built from the caller's 20 soonest-expiring active
-  items. `macros` = `{kcal: int, protein_g, carbs_g, fat_g}` per serving, estimated by Gemini
-  (validated: kcal 0-3000, grams 0-300, numeric); missing/invalid -> `macros: null` (no error).
-  `macros_estimated` is always `true`. With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
+  minutes, servings, uses_items, missing_items, steps, macros, macros_estimated}]}` built from the caller's
+  20 soonest-expiring active items.
+  - `servings`: int 1-20 from Gemini, else `null`.
+  - `uses_items`: `[{item_id, name, predicted_expiry (date)}]` — Gemini's names mapped back to the
+    caller's items (case/space-insensitive exact match, then containment; soonest-expiring wins; each
+    item at most once per recipe). Names that match no item are dropped. `missing_items` stays `[str]`.
+  - `macros` = `{kcal: int, protein_g, carbs_g, fat_g}` per serving, estimated by Gemini (validated:
+    kcal 0-3000, grams 0-300, numeric); missing/invalid -> `macros: null` (no error).
+    `macros_estimated` is always `true`.
+  - **Cache:** per user, keyed by a SHA-256 of all the caller's active items (id, name, category,
+    quantity, unit, expiry) plus `max_results` and `dietary`; TTL 6 h (`RECIPE_CACHE_TTL_SECONDS`, `0`
+    disables). Any add/edit/remove/restore changes the key, so the next call goes to Gemini. In-process
+    per gunicorn worker (not shared, lost on restart). Each lookup logs one INFO line on
+    `app.recipes.cache`: `recipes_cache status=hit age_s=<n>` or `status=miss reason=empty|items_changed|expired`
+    (no user data). Errors (`502`) are not cached.
+  - With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
 - ✅ `GET /impact?range=week|month|all` (default `all`; week=last 7 days, month=last 30; bad → 400) →
-  `{saved: {count, kg, money, co2e_kg}, wasted: {count, kg, money, co2e_kg}, waste_rate, weekly:
-  [{week (date of bucket start), saved, wasted}]}`. `saved` = `used`+`donated` removals, `wasted` =
-  `thrown_out`; `weekly` values are counts; `waste_rate = wasted.count / (saved.count + wasted.count)`
-  (0 when empty). Computed from `food_events` with `time_bucket('1 week', time)`; money/kg/co2e
-  rounded to 2 dp. Zero data → zeros and `weekly: []`.
+  ```json
+  {"range": "week",
+   "saved":   {"count": 3, "kg": 1.2, "money": 8.5, "co2e_kg": 2.1},   // used + donated
+   "wasted":  {"count": 1, "kg": 0.5, "money": 3.5, "co2e_kg": 2.25},  // thrown_out
+   "used":    {"count": 1, "kg": …, "money": …, "co2e_kg": …},
+   "donated": {"count": 2, "kg": …, "money": …, "co2e_kg": …},
+   "waste_rate": 0.25,
+   "waste_reasons": [{"reason": "forgot", "count": 1, "kg": 0.5, "money": 3.5, "co2e_kg": 2.25, "share": 1.0}, …],
+   "previous": {"saved": {…}, "wasted": {…}, "used": {…}, "donated": {…}, "waste_rate": 0.0},
+   "weekly": [{"week": "2026-10-05", "saved": 3, "wasted": 1}],
+   "last_6_weeks": [{"week": "2026-09-07", "used": 0, "donated": 0, "saved": 0, "wasted": 0}, …]}
+  ```
+  - `saved` = `used`+`donated`, so `saved.x == used.x + donated.x` (up to 2 dp rounding).
+    `waste_rate = wasted.count / (saved.count + wasted.count)` (0 when empty).
+  - `waste_reasons`: always all 4 reasons (`expired, didnt_like, forgot, other`), zero-filled, sorted by
+    `count` desc (ties keep that enum order); `share` = count / `wasted.count` (0 when none). Same range.
+  - `previous`: the same totals for the window of equal length just before the current one (week: 14..7
+    days ago; month: 60..30 days ago); `null` for `range=all`. Clients compute deltas.
+  - `weekly`: range-filtered weekly counts, only weeks with data (unchanged; zero data → `[]`).
+  - `last_6_weeks`: **always 6 entries**, oldest first, ending with the current week, gap-filled with
+    zeros, independent of `range`. Buckets are `time_bucket('1 week')` (Monday 00:00 UTC); `week` is the
+    bucket start date. Counts only.
+    Week dates (here and in `weekly`) are computed in UTC whatever the DB session time zone (BE-10).
+  - Computed from `food_events` (`event_type='remove'`) on every request, never stored totals; money/kg/
+    co2e rounded to 2 dp. A fixed number of queries, independent of data size (5 for `week`/`month`,
+    including the window-start lookup; 4 for `all`). Zero data → zeros.
 - ✅ `GET /tips` → `200 {tips: [{code, message}]}`. Based on the last 90 days of `thrown_out` events
   (top reason, most-wasted item, most-wasted category) plus items expiring within 2 days. Zero data
   → one `getting_started` tip.
@@ -203,6 +294,10 @@ logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compos
 
     gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
 
+A response that is not usable JSON (unparseable, a scalar such as `null`/string/number/bool, or an
+object whose `items`/`candidates`/`recipes`/`days` value is not a list) counts as a failed call
+(`status=error`, one line) and the endpoint returns `502 upstream_unavailable` (BE-13); for the shelf-life
+estimate on `POST /items` it falls back to the default table.
 Tokens come from the response's `usage_metadata` (`output_tokens` includes thinking tokens); they are
 `null` when it is missing, and on `status=error` when the call failed. Prompts, response text, user
 data and the API key are never logged. Cost report:

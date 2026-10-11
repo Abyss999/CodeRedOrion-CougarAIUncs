@@ -71,6 +71,11 @@ def _clean(app):
             names = ", ".join(f'"{r[0]}"' for r in rows)
             db.session.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
         db.session.commit()
+        try:  # the in-process recipe cache lives on the session-wide app: isolate tests
+            from app.services import recipe_cache
+            recipe_cache.clear()
+        except ImportError:  # pragma: no cover
+            pass
     yield
     with app.app_context():
         db.session.remove()

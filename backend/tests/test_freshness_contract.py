@@ -168,11 +168,13 @@ def test_normalize_all_skips_non_dicts_and_nameless():
     assert len(out) == 1 and out[0]["freshness"] == "spoiled"
 
 
-def test_freshness_not_stored_on_item(client, user):
+def test_freshness_stored_on_item_since_0004(client, user):
+    """Superseded: before migration 0004 freshness was informational; it is now stored (see test_wave2_freshness)."""
     r = client.post("/items", json={"items": [{"name": "Milk", "category": "dairy", "storage": "fridge",
                                                "freshness": "semi_fresh"}]}, headers=user["headers"])
     assert r.status_code == 201
-    assert "freshness" not in (r.get_json()["items"][0] if isinstance(r.get_json(), dict) else r.get_json()[0])
+    it = r.get_json()["items"][0]
+    assert it["freshness"] == "semi_fresh" and it["freshness_checked_at"]
 
 
 def test_unauthenticated_photo_401(client):

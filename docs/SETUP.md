@@ -1,7 +1,7 @@
 # Setup
 
 ## Prerequisites
-- macOS with **Xcode 16+** (iOS), **Homebrew**, `brew install xcodegen`
+- macOS with **Xcode 26** (iOS 26 SDK; the app targets iOS 18+), **Homebrew**, `brew install xcodegen`
 - **Docker Desktop** (or another Docker engine with Compose v2)
 - **Python 3.12**
 - Node (for `npx skills`), `gh` CLI logged in
@@ -67,6 +67,12 @@ xcodebuild test -project FoodWasteReducer.xcodeproj -scheme FoodWasteReducer \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 CI (`.github/workflows/ios.yml`) runs the same on every PR touching `ios/`.
+Test matrix: iPhone 17 Pro (iOS 26.5) for everything, plus an iPhone SE simulator at the largest
+accessibility text size for layout stress (create one with `xcrun simctl create "iPhone SE QA"
+"iPhone SE (3rd generation)" <iOS 26.5 runtime>` and `xcrun simctl ui <udid> content_size
+accessibility-extra-extra-extra-large`). UI-test launch arguments (`-UITestMockAPI`, `-UITestSeed`,
+`-UITestSignedIn`, `-UITestFailNetwork`, `-UITestSlowNetwork`, `-UITestShowToast`, `-UITestReduceMotion`)
+and the accessibility-ID convention are in `ios/README.md` and `ios/Tests/README.md`.
 
 ### Run on your own iPhone (free Personal Team, no TestFlight)
 No paid Apple Developer program is needed. Free-team builds are valid for 7 days, then re-run.

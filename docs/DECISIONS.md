@@ -2,9 +2,41 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — Backend wave 2 rulings (#57, #54)
+- **Number caps (BE-9):** `est_price` ≤ 99,999,999.99 (numeric(10,2)), `quantity` ≤ 1e6, `est_weight_kg` ≤ 1e5. Anything above → 400 `validation_error`. The last two columns are unbounded, but huge floats overflowed the CO₂e and weight maths into invalid JSON.
+- **`uses_items` is `[{item_id, name, predicted_expiry}]`**, matched back to the user's items. The iOS `Recipe` model changes in the first screen PR that decodes recipes (Home).
+- **The recipe cache is in-process** (6 h TTL, keyed on a hash of the active items). gunicorn runs one process, so the cache is shared. No Redis. Follow-up before integration QA: the gthread worker class (one process, threads) with a lock-guarded cache, so a slow Gemini call doesn't block other requests.
+- **Backend PRs stay backend-only.** iOS client additions for new endpoints (`remove-batch` / `restore-batch`) go into the iOS screen PR that uses them.
+- **Times are bucketed in UTC** (BE-10). Week buckets start Monday 00:00 UTC, and windows are exactly N × 24 h.
+- **A malformed Gemini reply is an upstream error** (BE-13). `_generate` rejects anything that isn't a list or object: 502, or the default table for shelf life. Never a 500.
+- **Receipt totals and coupons are filtered in the backend** (#54, BE-11 / BE-14). A line is dropped when an optional prefix plus a total / tax / payment / coupon keyword is followed only by numbers, card digits or a closed set of receipt words. So "TOTAL DUE" is dropped but "Total Cereal" is kept. A negative price is dropped too.
+- **Self-signed QA doesn't pass the gate.** A builder's own QA, including a teammate's, is kept as their record, but only an independent QA verdict counts.
+
+## 2026-10-10 — The app is called BiteDown (owner)
+- **Product name: BiteDown** (owner). Teammate Truc (FrankinstyLe) proposed a rename as "BiteUp" in #49, and the owner chose **BiteDown**. #49's tagline, "Use what you have. Share what you spare.", and its positioning toward students and shared households come with it until the owner says otherwise.
+- **The rename is user-facing only.** That covers the canvas (sign-in mark, settings version line, titles), the doc titles, the README and the iOS `CFBundleDisplayName`. Internal names stay: the Xcode target and scheme `FoodWasteReducer`, the repo, the Docker services and the bundle id. Renaming those would churn every open branch for no user-visible gain.
+
+## 2026-10-10 — ML models handed to a teammate (owner)
+- **ML model work is paused on our side.** A teammate is building the models. The Colab run, the `export.zip` YOLO gate, weights in `ml/serve`, the from-photo `source: "yolo"` check, GLM-OCR on MPS and further `ml/yolo` / `ml/eval` / pipeline data work are off the active queue until the owner says otherwise. The merged datasets, split rules, notebook and pipeline stay as they are. **The photo add flow, and so the demo path, runs on the existing Gemini-vision fallback** (`/items/from-photo` with `ML_SERVICE_URL` unset). Receipt OCR has no fallback (502), so receipt scan isn't available until the teammate's OCR lands.
+
 ## 2026-10-10 — Training data (Mac, stage 2)
 - **Datasets and licences, verified on each source page:** fridge_objects (Roboflow, wajeeha workspace), hien_fridge (Roboflow, gracelearning) and VegQual (figshare 30596084) are all **CC BY 4.0**, which requires attribution (see `docs/ML.md` "Attributions" and the README). The fresh/stale fruit set is **raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle, CC0)**.
 - **Dropped `sriramr/fruits-fresh-and-rotten-for-classification`.** The Kaggle API reports its licence as "Unknown", so we can't confirm our use is allowed. `muhammad0subhan/fruit-and-vegetable-disease-healthy-vs-rotten` (CC0) was also rejected: at 5.2 GB it breaks the 8 GB disk budget on the Mac.
+
+## 2026-10-10 — Motion
+- **Motion is calm and functional** (`docs/design/MOTION.md`). It confirms an action, shows where
+  something went, or shows that the app is working. The whole sequence takes at most 0.5 s, with
+  stagger delays included. Composites animate as one unit. Reduce Motion gets fades, never a
+  skipped animation. Haptics are used only at key moments.
+- The values were **tuned by QA** with frame-by-frame tests of the canvas demos. Round 1 found
+  stacked-bar segments coming apart, 680–770 ms sequences, a loud mic pulse and a missing
+  reduce-motion state. Round 2 passed every check.
+
+## 2026-10-10 — Orchestrator moved to the `food-main` session
+- The orchestrator role (review, merge, rulings, design canvas, orchestrator-owned docs) moved from
+  the VPS session `mobile-food` to the session `food-main`, to start with a fresh context. The Mac
+  session `food-waste` still builds. The process is unchanged; see `CLAUDE.md` and the
+  "Orchestrator handoff" section of `HANDOFF.md`.
 
 ## 2026-10-10 — Sign-in and screen set
 - **Sign-in is email + Google only.** Sign in with Apple was removed: the capability can't be
