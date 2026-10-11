@@ -2,6 +2,15 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Donation recipient and UI-build endpoints (#74, #76)
+- **`recipient_id` on a donated removal:** omitted = the claimer (as before); explicit `null` = someone not on BiteDown (the listing is fulfilled with no recipient, even when claimed); a user id must be an accepted friend or fellow group member, else 404; yourself → 400 ("You can't give food to yourself"). `recipient_id` with `used` / `thrown_out` → 400, null included. Check order: body 400 → item 404/403 → 409 → recipient 404. `remove-batch` (donated) takes the same field. Impact is unchanged: donated is always saved.
+- **New endpoints for the UI build:**
+  - `GET /requests?mine=1` (all statuses; `fulfilled_by` stays an id string plus `fulfilled_by_name`, so existing clients keep decoding);
+  - `share.audience {friends, groups}` on the owner's items only;
+  - `GET /auth/me` (`user`, `has_password`, `providers`);
+  - `GET /people/reachable` (friends plus fellow group members, de-duplicated, with the claimer flagged for the item's owner only).
+  Deferred: profile edit and server-side Fridge search.
+
 ## 2026-10-11 — Design feedback round 2 (teammate wedwqc, 13 comments; QA-checked; owner calls)
 - **Owner: the recipient is chosen in a "Given to" menu** after "Shared it". It defaults to the claimer, otherwise to "Someone not on BiteDown". The options are the claimer, friends, fellow group members and **Someone not on BiteDown**. Food given to a non-app person logs as donated (saved), never as waste or to the wrong friend. This replaces the 2026-10-10/11 "always the claimer" rulings. API: `recipient_id` explicit `null` = someone not on BiteDown; a user id must be an accepted friend or fellow group member (else 404); yourself → 400. Queued as `feat/donation-recipient`.
 - **Owner: the Home tip card sits at the top**, above "Use these first". It stays one line and dismissible. This reverses the earlier keep-below ruling.
