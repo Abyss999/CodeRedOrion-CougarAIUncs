@@ -1030,3 +1030,81 @@ No blocking bug found. Highest ML-n before this review was ML-63 (QA.md, `docs/q
 
 ## Files written
 `ml/eval/tests/qa_pr73_unrar_independent.py`; this section in `docs/qa/ml.md`.
+
+# 2026-10-11: ML QA for the Colab FAST profile (`feat/fast-train`, commit 0959750)
+
+## Verdict: **PASS, with 1 fixed CI break (ML-66, fixed in QA's own tests), 1 low and 1 info finding**
+Unit level only: tiny fixtures, no ultralytics, no training (a builder smoke run was in progress). Ultralytics 8.4.175 behaviour was
+checked by reading its source (`mldata/.venv-train`), not by running it. Interpreter: `.venv-ml`.
+
+New: `ml/eval/tests/qa_fast_profile.py` (26 tests: 25 run anywhere, 1 real-data test that skips when the local rebuild is absent).
+Updated (QA-owned, ML-66): `test_notebook_train_cell.py` (cell-5 harness sets `FAST=False` and stubs `cap_detector`, so the full profile still
+pins the exact old command), `qa_pr62_ml57.py` (crash test parametrized over `FAST`: the real train.py exits 1 = ImportError, not 2 =
+argparse, so the FAST profile flags parse).
+
+| Suite | Result |
+|---|---|
+| `cd ml && pytest yolo/tests -q` (CI) | 68 passed |
+| `pytest ml/eval/tests -q` (CI) | 224 passed (3 failed before the ML-66 test update) |
+| `pytest ml/eval/tests -q -o python_files="test_*.py qa_*.py"` | 288 passed, 4 skipped, 1 failed: `qa_pr73_unrar_independent.py::test_real_pip_failure_shows_error_and_exits_nonzero`, environmental (`.venv-ml` has no `pip` module; unrelated to this PR) |
+| `qa_fast_profile.py` incl. real data | 26 passed |
+
+Note: CI's ml/eval job collects `test_*.py` only, so `qa_fast_profile.py` runs with the `-o python_files` flag above (as the other `qa_*` files).
+
+## What was verified
+1. **Held-out / val / cls integrity** (`check_view`, fixture and real data): val and heldout `images/labels/freshness`, `cls/`,
+   `heldout_gt.jsonl`, `heldout_manifest.csv`, `class_names.json`, `dataset_report.json` are byte-identical to the source (deep compare through
+   the symlinks); `data.yaml` differs only in `path:`. Train is a subset of the source train split; every kept image has its own label and
+   freshness sidecar (byte-identical), found also by Ultralytics' `/images/`->`/labels/` rule on the unresolved path; no orphan sidecars.
+   Ultralytics `check_det_dataset` resolves `val`/`test` to the source dirs and lists train via glob on the view dir: same files.
+   Rebuilding into the same out (cell 5 re-run on resume) never touches the source (sha over the whole source tree) and drops a stale `train.cache`.
+2. **Cap semantics**: foods with total <= cap keep every box; foods over cap keep >= cap; **maximality** (every dropped image only has foods
+   already at cap); background images (empty label file, and no label file) kept; overshoot only from forced rare-food images, multi-food
+   images, or the last image's extra boxes. Freshness codes: `CODE_TO_FRESHNESS == {0 fresh, 1 spoiled, 2 semi_fresh}`; a spoiled-only big food
+   keeps only spoiled boxes; code 2 decodes to semi_fresh; missing sidecar -> fresh. Source prefix: longest match (`fresh_stale_fruits_veg`
+   beats a hypothetical `fresh` source), spied inside `select()`. Deterministic, and identical when the dataset lives at another path.
+3. **make_subset on the fast view**: every dry train/val/heldout image resolves through the symlink chain and has its label; dry train is a
+   subset of the capped train; `cls/{train,val}` have fresh/semi_fresh/spoiled, all non-empty; `heldout_gt.jsonl` rows == chosen heldout images.
+4. **Notebook**: every code cell compiles (`!`/`%` lines stripped); `FAST = True` and `DET_CAP = 400` params; cell 5 does not assign `rep`
+   (AST) and a sentinel `rep` survives exec; cell 5 exec'd for FAST x DRY_RUN with a stub train.py: `cap_detector("/content/fwr_data",
+   "/content/fwr_data_fast", cap=400)` only with FAST, `make_subset(TRAIN_DATA, ...)` only with DRY_RUN, epochs 1/1 dry, 30/10 fast, 80/30 full,
+   `PROFILE` appended last with FAST and absent otherwise; `RUN_DIR` has 4 distinct values and the full real run keeps the pre-FAST folder;
+   cell 6 message and its held-out val on the full `/content/fwr_data/data.yaml`.
+5. **train.py**: `--cache none|ram|disk` -> `cache=False|"ram"|"disk"` and `--no-epoch-val` -> `val=False` reach BOTH stages; the profile
+   flags parse (det model, imgsz 512, batch 32, cls batch 128); `--cache true` rejected. Resume branch with cache/val in kw: calls
+   `train(resume=True, data, device, batch, imgsz)` only, no KeyError; a done stage is skipped; a fresh stage gets cache/val. In 8.4.175
+   resume restores `cache`/`val` from the checkpoint args (both are also in its allowed overrides), and `val=False` is supported
+   (final epoch still validated, `EarlyStopping` handles `fitness=None`, `best.pt` == last until the final val).
+
+## Real data (`mldata/verify_main/fwr_data`, read-only; view built in `mldata/qa_fast_view`, deleted afterwards)
+Kept **4,881 of 11,777** train images (8,808 of 22,096 boxes), built in ~10 s. All integrity checks above pass; 0 unknown-source stems.
+
+| Freshness (boxes) | full train | fast view |
+|---|---|---|
+| fresh | 14,583 (66.0%) | 6,036 (68.5%) |
+| spoiled | 6,325 (28.6%) | 2,206 (25.0%) |
+| semi_fresh | 1,188 (5.4%) | 566 (6.4%) |
+
+Boxes per food (kept/total): apple 425/1187, avocado 400/424, bacon 188/188, banana 400/1011, beef 400/600, bell_pepper 404/2528,
+bitter_melon 400/407, butter 184/184, cheese 220/220, cucumber 315/315, egg 558/1478, eggplant 400/2092, fish 400/404, lemon 364/364,
+milk 501/1386, onion 404/1876, orange 400/960, papaya 311/311, pineapple 400/436, potato 400/1334, soda 403/890, tomato 400/2167, yogurt 531/1334.
+Overshoot: egg +158, yogurt +131, milk +101 (fridge multi-object photos: 170/164/59 boxes come with forced rare-food images such as
+butter/bacon/cheese/avocado, the rest from multi-food images), apple +25, onion/bell_pepper +4, soda +3 (last image's extra boxes).
+
+Images per source (kept/full): agrifreshnet 1973/3467, dafif 400/404, food_spoilage_status 213/217, fresh_stale_fruits_veg 478/1961,
+fridge_objects 547/728, hien_fridge 318/1393, meatscan 400/600, vegqual 552/3007.
+
+## Bugs
+Highest ML-n before this review: ML-65 (`docs/QA.md` on origin/main had ML-62, `docs/qa/ml.md` ML-65; no open PRs).
+
+| ID | Sev | Where | Summary | Status |
+|---|---|---|---|---|
+| ML-66 | medium | `ml/eval/tests/test_notebook_train_cell.py` (CI) | Commit 0959750 makes cell 5 read `FAST`; the ML-57 regression test exec'd cell 5 without it, so CI's `pytest ml/eval/tests -q` failed 3 tests (`NameError: name 'FAST' is not defined`), as did `qa_pr62_ml57.py` (2). The builder ran only `ml/yolo/tests`. | **fixed** in QA's tests (this branch): harness passes `FAST`, stubs `cap_detector` |
+| ML-67 | low | `ml/yolo/cap_detector.py` `cap_detector()` (`if out.exists(): shutil.rmtree(out)`) | No guard against `out` == `data` (or `data` inside `out`): `cap_detector(D, D)` deletes the whole source dataset, then raises `FileNotFoundError` on `class_names.json`. Repro in a temp copy confirmed. The notebook uses fixed distinct paths, so not reachable from Colab today; `make_subset.py` has the same pattern. | **open, non-blocking**; fix: refuse when `out.resolve()` equals or contains `data` |
+| ML-68 | info | `cap_detector.select()` | Per-food cap + round-robin keeps a share of every freshness, but box-level spoiled drops (28.6% -> 25.0%) and some cells shrink much more than their food: apple/spoiled 49/228 (apple 21% -> 12% spoiled), bell_pepper/spoiled 96/800 (32% -> 24%), tomato/semi_fresh 21/225 (10% -> 5%). Cause: fresh-only fridge sources contribute "free" boxes via forced and multi-object images, and vegqual images carry several boxes each. Freshness is the classifier's job (it still sees every crop), so this only matters if detector recall on spoiled / semi_fresh items drops. | **open, non-blocking**; compare held-out detector recall per freshness FAST vs full after the first real run |
+
+Other notes (no ID): the view's (and export's) `dataset_report.json` describes the full train split; the capped split is described only by
+`cap_report.json`, which stays in `/content/fwr_data_fast` and is not copied to the export. Consider copying it to `RUN_DIR/export` for traceability.
+
+## Files written
+`ml/eval/tests/qa_fast_profile.py` (new), `ml/eval/tests/test_notebook_train_cell.py`, `ml/eval/tests/qa_pr62_ml57.py` (ML-66), this section.
