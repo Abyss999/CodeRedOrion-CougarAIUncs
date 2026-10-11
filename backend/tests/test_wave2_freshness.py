@@ -236,8 +236,10 @@ def test_non_finite_numbers_rejected_on_patch(client, user, make_item, field, ra
     assert now[field] == it[field]
 
 
-@pytest.mark.xfail(strict=True, reason="BE-9: finite est_price beyond numeric(10,2) -> DB error -> 500")
 @pytest.mark.parametrize("val", [1e8, 1e12, 1e300])
-def test_huge_est_price_is_400_not_500(client, user, val):
+def test_huge_est_price_is_400_not_500(client, user, sql, val):
+    """BE-9 (fixed in backend PR 2): est_price beyond numeric(10,2) is a 400, nothing written."""
     r = post(client, user, est_price=val)
     assert r.status_code == 400, r.status_code
+    assert r.get_json()["error"]["code"] == "validation_error"
+    assert sql("SELECT count(*) AS n FROM items")[0]["n"] == 0
