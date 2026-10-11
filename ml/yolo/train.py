@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 DET_MODEL = "yolo26s.pt"      # detector; see docs/ML.md for the size trade-off
-CLS_MODEL = "yolo26n-cls.pt"  # fresh/spoiled crop classifier
+CLS_MODEL = "yolo26n-cls.pt"  # fresh/semi_fresh/spoiled crop classifier
 
 
 def pick_device(requested: str = "auto") -> str:

@@ -34,7 +34,7 @@ def test_detect_fridge_contract(client):
     assert len(j["candidates"]) == 2
     for c in j["candidates"]:
         assert set(c) == {"name", "category", "food_group", "confidence", "freshness", "bbox"}
-        assert c["category"] in CATEGORIES and c["freshness"] in ("fresh", "spoiled")
+        assert c["category"] in CATEGORIES and c["freshness"] in ("fresh", "semi_fresh", "spoiled")
         assert len(c["bbox"]) == 4
     assert j["candidates"][0]["confidence"] >= j["candidates"][1]["confidence"]
 
@@ -99,3 +99,23 @@ def test_yolo_detector_is_lazy_and_needs_weights(monkeypatch):
 def test_taxonomy_categories_valid():
     from serve.categories import CLASS_CATEGORY
     assert set(CLASS_CATEGORY.values()) <= set(CATEGORIES)
+
+
+def test_detect_freshness_normalisation(caplog):
+    dets = [{"name": "papaya", "confidence": 0.9, "freshness": "semi_fresh", "bbox": None},
+            {"name": "apple", "confidence": 0.8, "freshness": "spoiled", "bbox": None},
+            {"name": "milk", "confidence": 0.7, "freshness": "rotten", "bbox": None},
+            {"name": "kale", "confidence": 0.65, "freshness": "glowing", "bbox": None},
+            {"name": "egg", "confidence": 0.6, "bbox": None}]
+    with caplog.at_level("WARNING", logger="fwr.serve"):
+        r = post(create_app(FakeDetector(dets), FakeOCR()).test_client(), "/detect", png(), mode="fridge")
+    got = {c["name"]: c["freshness"] for c in r.json["candidates"]}
+    assert got == {"papaya": "semi_fresh", "apple": "spoiled", "milk": "spoiled", "kale": "fresh", "egg": "fresh"}
+    assert "glowing" in caplog.text  # unknown -> fresh + warning; "rotten" is a spoiled variant (ML-27)
+
+
+def test_detect_new_classes_food_group():
+    dets = [{"name": "bitter_melon", "confidence": 0.9, "freshness": "fresh", "bbox": None},
+            {"name": "pineapple", "confidence": 0.8, "freshness": "fresh", "bbox": None}]
+    r = post(create_app(FakeDetector(dets), FakeOCR()).test_client(), "/detect", png())
+    assert {c["name"]: c["food_group"] for c in r.json["candidates"]} == {"bitter_melon": "veggies", "pineapple": "fruit"}

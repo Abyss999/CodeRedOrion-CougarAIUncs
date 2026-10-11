@@ -61,10 +61,18 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
   https://universe.roboflow.com/gracelearning/hien_fridge-tathx . Licence CC BY 4.0. Dropped: the `others` class.
 
 ## 3. Label design (decision)
-**Two-stage: detector for item NAME + separate crop classifier for fresh/spoiled.**
+**Two-stage: detector for item NAME + separate crop classifier for fresh/semi_fresh/spoiled.**
 - Detector classes = ~50 canonical food names (`ml/yolo/taxonomy.py`, id order = `data.yaml`, append-only).
   No `rotten_apple` classes.
-- Freshness = `yolo26n-cls` trained on crops (`cls/{train,val}/{fresh,spoiled}/`), applied to each detected box.
+- Freshness = `yolo26n-cls` trained on crops (`cls/{train,val}/{fresh,semi_fresh,spoiled}/`), applied to each detected box.
+  **Three classes since 2026-10-10** (`fresh | semi_fresh | spoiled`, `taxonomy.FRESHNESS`): AgriFreshNET labels a middle
+  "semi fresh" stage, which maps to a "use soon" signal in the app. Decision rule in `infer.TwoStage.label`: `spoiled` if
+  p(spoiled) >= `SPOILED_THRESHOLD`, else `semi_fresh` if p(semi_fresh) >= `SEMI_FRESH_THRESHOLD`, else `fresh` (spoiled is
+  checked first because a missed spoiled item is the costly error). Old 2-class weights still work and never emit `semi_fresh`.
+  The serve layer coerces any other freshness value from a backend to `fresh` and logs a warning.
+  YOLO QA gates stay binary (spoiled vs not-spoiled); see `docs/QA.md`.
+  New detector classes `papaya`, `pineapple`, `bitter_melon` (AgriFreshNET) are appended to `taxonomy.py`
+  (`bitter_gourd` now aliases to `bitter_melon`); all three are `produce_leafy` (short-life, 5 d in `expiry.py`) with food groups fruit/fruit/veggies.
 - Why: (1) fresh/spoiled sources are labelled per-class-per-fruit (`rotten_apple`) and don't cover most fridge
   foods; a fused 2xN-class detector would have spoiled examples for only a few items and learn "apple => spoiled
   variants exist". (2) Spoilage is texture/colour on a crop and is the costly error (QA: spoiled recall >= 0.85);
@@ -83,8 +91,8 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
 ```
 DIR/data.yaml                  train: images/train  val: images/val  test: images/heldout
 DIR/images|labels/{train,val,heldout}/   YOLO txt (class xc yc w h, normalised)
-DIR/freshness/<split>/<stem>.txt   one line per label line: 1 = spoiled, 0 = fresh
-DIR/cls/{train,val}/{fresh,spoiled}/*.jpg   classifier crops
+DIR/freshness/<split>/<stem>.txt   one line per label line: 0 = fresh, 1 = spoiled, 2 = semi_fresh
+DIR/cls/{train,val}/{fresh,semi_fresh,spoiled}/*.jpg   classifier crops
 DIR/heldout_gt.jsonl           ground truth (below)
 DIR/heldout_manifest.csv       per-image metadata (below)
 DIR/dataset_report.json        counts, dropped source labels, classes with no data
@@ -148,14 +156,14 @@ gunicorn -w 1 --threads 4 -t 120 -b 127.0.0.1:8000 serve.wsgi:app
 ```
 Backend env: `ML_SERVICE_URL=http://<gpu-host>:8000` (tunnel/VPN; the service has **no auth** - never expose publicly).
 Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm`
-(default fake), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
+(default fake), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
 (optional; enables Gemini structuring of OCR text, else the deterministic parser alone), `GEMINI_MODEL`, `MAX_UPLOAD_MB` (12).
 Without `FRESHNESS_WEIGHTS` every item reports `freshness: "fresh"` - set it for real use.
 Models load on first request (first call is slow); a failed load returns 500 `inference_failed`, which the backend
 should treat as "fall back to Gemini vision" (docs/ARCHITECTURE.md).
 
-Contract (fixed): `POST /detect` (multipart `image`, form `mode`=fridge|single; default fridge) ->
-`{"candidates":[{name,category,confidence,freshness,bbox|null}],"model"}` (single = top-1 only; an empty list means
+Contract: `POST /detect` (multipart `image`, form `mode`=fridge|single; default fridge) ->
+`{"candidates":[{name,category,food_group,confidence,freshness: fresh|semi_fresh|spoiled,bbox|null}],"model"}` (single = top-1 only; an empty list means
 nothing detected); `POST /ocr` -> `{"lines":[{name,quantity,price}],"total","raw_text"}`; `GET /health`.
 Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 500 `inference_failed`.
 
@@ -175,6 +183,7 @@ tolerated; **voids** (`VOID`/`VOIDED`/`** VOID **`/`ITEM VOID` + name and/or pri
 - VegQual is the only dataset wired in so far; the fridge sets and the Kaggle replacement are pending download, and the Kaggle set's class list is unverified.
 - Domain gap: clean-background produce vs cluttered fridge shelves; small fridge sets; ~50 classes will be
   uneven (see `classes_with_no_data`). Freshness for non-produce (milk, meat) has no training signal.
+- `semi_fresh` training signal exists only for AgriFreshNET's 8 produce types; QA reports its precision/recall but does not gate it.
 - Synthetic lighting is an approximation of real low/warm light. Auto lighting tags can misfire on red/orange-heavy scenes.
 - Parser is heuristic: receipts with item names that look like prices/keywords (e.g. an item containing "CASH" or "TAX")
   or multi-line wrapped names can be dropped or split. Real-receipt accuracy needs ML QA's >=20-receipt set.

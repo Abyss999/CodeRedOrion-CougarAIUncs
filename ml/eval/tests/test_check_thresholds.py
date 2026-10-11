@@ -23,7 +23,7 @@ def test_all_pass_at_boundaries():
 def test_each_threshold_can_fail():
     cases = [
         (lambda m: m["detection"].__setitem__("map50", 0.599), "YOLO mAP@0.5"),
-        (lambda m: m["detection"]["freshness"]["fresh"].__setitem__("precision", 0.79), "YOLO precision [fresh]"),
+        (lambda m: m["detection"]["freshness"]["fresh"].__setitem__("precision", 0.79), "YOLO precision [not-spoiled]"),
         (lambda m: m["detection"]["freshness"]["spoiled"].__setitem__("precision", 0.79), "YOLO precision [spoiled]"),
         (lambda m: m["detection"]["freshness"]["spoiled"].__setitem__("recall", 0.849), "YOLO recall [spoiled]"),
         (lambda m: m["detection"]["recall_drop_points"]["low"].__setitem__("overall", 10.1), "YOLO recall drop low vs normal (overall)"),

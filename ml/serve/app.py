@@ -1,7 +1,7 @@
 """Inference service. Contract (fixed; backend codes against it):
 
   POST /detect  multipart image, form mode=fridge|single
-     -> {"candidates":[{name,category,food_group,confidence,freshness,bbox|null}], "model": str}
+     -> {"candidates":[{name,category,food_group,confidence,freshness(fresh|semi_fresh|spoiled),bbox|null}], "model": str}
   POST /ocr     multipart image
      -> {"lines":[{name,quantity,price}], "total": float|null, "raw_text": str}
   GET  /health  -> {"status":"ok", ...}
@@ -18,7 +18,7 @@ from werkzeug.exceptions import HTTPException
 
 from ocr.receipt_pipeline import gemini_structure, parse_receipt_text
 from .backends import detector_from_env, ocr_from_env
-from .categories import CATEGORIES, FOOD_GROUPS, food_group_for
+from .categories import CATEGORIES, FOOD_GROUPS, FRESHNESS, SEMI_WORDS, SPOILED_WORDS, food_group_for
 
 log = logging.getLogger("fwr.serve")
 MAX_FRIDGE_CANDIDATES = 50
@@ -46,6 +46,22 @@ def _load_image() -> Image.Image:
     return img.convert("RGB")
 
 
+def _clean_freshness(d: dict) -> str:
+    """Case/space/hyphen-insensitive; taxonomy spoiled/semi words map to their class (a spoiled
+    variant must never fall through to fresh). Anything else -> fresh + warning."""
+    f = d.get("freshness")
+    if isinstance(f, str):
+        key = "_".join(f.strip().lower().replace("-", " ").replace("_", " ").split())
+        if key in FRESHNESS:
+            return key
+        if key in SPOILED_WORDS:
+            return "spoiled"
+        if key in SEMI_WORDS or key == "use_soon":
+            return "semi_fresh"
+    log.warning("unknown freshness %r for %r; treating as fresh", f, d.get("name"))
+    return "fresh"
+
+
 def _clean_candidate(d: dict) -> dict:
     cat = d.get("category")
     bbox = d.get("bbox")
@@ -54,7 +70,7 @@ def _clean_candidate(d: dict) -> dict:
             "food_group": (d.get("food_group") if d.get("food_group") in FOOD_GROUPS
                            else food_group_for(str(d["name"]))),
             "confidence": round(float(d.get("confidence", 0.0)), 4),
-            "freshness": "spoiled" if d.get("freshness") == "spoiled" else "fresh",
+            "freshness": _clean_freshness(d),
             "bbox": [round(float(v), 1) for v in bbox] if bbox else None}
 
 

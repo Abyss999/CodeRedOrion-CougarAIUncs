@@ -114,3 +114,34 @@ Decisions / findings (all behaviours match docs/API.md):
 | BE-3 | info | No Gemini token usage logged | **fixed, verified** (one leak-free INFO line per call; `scripts/gemini_cost.py` verified) |
 | BE-4 | info | `food_group: null` on PATCH undocumented in docs/API.md (returns 400, never 500) | open, doc request to builder |
 | BE-5 | info | Reported cosmetic oddities: POPCORN -> other, PICO DE GALLO -> other, COCOA BUTTER -> dairy, EGG NOODLES -> protein, COCONUT WATER -> fruit | open, optional |
+
+## 2026-10-10 - freshness normaliser (PR A1, branch feat/semi-fresh-contract)
+
+**Result: PASS.** Full suite from `backend/`: `pytest -q --cov=app` = **380 passed, 1 skipped, coverage 96%**, against `fwr_test` on localhost:5433 (no train.py or xcodebuild running). New file `tests/test_freshness_contract.py`; ML and Gemini stubbed, `gemini._generate` stubs take `*a, **k`.
+
+| Checked | Result |
+|---|---|
+| `fresh`, `semi_fresh`, `spoiled` pass through, no warning | ok |
+| Variants: `Semi-Fresh`, `semi fresh`, `SEMIFRESH`, padded, `use soon`, `Rotten`, `stale`, `SPOILT`, `bad`, case/space variants of valid values | ok, no warning |
+| Unknown (`??`, empty, `mouldy`, `overripe`, None, int, float, bool, list, dict) -> `fresh` with exactly one WARNING (`freshness_fallback`, source, raw cut to 40 chars) | ok |
+| Warning has no user data: item names never appear, a 500-char raw is truncated | ok |
+| `/items/from-photo`, ML path: semi_fresh passes through, variants map, junk/None/missing -> fresh with one warning each, mixed list warns once per bad candidate, source=yolo | ok |
+| `/items/from-photo`, Gemini fallback: `Semi-Fresh` -> semi_fresh, list and `{"candidates": [...]}` shapes, unknown -> fresh, source=gemini; ML down -> Gemini still normalised | ok |
+| Gemini detect prompt lists `fresh|semi_fresh|spoiled` | ok |
+| `/items/parse-text`: no freshness key and no warning when Gemini sends none; a stray freshness is normalised | ok |
+| Freshness is not stored on items; unauthenticated from-photo is 401 | ok |
+
+### Findings
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| BE-6 | low | `_FRESHNESS_ALIASES` maps `ripe` -> `semi_fresh`, but `ml/yolo/taxonomy.FRESH_WORDS` treats `ripe` as fresh (ML-28). Also `overripe`, `mouldy`/`moldy`, `decayed`, `rotting`, `damaged` (all in taxonomy's spoiled list) fall through to `fresh` with a warning: the unsafe direction for free-text Gemini output. Impact is small since Gemini is told the enum, but the two tables should agree. Suggest dropping the `ripe` alias (or mapping it the same everywhere) and sending the taxonomy spoiled words to `spoiled`. | open |
+
+Contract grep: `docs/API.md` and the Gemini prompt are 3-value. No two-value enum left in `backend/app` or `ml/serve`. See ML-29 for stale wording elsewhere.
+
+### 2026-10-10 - re-verification after BE-6 fix (commit 5e15b00)
+
+**Result: PASS.** `pytest -q --cov=app` from `backend/` = **394 passed, 1 skipped, coverage 96%** (`fwr_test`, localhost:5433; no train.py/xcodebuild running).
+
+- BE-6 verified fixed. New and extended tests in `tests/test_freshness_contract.py`: `moldy`, `Mouldy`, `overripe`, `decayed`, `rotting`, `damaged`, `DEFECTIVE` -> spoiled and `half-fresh` -> semi_fresh with no warning; `ripe`, `Ripe`, `unripe`, `good`, `Over-Ripe` -> fresh with exactly one warning; a Gemini from-photo run with `moldy`/`overripe`/`decayed` -> spoiled and `ripe` -> fresh with a single warning; and `test_backend_word_lists_equal_taxonomy`, which loads `ml/yolo/taxonomy.py` by path and checks the backend semi aliases equal `SEMI_WORDS` plus `use soon`, the spoiled aliases equal `SPOILED_WORDS` (the exact `spoiled` value is handled separately), no `FRESH_WORDS` entry is aliased to another class, and the `FRESHNESS` tuples match.
+- Note: `Over-Ripe` (hyphenated) is not the taxonomy word `overripe`, so it stays fresh + warning in both backend and serve. They agree.
+- No new backend bugs.

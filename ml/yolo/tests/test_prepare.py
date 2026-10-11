@@ -58,7 +58,7 @@ def test_prepare_end_to_end(tmp_path):
     for g in gt:
         assert (out / g["image"]).exists() and g["lighting"] in ("normal", "low", "warm")
         for lab in g["labels"]:
-            assert lab["category"] in T.CATEGORIES and lab["freshness"] in ("fresh", "spoiled")
+            assert lab["category"] in T.CATEGORIES and lab["freshness"] in T.FRESHNESS
             x1, y1, x2, y2 = lab["bbox"]; assert x2 > x1 and y2 > y1
     # unmapped 'Robot' dropped; rotten_apple -> apple/spoiled; label & sidecar line counts agree
     rep = json.loads((out / "dataset_report.json").read_text())
