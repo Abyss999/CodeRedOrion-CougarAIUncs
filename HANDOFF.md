@@ -214,7 +214,8 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
   - Round 4 (v54, #91): ItemShared "Given to <name>" opens RemoveSheet prefilled with the claimer (`.default`), approved.
   - Round 3 (owner): the Home profile button becomes a settings gear; the tip stays observation-only; Social posts through one green "+" beside Requests, with a person-plus button for Connect (approved, #82); request notes keep 280 chars and the board clamps to 4 lines; chat and a waste-tracking metric are out of scope.
 - **Open owner items:**
-  - the Google OAuth client
+  - ~~the Google OAuth client~~ **done (2026-10-11):** the iOS client exists, and it's in the Mac's `.env` (`GOOGLE_IOS_CLIENT_IDS`) and gitignored `ios/Local.xcconfig`. The backend verifies tokens (a bogus one → 401). The Auth PR can turn `googleSignInEnabled` on.
+  - **Gemini:** a free-tier key can hit its quota mid-demo (it happened 2026-10-11, and the key was swapped). Enabling billing removes that risk. Rotate the key after the demo.
   - nothing else blocking
 - **Watch for:**
   - Home must switch `Recipe.usesItems` to the object shape (#57).

@@ -2,6 +2,10 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Receipts fall back to Gemini vision (owner; #95)
+- **`POST /items/from-receipt` falls back to Gemini vision** when the OCR service is unset or fails, like `/items/from-photo`. This reverses "receipts have no fallback (502)". The receipt response gains `source` (`ocr` | `gemini`). *Why:* receipt scanning works in the demo before the teammate's GLM-OCR engine is deployed. *Cost:* at most one Gemini call per scan, counted against the same quota.
+- **#97** (QA sweep by teammate duwudlekat) needs the author to merge main in, independent QA, a collision check with the in-flight screen PRs, and a check that its sign-in exists only in DEBUG builds.
+
 ## 2026-10-11 — Gemini quota hit; model stays gemini-3.8-flash (owner)
 - **The free-tier key ran out of quota** (429 RESOURCE_EXHAUSTED from about 15:07 UTC), so every Gemini endpoint failed. The owner put a second key in the Mac's `.env`; secrets are never relayed between sessions. From now on, **agents and QA never make live Gemini calls**. They use stubs or the Mock client, apart from one smoke call after a key or model change.
 - **The model stays `gemini-3.8-flash`** ("cheapest without degrading quality"). 3.6 Flash costs the same and is older; 3.5 Flash costs more (and isn't on Google's official pricing page); Flash-Lite is cheaper but lower quality.
