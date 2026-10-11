@@ -726,3 +726,53 @@ Contract: docs/API.md `POST /items/:id/remove` ("`recipient_id` has three cases"
 **Full suite:** run by the orchestrator on HEAD `8f3a17c` (main merged in): `pytest -q --cov=app` gave 1642 passed and 3 skipped in 305 s, with total coverage 98%.
 
 **Verdict: PASS (final).** No open bugs; BE-17 was found and fixed in this PR.
+
+
+## feat/backend-gaps
+
+Four additive gaps, stacked on `feat/donation-recipient`: G1 `GET /requests?mine=1`, G2 `share.audience` on the owner's items, G3 `GET /auth/me`, G5 `GET /people/reachable`. Tests are written against `docs/API.md` as built. **Status: PASS (final).**
+
+**New file:** `tests/test_backend_gaps.py`.
+- **G1 (`?mine=1`)**
+  - Own requests only, in all statuses, newest first. Another user's requests, including ones visible to the caller, never appear.
+  - `fulfilled_by` is the user-id string and `fulfilled_by_name` the display name; both are null for open and cancelled requests. Two different fulfillers are each reported correctly.
+  - `mine` accepts `1` and `true` in any case. `""`, `0`, `false`, `2`, `yes`, junk and a leading space give 400.
+  - `audiences.hidden_count` is 0 for the author, except after the author leaves an audience group: that group is not listed and is counted as 1, and a request whose only audience was that group is cancelled but still listed.
+  - The query count is constant at 1 vs 25 requests with mixed statuses and audiences. The plain board is still open-only and constant.
+- **G2 (`share.audience`)**
+  - A friends listing gives `{friends: true, groups: []}` and a group listing gives `{friends: false, groups: [{id, name}]}`. A group rename is reflected, and a cancelled listing gives `share: null`.
+  - Present on `GET /items`, `group_by`, PATCH, remove, restore and both batch endpoints.
+  - Never present in the Food Pantry entries or the group pantry. There is no `GET /items/:id` route.
+  - N+1: the query count is constant between 1 and 20 shared items, with friends and two groups mixed. `group_by` stays within its existing bound, and the batch remove adds no queries.
+- **G3 (`/auth/me`)**
+  - A password user gets `has_password: true`, `providers: []`. A Google-only user (stubbed JWKS) gets `false` and `["google"]`. A linked user gets `true` and `["google"]`, with no duplicate after a second sign-in.
+  - The body is exactly `{user, has_password, providers}` and `user` is `{id, email, display_name, created_at}`. No hash or subject appears in it.
+  - 401 for a missing, malformed, wrong-secret, expired, unknown-user or deleted-account token.
+- **G5 (`/people/reachable`)**
+  - Accepted friends plus current group-mates, deduplicated (a friend who is also a group-mate has `kind: friend` with groups), the caller excluded.
+  - Pending (out and in), strangers, former members and members of other groups are excluded. Unfriending or leaving takes effect at once.
+  - Sorted by name case-insensitively. With `item_id`, the open-listing claimer is flagged and sorted first (friends and group listings). With no claim, no `item_id`, or a cancelled or fulfilled listing, all are false.
+  - 404 for an invisible, unknown or removed item and 400 for a malformed `item_id`.
+  - **Only the owner learns the claimer.** Every non-owner viewer (friend, group-mate, stranger, other-group member, the claimer) gets all false or a 404, never a true.
+  - Consistency with donation-recipient: every returned person is accepted as `recipient_id` on remove and remove-batch (donated), and each non-returned person gets 404. After someone leaves, both agree.
+  - The query count is constant from 5 people to about 30 people across 6 more groups, with and without `item_id`.
+
+**Edited:** `tests/test_wave2_item_share.py` expected `share` to be exactly `{id, status, claimed_by}`. It now also expects the new `audience` key. This is the contract change, not a regression.
+
+**Contract/code notes for the orchestrator:**
+- `fulfilled_by` stays a string while `/auth/me` and the other new shapes are flat. This is as ruled, and iOS must decode accordingly.
+- A friend can call `/people/reachable?item_id=` for an item that is visible through an open listing and gets all false. This is as documented, and it is a deliberate non-leak.
+
+**Bugs:** none yet. The next free ID is **BE-18** (BE-17 is the donation-recipient remove-batch query count in `wt/donation-recipient/docs/qa/backend.md`; this branch's own copy of the doc stops at BE-16 until that PR merges).
+
+**Run results (targeted, not the full suite):** `test_backend_gaps.py`, `test_wave2_item_share.py`, `test_social.py`, `test_auth.py`, `test_oauth_google.py` and `test_donation_recipient.py` together gave 456 passed, 2 skipped (the "no claimer" cases, by design) in 152 s.
+
+**Test-expectation fixes made on the first run (not code bugs):**
+- `mine=" 1"` (leading space) was expected to be 400, but the code trims it. The contract names only `1` and `true`, so I dropped that case.
+- The `?mine=1` query-count baseline had no fulfilled request, so the conditional fulfiller lookup showed as one extra query. The baseline now includes a fulfilled request.
+
+**Bugs:** none. BE-18 is still free.
+
+**Full suite:** run by the coordinator on HEAD `446c2ca` (with #74 merged in). `pytest -q --cov=app` gave 1708 passed and 3 skipped in 336 s, with total coverage 98%. Merging main afterwards (`06cf7fa`) changed nothing under `backend/`.
+
+**Verdict: PASS (final).** No open bugs.
