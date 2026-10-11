@@ -161,30 +161,32 @@ final class RemoveFlowUITests: XCTestCase {
         XCTAssertFalse(app.fridgeRow("item-eggs").exists, "removal must persist after the toast expires")
     }
 
-    /// The Undo countdown starts when the toast becomes visible, after the sheet dismisses (#64),
-    /// so the whole window is usable. Window 4 s; the toast must still be up 2.5 s after the sheet is
-    /// seen gone. `tGone` is when XCUITest *noticed*, which is at or after the real dismissal, so the
-    /// check is conservative. If the runner's snapshot itself lands later than 3.3 s after `tGone`,
-    /// the run is inconclusive (logged), never a false failure. Before the fix the countdown ran
-    /// under the sheet (≈ 2 s lost locally), so this failed.
+    /// The Undo countdown starts when the toast becomes visible, after the sheet dismisses (#64).
+    /// Window 12 s; the toast must still be up 10 s after XCUITest *noticed* the sheet was gone.
+    /// Noticing lags the real dismissal (about 1 s polling on CI) and each query costs 1-1.5 s there,
+    /// so a 2 s allowance is built in. It still fails if the countdown ran under the sheet for more
+    /// than about 2 s. If the snapshot itself lands more than 11 s after `tGone`, the run is
+    /// inconclusive (logged), never a false failure.
     func testFullUndoWindowAfterSheetDismisses() {
-        let app = XCUIApplication.fridge(["-UITestUndoWindow", "4"])
+        let app = XCUIApplication.fridge(["-UITestUndoWindow", "12"])
         openRemove(app, item: "item-eggs")
         app.any(FID.outcome("used")).tap()
         XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 10))
         let tGone = Date()
-        XCTAssertTrue(app.toast.waitForExistence(timeout: 2), "toast should be up once the sheet is gone")
-        let wait = 2.5 - Date().timeIntervalSince(tGone)
+        XCTAssertTrue(app.toast.waitForExistence(timeout: 5), "toast should be up once the sheet is gone")
+        let wait = 10 - Date().timeIntervalSince(tGone)
         if wait > 0 { Thread.sleep(forTimeInterval: wait) }
         let present = app.toast.exists
         let lookedAt = Date().timeIntervalSince(tGone)
-        if lookedAt > 3.3 {
+        let timing = XCTAttachment(string: "undo-window: present=\(present) lookedAt=\(lookedAt)")
+        timing.lifetime = .keepAlways; add(timing)
+        if lookedAt > 11 {
             let note = XCTAttachment(string: "snapshot landed \(lookedAt) s after the sheet; inconclusive on this runner")
             note.lifetime = .keepAlways; add(note)
         } else {
             XCTAssertTrue(present, "toast gone \(lookedAt) s after the sheet: the countdown ran under the sheet")
         }
-        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 15), "toast never timed out")
+        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 20), "toast never timed out")
         XCTAssertFalse(app.fridgeRow("item-eggs").exists, "timeout keeps the removal")
     }
 

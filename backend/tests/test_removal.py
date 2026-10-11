@@ -131,10 +131,16 @@ def test_exactly_one_add_and_one_remove(client, user, make_item, events):
     assert types == ["add", "remove"]
 
 
+def befriend(client, a, b):
+    assert client.post("/friends", json={"email": b["email"]}, headers=a["headers"]).status_code in (200, 201)
+    assert client.post(f"/friends/{a['user']['id']}/accept", headers=b["headers"]).status_code == 200
+
+
 def test_donated_fulfils_open_listing(client, user, user2, make_item, sql, events):
     """Share listings table is Social (wave 3) - inserted directly if the table exists."""
     if not sql("SELECT to_regclass('public.share_listings') AS t")[0]["t"]:
         pytest.skip("share_listings table not present yet")
+    befriend(client, user, user2)
     it = make_item(user)
     lid = str(uuid.uuid4())
     sql("INSERT INTO share_listings (id, item_id, owner_id, status) VALUES (:l, :i, :o, 'open')",
@@ -168,6 +174,7 @@ def test_removed_excluded_from_list(client, user, make_item):
 
 
 def test_donated_fulfils_listing_created_via_api(client, user, user2, make_item, sql, events):
+    befriend(client, user, user2)
     it = make_item(user)
     r = client.post("/share", json={"item_id": it["id"]}, headers=user["headers"])
     assert r.status_code == 201, r.get_data(as_text=True)
@@ -182,7 +189,7 @@ def test_donated_fulfils_listing_created_via_api(client, user, user2, make_item,
 def test_donated_recipient_must_exist(client, user, make_item, events):
     it = make_item(user)
     r = remove(client, user, it, outcome="donated", recipient_id=str(uuid.uuid4()))
-    assert r.status_code == 400
+    assert r.status_code == 404  # feat/donation-recipient: unknown / unreachable recipient is 404
     assert events(item_id=it["id"], event_type="remove") == []
 
 

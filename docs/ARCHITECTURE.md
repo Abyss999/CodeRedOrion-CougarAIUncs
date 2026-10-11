@@ -11,7 +11,8 @@
    │   └────── Open Food Facts (barcode lookup)
    ▼
  PostgreSQL + TimescaleDB (Docker)
-   relational tables: users, items, groups, share_listings, requests…
+   relational tables: users, user_identities, items, groups, share_listings,
+   requests + request_audiences…
    hypertable: food_events (add / share / expiry_warning / remove)
 ```
 
@@ -24,7 +25,7 @@
 | DB | Docker `db` service | `timescale/timescaledb` (pinned tag). One database. Migrations run automatically when the api container starts (`backend/entrypoint.sh`). |
 | ML service | `ml/serve/` | Flask: `POST /detect` (YOLO26 food-name detector, then a fresh / semi_fresh / spoiled crop classifier), `POST /ocr` (GLM-OCR, then the deterministic receipt parser), `GET /health`. Runs where there's a GPU, with fake backends for CPU tests. Backend reaches it at `ML_SERVICE_URL`. **If it's unset or returns an error, `/items/from-photo` falls back to Gemini vision**, so the demo never depends on a GPU being up. Receipts have no fallback. It has no auth, so keep it on loopback or a tunnel. Details: `docs/ML.md`. |
 | Gemini | external | One service module (`backend/app/services/gemini.py`). Model id in `.env` (`GEMINI_MODEL`), recorded in `DECISIONS.md`. Every call logs token usage (`scripts/gemini_cost.py`), and recipe suggestions are cached per user. |
-| Training | Colab + `ml/yolo/train_colab.ipynb` | Data from 8 sources (VegQual, fridge_objects, hien_fridge, food_spoilage_status, Kaggle fresh/stale, AgriFreshNET, MeatScan, DaFiF; food_hvk7g pending) through `pipeline/` (`fetch-*`, `ingest-dataset`) and `prepare_dataset.py`. Leakage, stratification and parent-photo gates run before training, with checkpoints and resume on Drive under a `sources.json`-hash cache key. Weights never go in git. |
+| Training | Colab + `ml/yolo/train_colab.ipynb` | Data from 8 enabled sources in `ml/yolo/sources.json` (VegQual, fridge_objects, hien_fridge, food_spoilage_status, Kaggle fresh/stale, AgriFreshNET, MeatScan, DaFiF; food_hvk7g pending) through `pipeline/` (`fetch-*`, `ingest-dataset`) and `prepare_dataset.py`. Leakage, stratification and parent-photo gates run before training, with checkpoints and resume on Drive under a `sources.json`-hash cache key. Weights never go in git. |
 
 ## Key flows
 - **Add by photo:** iOS uploads image → `POST /items/from-photo` → ML service (or Gemini) returns
@@ -33,7 +34,8 @@
 - **Remove:** swipe → 3-option sheet → `POST /items/:id/remove` → one transaction: soft delete +
   `remove` event (+ fulfil share listing on `donated`).
 - **Impact:** `GET /impact` aggregates `food_events` with `time_bucket`, and returns zeros (not an error) for a user with no events.
-- **Social (Wave 3):** friends, groups with their own pantries, the Food Pantry share board and the request board. Visibility is limited to accepted friends and fellow group members. See `docs/API.md`.
+- **Social (Wave 3):** friends, groups with their own pantries, the Food Pantry share board and the request board. A request targets friends and/or several groups (`request_audiences`) and shows once on each audience's board. Visibility is limited to accepted friends and fellow group members. See `docs/API.md`.
+- **Google sign-in:** the iOS SDK returns an ID token → `POST /auth/oauth/google` verifies it against Google's JWKS (`aud` in `GOOGLE_IOS_CLIENT_IDS`), resolves or creates the user through `user_identities` (auto-link only for verified gmail.com / googlemail.com or an `hd` equal to the email domain) and returns our JWT.
 
 ## Deployment
 - Local / demo: `docker compose up` (API on `127.0.0.1:5055`, DB on `127.0.0.1:5433`).

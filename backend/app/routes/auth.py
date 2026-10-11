@@ -28,6 +28,15 @@ def _str(body, key):
     return v.strip()
 
 
+@bp.get("/me")
+@require_auth
+def me():
+    """The caller's profile plus how they sign in. Never exposes hashes or provider subjects."""
+    providers = db.session.scalars(db.select(UserIdentity.provider).where(
+        UserIdentity.user_id == g.user.id).distinct().order_by(UserIdentity.provider)).all()
+    return jsonify(user=_user(g.user), has_password=bool(g.user.password_hash), providers=list(providers))
+
+
 @bp.post("/signup")
 def signup():
     body = json_body()

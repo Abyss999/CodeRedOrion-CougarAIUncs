@@ -43,7 +43,7 @@ dihedral-variant near-duplicate check is **reported only** (same-class, masked p
 ## 2. Datasets
 Licences, class lists and sizes verified **2026-10-10** (figshare API for VegQual, Roboflow pages for the two
 fridge sets, Kaggle API for the Kaggle sets). `ml/yolo/sources.json` (committed, no secrets) holds the class maps;
-raw data lives outside the repo (`mldata/raw/<name>`). `prepare_dataset.py` skips sources marked `"pending": true` (none now)
+raw data lives outside the repo (`mldata/raw/<name>`). `prepare_dataset.py` skips sources marked `"pending": true` (only `food_hvk7g` now)
 or whose root is missing, drops unmapped labels (listed in `dataset_report.json`), and supports
 `drop_image_if_label` (drops a whole image that contains an unmodelled object).
 
@@ -93,18 +93,19 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
   relabelled into our taxonomy (bitter melon -> `bitter_melon`; cucumber, papaya, pineapple, banana, orange, tomato,
   eggplant), semi-fresh stage kept as `semi_fresh`, day-range suffixes dropped, re-split by inferred specimen.
   Ingestion code ported from @LemurTech22's pipeline (#21 -> #26).
-- **MeatScan: An image dataset for machine learning-based classification of fresh and spoiled cow meat** - Data in Brief
+- **MeatScan: An image dataset for machine learning-based classification of fresh and spoiled cow meat** - Mensah Gyening,
+  Akoto, Owusu-Agyemang, Amoako-Banning, Takyi, Appiahene (Zenodo creator list, checked 2026-10-11); Data in Brief
   (2025), doi 10.1016/j.dib.2025.112045; Zenodo, doi 10.5281/zenodo.16764338. Licence CC BY 4.0. Changes: only the
   authors' originals (augmented copies excluded), subsampled per class, downscaled to 1280 px, relabelled `beef`.
 - **Food Spoilage Status** - Roboflow Universe, workspace `food-monitoring`,
   https://universe.roboflow.com/food-monitoring/food-spoilage-status-ds1sc (v1). Licence CC BY 4.0. Changes: polygons
   converted to boxes, relabelled into our taxonomy (capsicum -> `bell_pepper`, bitter gourd -> `bitter_melon`).
-- **DaFiF: Dataset for Fish's Freshness Problems** - Prasetyo, Suciati, Sutramiani, Adiananda, Dewi; Mendeley Data v1,
+- **DaFiF: Dataset for Fish's Freshness Problems** - Prasetyo, Suciati, Sutramiani, Adi Ananda, Dewi; Mendeley Data v1,
   doi 10.17632/vx4ptwk3pb.1 (article: Data in Brief 57 (2024) 111016). Licence CC BY 4.0. Changes: labelled fresh/spoiled
   from the storage day (days 1-3 / 9-11; 4-8 dropped), subsampled, downscaled to 1280 px, relabelled `fish`.
 
-**Status 2026-10-10 (feat/ml-full-data): all four sources are downloaded and enabled** (no `pending`), under
-`mldata/raw/`:
+**Status 2026-10-11: eight sources are enabled** (`food_hvk7g` stays `pending`). The first five are under `mldata/raw/`;
+MeatScan, DaFiF and Food Spoilage Status are in the table in section 2 and `docs/PIPELINE.md`:
 | Source | Version / format | Images | Licence | Notes |
 |---|---|---|---|---|
 | `vegqual` | figshare 30596084 (= Roboflow v6) | 4,831 (3,207 kept) | CC BY 4.0 | |
@@ -202,6 +203,7 @@ same eval without reading `class_names.json`.
     `--max-unit-images` (600) - look-alike white-background fruit photos chain into one 1,751-image component - which are
     left as separate capture groups; afterwards the (few) held-out/val images that still have a near-duplicate in another
     split are **dropped** (not moved), counted in `grouping.near_duplicate_drops`.
+  The checks in `ml/eval/stratification_check.py` follow the same rules: the timestamped-session span rule now fires (ML-59), and the pHash merge keeps timestamped sessions as sessions and is capped like prepare's 600 (ML-60); a cross-split pHash pair is a warning, while `leakage_check.py`'s identity pHash <= 1% per source stays the gate. Roboflow rotations / crop tiles of one photo share a group (ML-50, `parent_stem`), and a cell demoted to not-measurable moves wholly to train (ML-53/56).
   `dataset_report.json.leakage_by_source` reports, per source, held-out originals with a train/val timestamp neighbour
   within 60 s / 300 s and pHash and (independent, coarser) dHash near-duplicates. **Reproducibility parameters** (all defaults): `--seed 42`, `--session-gap 300`, `--phash-threshold 6`, `--max-unit-images 600`,
 `--min-session-images 10`, `--heldout 0.10 --val 0.10`, Kaggle `max_per_class: 250` per class x freshness (images picked by SHA1
@@ -350,10 +352,10 @@ tolerated; **voids** (`VOID`/`VOIDED`/`** VOID **`/`ITEM VOID` + name and/or pri
   prep (on synthetic images) and the Flask contract are tested. Ultralytics/transformers API usage in `infer.py`,
   `train.py`, `GlmOcrEngine` is written against docs and unexecuted - expect small fixes on first GPU run
   (notably the GLM-OCR image input via a temp file path and its required transformers version).
-- All four sources are downloaded (see section 2).
+- Eight sources are enabled (see section 2); `food_hvk7g` is pending. Named data risks (beef train-only and scene-confounded, fish tray colour tracks the label, fish held-out is one unseen batch) are in `docs/PIPELINE.md`; report spoiled recall per source with Wilson CIs.
 - Domain gap: clean-background produce vs cluttered fridge shelves; small fridge sets; ~50 classes will be
-  uneven (see `classes_with_no_data`). Freshness for non-produce (milk, meat) has no training signal.
-- `semi_fresh` training signal exists only for AgriFreshNET's 8 produce types; QA reports its precision/recall but does not gate it.
+  uneven (see `classes_with_no_data`). Freshness has training signal only for produce, beef (MeatScan) and fish (DaFiF); milk, eggs and other dairy have none.
+- `semi_fresh` training signal exists only for AgriFreshNET's 8 produce types (MeatScan, DaFiF and Food Spoilage Status are fresh/spoiled only); QA reports its precision/recall but does not gate it.
 - Synthetic lighting is an approximation of real low/warm light. Auto lighting tags can misfire on red/orange-heavy scenes.
 - Parser is heuristic: receipts with item names that look like prices/keywords (e.g. an item containing "CASH" or "TAX")
   or multi-line wrapped names can be dropped or split. Real-receipt accuracy needs ML QA's >=20-receipt set.

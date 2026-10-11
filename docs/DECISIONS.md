@@ -2,6 +2,36 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Donation recipient and UI-build endpoints (#74, #76)
+- **The client sends `recipient_id` only when the user explicitly picks someone in Given to.** The default ("claimer") is sent by omitting the key. An explicit `null` is sent only when "Someone not on BiteDown" is actually chosen, so a claimer the client can't see (e.g. on a group item) never loses the credit. Choosing a user for an item with no listing is validated but not stored (no recipient column), so it's accepted for v1 and noted as a follow-up.
+- **`recipient_id` on a donated removal:** omitted = the claimer (as before); explicit `null` = someone not on BiteDown (the listing is fulfilled with no recipient, even when claimed); a user id must be an accepted friend or fellow group member, else 404; yourself → 400 ("You can't give food to yourself"). `recipient_id` with `used` / `thrown_out` → 400, null included. Check order: body 400 → item 404/403 → 409 → recipient 404. `remove-batch` (donated) takes the same field. Impact is unchanged: donated is always saved.
+- **New endpoints for the UI build:**
+  - `GET /requests?mine=1` (all statuses; `fulfilled_by` stays an id string plus `fulfilled_by_name`, so existing clients keep decoding);
+  - `share.audience {friends, groups}` on the owner's items only;
+  - `GET /auth/me` (`user`, `has_password`, `providers`);
+  - `GET /people/reachable` (friends plus fellow group members, de-duplicated, with the claimer flagged for the item's owner only).
+  Deferred: profile edit and server-side Fridge search.
+
+## 2026-10-11 — Design feedback round 2 (teammate wedwqc, 13 comments; QA-checked; owner calls)
+- **Owner: the recipient is chosen in a "Given to" menu** after "Shared it". It defaults to the claimer, otherwise to "Someone not on BiteDown". The options are the claimer, friends, fellow group members and **Someone not on BiteDown**. Food given to a non-app person logs as donated (saved), never as waste or to the wrong friend. This replaces the 2026-10-10/11 "always the claimer" rulings. API: `recipient_id` explicit `null` = someone not on BiteDown; a user id must be an accepted friend or fellow group member (else 404); yourself → 400. Queued as `feat/donation-recipient`.
+- **Owner: the Home tip card sits at the top**, above "Use these first". It stays one line and dismissible. This reverses the earlier keep-below ruling.
+- **Recipes open on "Only what I have"** (no missing items), switchable off.
+- **Impact leads with food saved in lb**, and CO₂e becomes a secondary line with a driving equivalent. Month means "previous 30 days".
+- **"I have it" becomes "Offer" plus a confirmation sheet.** Fulfilling closes the request for everyone and can't be undone. No in-app messaging is promised.
+- **Kept against the comments, with reasons:** the Fridge swipe action stays forest, not red, with a take-out icon instead of the checkmark, because removal records an outcome and isn't a delete. The Add-sheet hero stays full width but shorter, to keep the shared 20 pt margins.
+- Also: the reason picker becomes a list ("Why was it thrown out?"); the Pantry widget shows food tiles with no counts; Photo review loses its captions and gets a taller photo; the barcode hint is "Boxes, cans, jars"; the Remove sheet meta is capitalised, with a badge.
+- **Design QA gate before iOS (READY WITH FIXES; fixes applied in `design/qa-gate-fixes`):**
+  - **Batch "Shared them"** **omits** `recipient_id`, so each item goes to its own claimer, or to nobody when unclaimed (#74). A batch `recipient_id: null` would override every claimer, so it's never sent. There's no per-batch Given-to menu.
+  - **The Home pill shows food saved over the previous 30 days** (`/impact?range=month`), matching Impact's Month hero. Tips render verbatim and may wrap: "one line" means one sentence.
+  - **Donated reads "shared" everywhere**, Impact included ("19 used · 4 shared"). CO₂e follows the Units setting (lb for US).
+  - **One `DetectedItemRow` for every add-review list** (photo, type or say, receipt): checkbox, name, food group, one status badge, trailing stepper or price. Review lists show badges, not exact day counts.
+  - **The Pantry widget is a link** that pushes Food Pantry. It no longer expands in place, because the artboard has a Back button.
+  - **New entry points:** Fridge "Select" → multi-select; Social "Yours" → Your requests (its Done section waits on `GET /requests?mine=1`, G1); Settings › Debug › Server address.
+  - **Dark generation:** new token `onForestChip` (light text on `forestChip` in both modes). Camera surfaces keep light colours. `mkdark.py` fails on any light-only token it didn't map.
+
+## 2026-10-11 — gunicorn gthread (#63)
+- **The API container runs one `gthread` worker with 4 threads** (`GUNICORN_THREADS`, default 4; `--timeout 120`, `--graceful-timeout 30`). A slow Gemini call no longer blocks other requests, and the in-process recipe cache stays shared (lock-guarded). *Why not several processes:* the cache is per process and there is no Redis. This closes the follow-up noted under "Backend wave 2 rulings".
+
 ## 2026-10-11 — Multi-audience requests and tips (#66)
 - **A request targets `audiences {friends, group_ids}`** (at least one, ≤ 50 groups) through the `request_audiences` join table. One note shows on every chosen board. `requests.group_id` is dropped after the backfill in migration 0006. The legacy `group_id` body field is accepted for one release (deprecated, keeping its old 403); sending both → 400; an audiences group you're not in → 404.
 - **You only see the audiences you belong to.** The others are counted (`hidden_count`), never named, so group names can't leak.
@@ -37,7 +67,7 @@ A UI/UX QA pass checked every comment. The owner made the product calls, and the
   - the Impact pill in the header, because it's the demo path's last step;
   - "Used it" rather than "Used in a recipe / ate it";
   - **"Shared it"** rather than "Gave to a friend", because `donated` also covers groups and the Food Pantry;
-  - no "someone not on BiteDown" option, because the API stores recipients as users only, and no recipient is recorded when nobody claimed the item.
+  - ~~no "someone not on BiteDown" option~~ (superseded the same day: the owner added it, see "Design feedback round 2" and #74). Original reason: the API stores recipients as users only, and no recipient is recorded when nobody claimed the item.
 - **Tagline:** "Use what you have. Share what you spare." (from #49), replacing "Eat what you buy." on the sign-in screen.
 - **Owner: requests can target several audiences at once** (friends and/or groups). One note shows on every chosen board, via a join table. Backend change queued.
 - **Deferred:** per-item photo history (needs image storage and a privacy review) and a free-text waste note.

@@ -1,4 +1,4 @@
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy import and_, exists, or_
 
 from ..auth import require_auth
@@ -112,11 +112,31 @@ def create_request():
     return jsonify(request=_one(r, auds)), 201
 
 
+def _mine_flag() -> bool:
+    raw = request.args.get("mine")
+    if raw is None:
+        return False
+    if raw.strip().lower() in ("1", "true"):
+        return True
+    raise validation_error("mine must be 1 or true.")
+
+
 @bp.get("")
 @require_auth
 def board():
-    """Fixed query count: my groups, my friends, the board rows (+ authors), their audiences."""
+    """Fixed query count: my groups, my friends, the board rows (+ authors), their audiences.
+    `?mine=1`: only my own requests, every status (+ the fulfillers' names in one more query)."""
     me = g.user.id
+    if _mine_flag():
+        groups = social.my_groups(me)
+        rows = (db.session.query(HelpRequest, User).join(User, User.id == HelpRequest.author_id)
+                .filter(HelpRequest.author_id == me)
+                .order_by(HelpRequest.created_at.desc(), HelpRequest.id).all())
+        fids = {r.fulfilled_by for r, _ in rows if r.fulfilled_by}
+        fulfillers = {u.id: u for u in User.query.filter(User.id.in_(fids)).all()} if fids else {}
+        auds = social.request_audiences(r.id for r, _ in rows)
+        return jsonify(requests=[_ser(r, u, auds[r.id], me, groups, False, fulfillers.get(r.fulfilled_by))
+                                 for r, u in rows])
     groups = social.my_groups(me)
     friends = social.friend_ids(me)
     ra = RequestAudience

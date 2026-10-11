@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark: Social: confirm offer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
+a{color:#B9D871}a:hover{color:#E8F0DA}
+
+body{background:#0F1A12}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0A110C; display: flex; flex-direction: column; justify-content: flex-end">
+  <section role="dialog" aria-modal="true" aria-labelledby="fc-title" aria-describedby="fc-what" style="background: #0F1A12; border-radius: 28px 28px 0 0; padding: 10px 20px 40px; display: flex; flex-direction: column; gap: 18px">
+    <div style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #34483A"></div>
+    <h2 id="fc-title" style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 22px">{{title}}</h2>
+
+    <article aria-label="{{noteLabel}}" style="padding: 14px; border-radius: 4px 4px 14px 4px; background: #3A3720; box-shadow: 0 2px 6px rgba(185,216,113,0.16); display: flex; flex-direction: column; gap: 10px">
+      <header style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #C9D6BC">
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #B9D871"></span>{{source}}</header>
+      <p style="margin: 0; font-family: Outfit, sans-serif; font-size: 18px; font-weight: 500; line-height: 1.3; color: #E8F0DA">{{text}}</p>
+      <footer style="font-size: 12px; color: #9DB09F">{{who}}</footer>
+    </article>
+
+    <ul id="fc-what" style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px; border-bottom: 1px solid #2A3A2D">
+        <span style="width: 32px; height: 32px; border-radius: 10px; background: #24361F; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"></path></svg></span>
+        <span style="font-size: 15px; color: #E8F0DA">{{seeLine}}</span>
+      </li>
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px; border-bottom: 1px solid #2A3A2D">
+        <span style="width: 32px; height: 32px; border-radius: 10px; background: #24361F; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v12l-4 4H5z"></path><path d="M15 20v-4h4"></path></svg></span>
+        <span style="font-size: 15px; color: #E8F0DA">The note comes off the board</span>
+      </li>
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px">
+        <span style="width: 32px; height: 32px; border-radius: 10px; background: #24361F; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"></path></svg></span>
+        <span style="font-size: 15px; color: #E8F0DA">{{handoffLine}}</span>
+      </li>
+    </ul>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <a href="Social.dark.dc.html" style="text-decoration: none; height: 56px; border-radius: 16px; background: #B9D871; color: #13261A; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">I have it</a>
+      <a href="Social.dark.dc.html" style="text-decoration: none; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #B9D871; font-size: 16px; font-weight: 600">Cancel</a>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {
+title: 'Tell Marcus you have it?',
+source: 'Moody Hall 4F',
+text: 'Anyone have 2 eggs? Baking tonight.',
+who: 'Marcus, 20m',
+noteLabel: 'Request from Marcus in Moody Hall 4F: Anyone have 2 eggs? Baking tonight.',
+seeLine: 'Marcus sees that you have it',
+handoffLine: 'You and Marcus sort out the handoff'
+};
+}
+}
+</script>
+</body>
+</html>
