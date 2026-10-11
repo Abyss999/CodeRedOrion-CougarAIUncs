@@ -146,6 +146,73 @@
       "_note": "AgriFreshNET (Mendeley Data v1, doi 10.17632/42m5tb7yv9.1, CC BY 4.0): 8 produce x Fresh/Semi fresh/Rotten, 590 images per folder, HEAVILY AUGMENTED (about 92% of images have a flip/rotation-aware pHash<=6 near-duplicate in their own class). Staged by `python -m pipeline ingest-dataset` with PIPELINE_SPECIMEN_GROUPS=1: the staged name is `<class>__spec_<id>.rf.<sha>_<orig stem>.jpg`, where <id> is a cross-stage component of 8-variant pHash distance (<=10, tightened to 6/4 per class when one component exceeded 30%), so prepare_dataset keeps every specimen and its augmentations in one split. semi_fresh is kept as its own label. Classification crops only (no boxes): whole image = one object.",
       "source_version": "v1",
       "version": "v1"
+    },
+    {
+      "name": "meatscan",
+      "kind": "folders",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/pipeline_data/staged/meatscan",
+      "license": "CC BY 4.0",
+      "url": "https://doi.org/10.5281/zenodo.16764338",
+      "class_map": {
+        "beef__fresh": "beef:fresh",
+        "beef__spoiled": "beef:spoiled"
+      },
+      "_note": "MeatScan (Zenodo 16764338, CC BY 4.0; Data in Brief 2025 doi:10.1016/j.dib.2025.112045): raw cow meat, fresh/spoiled, phone photos from two Kumasi markets, 14-16 Feb 2024. 6,995 originals + 4,005 author augmentations in one 25.4 GB RAR. Fetched by HTTP range reads of ORIGINALS only (python -m pipeline fetch-meatscan, 450 per class spread over date x market x hour), then ingested with --adapter meatscan --max-per-cell 300: capture time from MeatScan_Metadata.csv goes into the staged name so the 300 s session split applies. Whole-frame boxes (single-subject photos). First non-produce freshness source (ML-16)."
+    },
+    {
+      "name": "dafif",
+      "kind": "folders",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/pipeline_data/staged/dafif",
+      "license": "CC BY 4.0",
+      "url": "https://data.mendeley.com/datasets/vx4ptwk3pb/1",
+      "class_map": {
+        "fish__fresh": "fish:fresh",
+        "fish__spoiled": "fish:spoiled"
+      },
+      "_note": "DaFiF (Mendeley vx4ptwk3pb v1, CC BY 4.0; Data in Brief 57 (2024) 111016): mackerel, tilapia, tuna on ice for 11 days, 10 fish per species, two sessions a day. No image freshness labels in the release: labelled by storage day per the data owner's rule (2026-10-10): days 1-3 fresh, days 9-11 spoiled, days 4-8 dropped. Fetched with python -m pipeline fetch-dafif (300 per freshness, round-robin over species x session x day, SHA-256 checked, downscaled to 1280 px); ingested with --adapter dafif, which groups by species + session across days (the same fish) so a batch never straddles splits. Whole-frame boxes."
+    },
+    {
+      "name": "food_hvk7g",
+      "kind": "yolo",
+      "pending": true,
+      "root": "",
+      "license": "CC BY 4.0",
+      "url": "https://universe.roboflow.com/fruit-and-vegetable-objection-by-yolo/food-hvk7g",
+      "roboflow": {
+        "workspace": "fruit-and-vegetable-objection-by-yolo",
+        "project": "food-hvk7g",
+        "version": null
+      },
+      "class_map": {},
+      "_note": "PENDING, not downloadable as published (checked 2026-10-10 with the private key): the project has 0 generated versions, and Roboflow only serves a generated version (only its owner can generate one). Classes are '2', 'orange', 'oranges', 'Platano' (696 images, object detection), with NO freshness labels, so even if forked it can only teach the detector banana/orange (assumed fresh is wrong for a set described as including spoiled food). To use it: fork it into our Roboflow workspace (Universe -> Fork Project), generate a version, then map Platano->banana, orange(s)->orange, drop '2', and hand-label freshness or keep it detector-only with freshness excluded from metrics."
+    },
+    {
+      "name": "food_spoilage_status",
+      "kind": "yolo",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/raw/food_spoilage_status",
+      "license": "CC BY 4.0",
+      "url": "https://universe.roboflow.com/food-monitoring/food-spoilage-status-ds1sc",
+      "_note": "Roboflow 'Food Spoilage Status' (workspace food-monitoring), v1, 276 images (train 193 / valid 55 / test 28), instance segmentation: the yolov8 export has POLYGON labels, which prepare_dataset.yolo_line_to_box turns into enclosing boxes. Names verified against data.yaml 2026-10-10 (12 classes): fresh/spoiled x apple, banana, capsicum, orange, potato, bitter gourd. File names carry capture times (20190809_165458_jpg.rf.<hash>), so the 300 s session split applies. Added at the data owner's request.",
+      "class_map": {
+        "Fresh Apple": "apple:fresh",
+        "Spoiled Apple": "apple:spoiled",
+        "Fresh Banana": "banana:fresh",
+        "Spoiled Banana": "banana:spoiled",
+        "Fresh Capsicum": "bell_pepper:fresh",
+        "Spoiled Capsicum": "bell_pepper:spoiled",
+        "Fresh Orange": "orange:fresh",
+        "Spoiled Orange": "orange:spoiled",
+        "Fresh Potato": "potato:fresh",
+        "Spoiled Potato": "potato:spoiled",
+        "FreshBittergourd": "bitter_melon:fresh",
+        "Spoiled Bittergourd": "bitter_melon:spoiled"
+      },
+      "roboflow": {
+        "workspace": "food-monitoring",
+        "project": "food-spoilage-status-ds1sc",
+        "version": 1
+      },
+      "export_format": "yolov8 (instance segmentation polygons -> boxes)"
     }
   ]
 }
