@@ -128,3 +128,19 @@ def test_ocr_off_is_503_and_health_says_off(monkeypatch):
     assert r.status_code == 503 and r.json["error"]["code"] == "ocr_not_configured"
     assert c.get("/health").json["ocr"] == "off"
     assert post(c, "/detect", png()).status_code == 200      # detection unaffected
+
+
+@pytest.mark.parametrize("val,kind", [(" Off ", None), ("GLM", "GlmOcr"), ("fake", "FakeOCR")])
+def test_ocr_backend_value_is_normalised(monkeypatch, val, kind):
+    from serve.backends import ocr_from_env
+    monkeypatch.setenv("OCR_BACKEND", val)
+    got = ocr_from_env()
+    assert (got is None) if kind is None else type(got).__name__ == kind
+
+
+@pytest.mark.parametrize("val", ["none", "false", "of"])
+def test_unknown_ocr_backend_fails_at_startup(monkeypatch, val):
+    from serve.backends import ocr_from_env
+    monkeypatch.setenv("OCR_BACKEND", val)
+    with pytest.raises(ValueError):
+        ocr_from_env()

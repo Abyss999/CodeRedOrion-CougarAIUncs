@@ -346,7 +346,8 @@ decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (def
 ## 6. Running the service on a GPU box
 **On the same machine as the API (compose, CPU is fine for the yolo26n FAST model):** put `detector.pt` and
 `freshness.pt` in `../mldata/models/current/` (or set `ML_MODELS_DIR`), set `ML_SERVICE_URL=http://ml:8000` in `.env`, then
-`docker compose --profile ml up -d --build`. The `ml` service publishes no host port (only the api container reaches it),
+`docker compose --profile ml up -d --build` (outside the main checkout set an absolute `ML_MODELS_DIR`; a missing folder stops
+`up`). The `ml` service publishes no host port (only the api container reaches it),
 runs with `OCR_BACKEND=off` and `YOLO_DEVICE=${YOLO_DEVICE:-cpu}`. Verified 2026-10-11 with the first FAST export
 (`fwr_20261011`): photo -> `/items/from-photo` (`source: "yolo"`) -> Gemini enrichment of the crops -> `POST /items`.
 
@@ -357,11 +358,13 @@ pip install -r serve/requirements.txt        # torch CUDA build first
 YOLO_WEIGHTS=/models/detector.pt FRESHNESS_WEIGHTS=/models/freshness.pt \
 OCR_BACKEND=glm GEMINI_API_KEY=... \
 gunicorn -w 1 --threads 4 -t 120 -b 127.0.0.1:8000 serve.wsgi:app
-# or: docker build -f serve/Dockerfile -t fwr-ml ml/ && docker run --gpus all -p 127.0.0.1:8000:8000 -v /models:/models --env-file .env fwr-ml
+# or: docker build -f serve/Dockerfile --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128 -t fwr-ml ml/ \
+#       && docker run --gpus all -p 127.0.0.1:8000:8000 -v /models:/models --env-file .env fwr-ml   (CPU torch without the build arg)
 ```
 Backend env: `ML_SERVICE_URL=http://<gpu-host>:8000` (tunnel/VPN; the service has **no auth** - never expose publicly).
 Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm|off`
-(default fake; `off` = `/ocr` answers 503 `ocr_not_configured`, so no canned receipt is ever served as real), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
+(default fake; `off` = `/ocr` answers 503 `ocr_not_configured`, so no canned receipt is ever served as real; any other value
+fails at startup), `YOLO_CONFIG_DIR` (Ultralytics settings dir; compose sets `/tmp/ultralytics`), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
 (optional; enables Gemini structuring of OCR text, else the deterministic parser alone), `GEMINI_MODEL` (the same
 value as the backend's, see `docs/DECISIONS.md`; unset falls back to Google's `gemini-flash-latest` alias, never a
 pinned old id), `MAX_UPLOAD_MB` (12). Gemini's structured answer is validated by `clean_structured()` before it is
