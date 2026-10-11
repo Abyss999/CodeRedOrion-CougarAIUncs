@@ -46,8 +46,8 @@ body{background:#0F1A12}</style>
                 <span style="{{item.badgeStyle}}">{{item.when}}</span>
               </div>
               <sc-if value="{{item.swiped}}" hint-placeholder-val="{{ false }}">
-                <a href="RemoveSheet.dark.dc.html" style="width: 96px; flex-shrink: 0; background: #B9D871; color: #13261A; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 600">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Remove</a>
+                <a href="RemoveSheet.dark.dc.html" aria-label="Remove" style="width: 80px; flex-shrink: 0; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 600; color: #B9D871">
+                  <span style="width: 52px; height: 52px; border-radius: 26px; background: #B9D871; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#13261A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg></span>Remove</a>
               </sc-if>
             </div>
           </sc-for>
@@ -92,7 +92,7 @@ const meta = 'font-size: 13px; color: #9DB09F';
 const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #4A2614; color: #FFB98A; white-space: nowrap';
 const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #24361F; color: #B9D871; white-space: nowrap';
 const row = 'flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #18261B';
-const swipedRow = row + '; margin-left: -96px';
+const swipedRow = row + '; margin-left: -80px';
 const it = (name, m, when, opts) => Object.assign({ name, meta: m, when, metaStyle: meta, badgeStyle: soon, rowStyle: row, swiped: false }, opts || {});
 return {
 groups: [

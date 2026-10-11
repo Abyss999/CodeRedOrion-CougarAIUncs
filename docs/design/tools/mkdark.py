@@ -5,16 +5,19 @@ import re, sys, collections
 BG = {"F4F8E8":"0F1A12","FFFFFF":"18261B","EEF5D6":"24361F","E3EDCB":"223024","E6EDD6":"2A3A2D","1F4D2B":"B9D871",
  "3B7046":"8FB45A","2F6B3C":"2C4A26","D9EC8F":"D9EC8F","FBE3CF":"4A2614","FFF6C7":"3A3720","E4F2C4":"2A3A1F","FFF1B8":"3A3112",
  "4C5A4F":"050806","C3D1B3":"34483A","D3E0BF":"34483A","277338":"24783D","E8A04C":"C6802F","13261A":"E8F0DA","1B2A1F":"0F1A12",
- "FBE4DE":"3D1F1A","E2F1D8":"1C3320","F8E1EC":"3A1C2B","E2E9F7":"1C2540","F5EBCD":"33290F","ECE5F7":"2A2140","DAF0EE":"14302F","DCEFF8":"122C3A","EAEFE6":"243026"}
+ "FBE4DE":"3D1F1A","E2F1D8":"1C3320","F8E1EC":"3A1C2B","E2E9F7":"1C2540","F5EBCD":"33290F","ECE5F7":"2A2140","DAF0EE":"14302F","DCEFF8":"122C3A","EAEFE6":"243026","8E978F":"0A110C","EAF0DA":"223024","8FB43A":"8FB45A","6B5000":"FFD970"}
 FG = {"13261A":"E8F0DA","2B3D30":"C9D6BC","45584A":"9DB09F","4F6152":"8FA391","5C6E5F":"8FA391","1F4D2B":"B9D871","3B7046":"8FB45A",
  "2F6B3C":"2C4A26","F4F8E8":"13261A","D9EC8F":"13261A","C9D8BE":"2F4A2A","8A3B0E":"FFB98A","6B5000":"FFD970","D3E0BF":"34483A",
  "E6EDD6":"2A3A2D","C3D1B3":"34483A","EEF5D6":"24361F","E3EDCB":"223024","277338":"24783D","E8A04C":"C6802F","747775":"8E918F","1F1F1F":"E3E3E3",
- "FBE3CF":"4A2614","1B2A1F":"E8F0DA",
+ "FBE3CF":"4A2614","1B2A1F":"E8F0DA","FFF1B8":"3A3112",
  "B0412E":"FF9E8A","2F7A3A":"8FD69A","A8366E":"F59AC6","3A5BA0":"9DB7F0","8A6414":"E8C46A","6A4FA3":"C1AAF0","1F7A78":"7FD8D3","1E7BA8":"86CBEE"}
 KEEP = {"FFFFFF","4285F4","34A853","FBBC05","EA4335"}  # fg kept as is
 RGBA = [(r"rgba\(255,\s*255,\s*255,\s*0?\.8\)","rgba(24,38,27,0.82)"),(r"rgba\(255,\s*255,\s*255,\s*0?\.7\)","rgba(255,255,255,0.08)"),
  (r"rgba\(31,\s*77,\s*43,\s*0?\.12\)","rgba(185,216,113,0.16)"),(r"rgba\(19,\s*38,\s*26,\s*0?\.14\)","rgba(0,0,0,0.5)"),(r"rgba\(31,\s*77,\s*43,\s*0?\.12\)","rgba(0,0,0,0.4)"),
- (r"rgba\(138,\s*59,\s*14,","rgba(255,185,138,")]
+ (r"rgba\(138,\s*59,\s*14,","rgba(255,185,138,"),
+ # Undo toast (as shipped, #64): capsule, progress track and fill, shadow
+ (r"rgba\(255,\s*255,\s*255,\s*0?\.18\)","rgba(0,0,0,0.16)"),(r"rgba\(255,\s*255,\s*255,\s*0?\.1\)","rgba(0,0,0,0.12)"),
+ (r"rgba\(244,\s*248,\s*232,\s*0?\.8\)","rgba(19,38,26,0.85)"),(r"rgba\(19,\s*38,\s*26,\s*0?\.28\)","rgba(0,0,0,0.5)")]
 HEX = re.compile(r"#([0-9A-Fa-f]{6})\b")
 miss = collections.Counter()
 def m(table, h, lime):
