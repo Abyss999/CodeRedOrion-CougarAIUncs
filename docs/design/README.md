@@ -47,7 +47,7 @@ These need two backend additions (see `docs/API.md` once built):
 
 ## Sign-in (owner request, 2026-10-10)
 - The landing screen keeps **Sign up / Log in** (green, as in the brief) and adds **"or continue with" Apple | Google**. The Sign up and Log in screens offer Apple and Google first, then email.
-- **Use the official buttons, not the mockup's drawing.** The mockups show **dashed placeholders** where the logos go, because we don't redraw brand marks.
+- **Each button shows its provider's mark** (owner request): the white Apple logo on the black Apple button, and the four-colour Google "G" on the white Google button. The mockups use the standard marks so the screens read correctly. **In the app, use the official buttons**, which render these marks themselves:
   - **Apple:** `SignInWithAppleButton` / `ASAuthorizationAppleIDButton`, black style in light mode and white in dark, with the label variant matching the screen (Sign up / Sign in / Continue).
   - **Google:** the button from the Google Sign-In SDK, or one built strictly to Google's branding guidelines: white, a `#747775` border, `#1F1F1F` text and the official "G" mark.
   - Apple and Google buttons are the **same size and prominence** (App Store guideline 4.8).
