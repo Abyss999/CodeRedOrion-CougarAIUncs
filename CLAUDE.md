@@ -91,7 +91,12 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
   presents a sheet), sheets, swipe actions, `ContentUnavailableView`, data scanner, document
   camera, and the official Google button.
 - Every data screen has empty, loading (skeleton) and error states.
-- Motion follows [`docs/design/MOTION.md`](docs/design/MOTION.md): `Theme.Motion` tokens, haptics paired with motion, and **Reduce Motion respected** (fades replace movement). Never delay an action for an animation.
+- Motion follows [`docs/design/MOTION.md`](docs/design/MOTION.md), using the `Theme.Motion` tokens:
+  - Never delay an action for an animation. The tap takes effect immediately.
+  - Never animate on every data refresh. Staggers run on first load or a new result only.
+  - No decorative motion: no confetti, bouncing, parallax or idle loops. Only loading and listening may loop.
+  - Pair haptics with key moments only: add, remove, claim, success and error.
+  - **Respect Reduce Motion.** Movement, scaling, shakes and shimmer become fades. Counters show their final value. Haptics and colour or state changes stay.
 - Accessibility is required: VoiceOver labels, Dynamic Type to AX5, 44 pt targets, AA contrast,
   Reduce Motion, and colour never the only cue.
 - An iOS PR that deviates from an artboard includes a **Design delta** section with a Simulator
