@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark: Fridge empty</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
+a{color:#B9D871}a:hover{color:#E8F0DA}
+body{background:#0F1A12}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1A12; display: flex; flex-direction: column">
+  <main style="flex: 1; overflow: hidden; padding: 64px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; justify-content: space-between; align-items: center">
+      <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 30px; letter-spacing: -0.01em">{{title}}</h1>
+    </header>
+
+    <div role="tablist" aria-label="Storage" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #223024; border-radius: 14px">
+      <button role="tab" aria-selected="true" style="height: 36px; border: 0; border-radius: 10px; background: #18261B; color: #E8F0DA; font-weight: 600; font-size: 15px">Fridge</button>
+      <button role="tab" aria-selected="false" style="height: 36px; border: 0; border-radius: 10px; background: transparent; color: #9DB09F; font-weight: 500; font-size: 15px">Pantry</button>
+      <button role="tab" aria-selected="false" style="height: 36px; border: 0; border-radius: 10px; background: transparent; color: #9DB09F; font-weight: 500; font-size: 15px">Freezer</button>
+    </div>
+
+    <section style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 0 20px 40px">
+      <div style="width: 72px; height: 72px; border-radius: 36px; background: #24361F; display: flex; align-items: center; justify-content: center; margin-bottom: 6px">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="M6 10h12M9 5v2M9 13v3"></path></svg>
+      </div>
+      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 22px; color: #E8F0DA">{{empty.title}}</h2>
+      <p style="margin: 0; font-size: 15px; line-height: 1.45; color: #9DB09F">{{empty.line}}</p>
+      <a href="AddSheet.dark.dc.html" style="margin-top: 12px; text-decoration: none; min-width: 160px; height: 50px; padding: 0 28px; box-sizing: border-box; border-radius: 14px; background: #B9D871; color: #13261A; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">Add food</a>
+    </section>
+  </main>
+
+  <nav aria-label="Tabs" style="padding: 6px 14px 26px; box-sizing: border-box">
+    <div style="height: 62px; border-radius: 31px; background: rgba(24,38,27,0.82); box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; padding: 0 5px">
+    <a href="Home.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"></path></svg>Home</a>
+    <a href="Recipes.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"></path><path d="M2 10h20"></path><path d="M9 7c0-1.2 1-1.8 1-3M14 7c0-1.2 1-1.8 1-3"></path></svg>Recipes</a>
+    <a href="AddSheet.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #B9D871; font-size: 10px; font-weight: 600">
+      <span style="width: 28px; height: 28px; border-radius: 14px; background: #B9D871; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#13261A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>Add</a>
+    <a href="Fridge.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; background: rgba(185,216,113,0.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #B9D871; font-size: 10px; font-weight: 600">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="M6 10h12M9 5v2M9 13v3"></path></svg>Fridge</a>
+    <a href="Social.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.8 3.5 6"></path></svg>Social</a>
+    </div>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return { title: 'Your food', empty: { title: 'Nothing in your fridge yet', line: 'Snap a photo, scan a receipt or type what you bought.' } };
+}
+}
+</script>
+</body>
+</html>
