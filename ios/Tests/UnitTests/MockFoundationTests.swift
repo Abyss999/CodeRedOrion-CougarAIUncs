@@ -279,7 +279,7 @@ final class MockFoundationTests: XCTestCase {
         let c = mock()
         let mine = try await c.listMyRequests()
         XCTAssertFalse(mine.isEmpty)
-        XCTAssertTrue(mine.allSatisfy { $0.authorId == MockData.priya.id && $0.source == .me })
+        XCTAssertTrue(mine.allSatisfy { $0.authorId == MockData.priya.id && $0.source.type == .me })
     }
 
     func testCreateRequestAudiencesAndValidation() async throws {
@@ -287,7 +287,7 @@ final class MockFoundationTests: XCTestCase {
         let r = try await c.createRequest(text: "  Need salt  ", friends: true, groupIds: ["group-moody", "group-ccs", "group-moody"])
         XCTAssertEqual(r.text, "Need salt", "trimmed")
         XCTAssertEqual(r.status, .open)
-        XCTAssertEqual(r.source, .me)
+        XCTAssertEqual(r.source.type, .me)
         XCTAssertTrue(r.audiences.friends)
         XCTAssertEqual(r.audiences.groups.map(\.name), ["CougarCS Kitchen", "Moody Hall 4F"], "deduplicated and sorted by name")
         XCTAssertEqual(r.audiences.hiddenCount, 0, "the author sees every audience")

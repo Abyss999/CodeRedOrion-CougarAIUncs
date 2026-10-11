@@ -47,7 +47,7 @@ actor SpyAPIClient: APIClient {
     func leaveGroup(id: String) async throws { try await inner.leaveGroup(id: id) }
     func groupDetail(id: String) async throws -> GroupDetail { try await inner.groupDetail(id: id) }
     func groupPantry(id: String) async throws -> [PantryItem] { try await inner.groupPantry(id: id) }
-    func reachablePeople() async throws -> [Person] { try await inner.reachablePeople() }
+    func reachablePeople(itemId: String?) async throws -> [Person] { try await inner.reachablePeople(itemId: itemId) }
     func restoreItem(id: String) async throws -> Item { restores.append(id); return try await inner.restoreItem(id: id) }
     func fromPhoto(imageData: Data, mode: PhotoMode) async throws -> CandidatesResponse { try await inner.fromPhoto(imageData: imageData, mode: mode) }
     func parseText(_ text: String) async throws -> [Candidate] { try await inner.parseText(text) }
@@ -180,9 +180,10 @@ final class FridgeModelTests: XCTestCase {
         m.remove(item(m, "item-spinach"), choice: .init(outcome: .donated, recipientId: "user-marcus"), reduceMotion: true)
         m.showPendingToast()   // the second sheet's onDismiss
         await until { await spy.removes.count == 2 }
+        // The two background tasks race, so the arrival order is not part of the contract.
         let calls = await spy.removes
-        XCTAssertEqual(calls[0], .init(id: "item-strawberries", outcome: .thrownOut, reason: .forgot, recipient: nil))
-        XCTAssertEqual(calls[1], .init(id: "item-spinach", outcome: .donated, reason: nil, recipient: "user-marcus"))
+        XCTAssertTrue(calls.contains(.init(id: "item-strawberries", outcome: .thrownOut, reason: .forgot, recipient: nil)), "\(calls)")
+        XCTAssertTrue(calls.contains(.init(id: "item-spinach", outcome: .donated, reason: nil, recipient: "user-marcus")), "\(calls)")
         await until { await self.serverItem(mock, "item-spinach").share?.status == .fulfilled }
         XCTAssertEqual(m.toast?.message, "Baby spinach removed", "a second removal replaces the toast")
     }
