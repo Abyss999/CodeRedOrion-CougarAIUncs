@@ -5,10 +5,11 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..auth import make_token, require_auth
-from ..errors import ApiError, validation_error
+from ..errors import ApiError, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (TOMBSTONE_USER_ID, FoodEvent, Friendship, Group, GroupMember, HelpRequest, Item,
-                      ShareListing, User)
+                      ShareListing, User, UserIdentity)
+from ..services import google_auth
 from ._util import iso, json_body
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -55,9 +56,94 @@ def login():
     email = _str(body, "email").lower()
     password = body.get("password")
     user = User.query.filter_by(email=email).first()
-    if not user or not isinstance(password, str) or not check_password_hash(user.password_hash, password):
+    # OAuth-only accounts have no password_hash: same 401 as a wrong password (never a 500).
+    if (not user or not isinstance(password, str) or not user.password_hash
+            or not check_password_hash(user.password_hash, password)):
         raise ApiError(401, "invalid_credentials", "Incorrect email or password.")
     return jsonify(token=make_token(user.id), user=_user(user))
+
+
+DISPLAY_NAME_MAX = 80
+
+
+def _display_name(claims) -> str:
+    for key in ("name", "given_name"):
+        v = claims.get(key)
+        if isinstance(v, str) and v.strip():
+            return " ".join(v.split())[:DISPLAY_NAME_MAX]
+    return claims["email"].split("@", 1)[0][:DISPLAY_NAME_MAX] or "BiteDown user"
+
+
+# Google is authoritative for these mailboxes; for any other domain, only a Workspace `hd` claim makes
+# Google's email_verified strong enough to take over an existing account.
+_GOOGLE_MAIL_DOMAINS = ("gmail.com", "googlemail.com")
+
+
+def _email_linkable(claims) -> bool:
+    if not google_auth.email_verified(claims):
+        return False
+    domain = claims["email"].rsplit("@", 1)[-1].lower()
+    hd = claims.get("hd")
+    return domain in _GOOGLE_MAIL_DOMAINS or (isinstance(hd, str) and bool(hd.strip()))
+
+
+def _sign_in_with(provider: str, claims) -> tuple[User, bool]:
+    """Existing identity -> its user (200). Else, a user with the same email: 409 identity_conflict if
+    they already have a different identity for this provider, 409 account_exists_use_password unless
+    the email is linkable (see `_email_linkable`), otherwise link (200). Else create (201).
+    Returns (user, created). Commits on success; a 409 writes nothing."""
+    sub, email = claims["sub"], claims["email"]
+    ident = UserIdentity.query.filter_by(provider=provider, subject=sub).first()
+    if ident:
+        if ident.email != email:
+            ident.email = email
+            db.session.commit()
+        return db.session.get(User, ident.user_id), False
+    # citext: case-insensitive. FOR UPDATE serialises concurrent links to the same account, so the
+    # one-identity-per-provider check below can't be raced.
+    user = User.query.filter_by(email=email).with_for_update().first()
+    created = user is None
+    if not created:
+        if UserIdentity.query.filter_by(provider=provider, user_id=user.id).first():
+            db.session.rollback()
+            raise ApiError(409, "identity_conflict",
+                           "This BiteDown account is already linked to a different Google account.")
+        if not _email_linkable(claims):
+            db.session.rollback()
+            raise ApiError(409, "account_exists_use_password",
+                           "An account with this email already exists. Log in with your email and password.")
+    else:
+        user = User(email=email, display_name=_display_name(claims), password_hash=None)
+        db.session.add(user)
+        db.session.flush()
+    db.session.add(UserIdentity(provider=provider, subject=sub, user_id=user.id, email=email))
+    db.session.commit()
+    return user, created
+
+
+@bp.post("/oauth/google")
+def oauth_google():
+    body = json_body()
+    id_token = body.get("id_token")
+    if not isinstance(id_token, str) or not id_token.strip():
+        raise validation_error("id_token is required.")
+    try:
+        claims = google_auth.verify_id_token(id_token.strip())
+    except google_auth.GoogleAuthNotConfigured:
+        raise ApiError(503, "oauth_not_configured", "Google sign-in is not configured on this server.")
+    except google_auth.GoogleAuthUnavailable:
+        raise upstream_unavailable("Could not reach Google to verify the sign-in. Try again.")
+    except google_auth.EmailNotVerified:
+        raise ApiError(403, "email_not_verified", "Your Google account email is not verified.")
+    except google_auth.InvalidGoogleToken:
+        raise ApiError(401, "invalid_token", "Google sign-in token is invalid or expired.")
+    try:
+        user, created = _sign_in_with("google", claims)
+    except IntegrityError:
+        # A concurrent first sign-in won the race (same sub or same email): the rows now exist.
+        db.session.rollback()
+        user, created = _sign_in_with("google", claims)
+    return jsonify(token=make_token(user.id), user=_user(user), created=created), 201 if created else 200
 
 
 @bp.delete("/me")
@@ -66,7 +152,7 @@ def delete_account():
     """Delete the caller and everything they own, in one transaction (App Store requirement).
 
     Deleted: their items, listings on those items and their own listings, friendships, group
-    memberships, requests they wrote. Detached from other people's rows: listings they claimed or
+    memberships, requests they wrote, linked sign-in identities (`user_identities`). Detached from other people's rows: listings they claimed or
     received (claimed_by/recipient_id -> null, so the listing is open again), requests they fulfilled
     (reopened). Groups they created lose `created_by` (ownership passes to the longest-standing
     remaining member). food_events are ANONYMISED, not deleted: user_id -> the nil-UUID tombstone, so
@@ -92,6 +178,7 @@ def delete_account():
                             ).delete(synchronize_session=False)
     FoodEvent.query.filter_by(user_id=uid).update({"user_id": TOMBSTONE_USER_ID}, synchronize_session=False)
     Item.query.filter_by(owner_id=uid).delete()
+    UserIdentity.query.filter_by(user_id=uid).delete()
     User.query.filter_by(id=uid).delete()
     db.session.commit()
     return Response(status=204)
