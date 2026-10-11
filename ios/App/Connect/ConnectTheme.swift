@@ -73,6 +73,9 @@ extension AccessibilityID {
     enum FriendScan {
         static let screen = "friendscan"
         static let scanner = "friendscan.scanner"
+        static let confirm = "friendscan.confirm"
+        static let confirmAdd = "friendscan.confirm.add"
+        static let confirmCancel = "friendscan.confirm.cancel"
         static let manualField = "friendscan.manual.field"
         static let manualAdd = "friendscan.manual.add"
         static let error = "friendscan.error"

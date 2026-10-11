@@ -6,7 +6,7 @@ import VisionKit
 struct FriendScanView: View {
     @State var model: FriendAddModel
     let close: () -> Void
-    /// A code to submit as soon as the screen appears (deep link flow).
+    /// A code from a deep link that requires confirmation before submission.
     var initialCode: String?
     @FocusState private var manualFocused: Bool
 
@@ -23,13 +23,40 @@ struct FriendScanView: View {
             if let result = model.result {
                 FriendAddedView(result: result, scanAnother: initialCode == nil ? { model.reset() } : nil, done: close)
                     .navigationBarBackButtonHidden()
+            } else if let initialCode {
+                confirmBody(code: initialCode)
             } else {
                 scanBody
             }
         }
-        .task {
-            if let initialCode, model.phase == .idle { model.submit(payload: initialCode) }
+    }
+
+    private func confirmBody(code: String) -> some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Spacer()
+            Text("Add this person as a friend?")
+                .font(Theme.Fonts.sheetTitle)
+                .foregroundStyle(Theme.Colors.ink)
+                .multilineTextAlignment(.center)
+            if model.isAdding {
+                ProgressView("Adding friend")
+            }
+            if let message = model.errorMessage {
+                Text(message)
+                    .font(Theme.Fonts.meta)
+                    .foregroundStyle(Theme.Colors.urgentInk)
+            }
+            Spacer()
+            Button("Add") { model.submit(payload: code) }
+                .disabled(model.isAdding)
+                .accessibilityIdentifier(AccessibilityID.FriendScan.confirmAdd)
+            Button("Cancel", action: close)
+                .accessibilityIdentifier(AccessibilityID.FriendScan.confirmCancel)
         }
+        .padding(Theme.Spacing.gutter)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .accessibilityIdentifier(AccessibilityID.FriendScan.confirm)
     }
 
     private var scanBody: some View {

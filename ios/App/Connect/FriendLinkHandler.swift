@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Handles `bitedown://friend/<code>` deep links anywhere in the app: presents the scan result flow
-/// (adding the friend and showing FriendAdded or the error). Apply once at the app root.
+/// Handles `bitedown://friend/<code>` deep links anywhere in the app: asks before adding
+/// the friend, then shows FriendAdded or the error. Apply once at the app root.
 private struct FriendLinkModifier: ViewModifier {
     @Environment(AppEnvironment.self) private var env
     @State private var link: PendingLink?
@@ -14,6 +14,7 @@ private struct FriendLinkModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onOpenURL { url in
+                guard env.auth.isSignedIn else { return }
                 if let code = FriendLink.code(from: url) { link = PendingLink(code: code) }
             }
             .sheet(item: $link) { pending in
