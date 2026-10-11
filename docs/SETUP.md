@@ -64,16 +64,32 @@ open FoodWasteReducer.xcodeproj
 Tests from the command line:
 ```bash
 xcodebuild test -project FoodWasteReducer.xcodeproj -scheme FoodWasteReducer \
-  -destination 'platform=iOS Simulator,name=iPhone 16'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 CI (`.github/workflows/ios.yml`) runs the same on every PR touching `ios/`.
 
-### TestFlight
-1. Apple Developer account → set the team in `project.yml` (`DEVELOPMENT_TEAM`) and a unique bundle id.
-2. Create the app in App Store Connect with that bundle id.
-3. Xcode → Product → Archive → Distribute App → App Store Connect → Upload.
-4. App Store Connect → TestFlight → add internal testers.
-The API must be reachable from the phone for TestFlight builds (see open questions in `HANDOFF.md`).
+### Run on your own iPhone (free Personal Team, no TestFlight)
+No paid Apple Developer program is needed. Free-team builds are valid for 7 days, then re-run.
+1. Copy `ios/Local.xcconfig.example` to `ios/Local.xcconfig` (gitignored) and set your Team ID and a unique
+   bundle id (e.g. `com.<you>.foodwastereducer`). Then `xcodegen generate`.
+2. Xcode → target → Signing & Capabilities → Team: your Personal Team, "Automatically manage signing".
+3. Plug in the phone, pick it as the run destination, Run. First time: on the phone, Settings → General →
+   VPN & Device Management → trust your developer certificate.
+The app uses no capability a free team can't sign (no push, iCloud, App Groups or Sign in with Apple).
+
+### Demo on a phone (Cloudflare quick tunnel)
+The API stays bound to `127.0.0.1`; a quick tunnel gives the phone an HTTPS URL to it (no account, no ATS
+exceptions). The URL changes every run.
+```bash
+brew install cloudflared            # once
+docker compose up -d                # API on 127.0.0.1:5055
+scripts/demo_tunnel.sh              # prints the https://<random>.trycloudflare.com URL and health-checks it
+```
+In the app (Debug build): long-press the version label → Debug settings → API base URL → paste the URL →
+Save. "Reset to default" returns to `http://127.0.0.1:5055` (Simulator).
+The script uses the `http2` tunnel protocol because QUIC (UDP 7844) is blocked on many networks; set
+`TUNNEL_PROTOCOL=quic` to try it. Ctrl-C stops the tunnel. Anyone with the URL can reach the API while it runs,
+so stop it after the demo.
 
 ## 5. ML (off-box)
 **Dataset credentials** go in `.env` where datasets are prepared, and as Colab secrets:
