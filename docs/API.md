@@ -456,6 +456,11 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
     `uses_items` matches names back soonest-first, so with two items of the same name the focus one may be reported
     as its twin). The order stays soonest-expiring first. The cache key includes the ids (in any order) only when
     given, so keys without them are unchanged. Works with `max_results` and `dietary`.
+  - **Filtering (server side):** a recipe is dropped if its `title` is not a non-empty string or its `minutes`
+    is not a number that rounds to an int in 1-600 (the app decodes both as non-null). `steps` and
+    `missing_items` keep only their string entries and default to `[]`. Gemini is asked for
+    `min(max_results + 2, 12)` recipes and the route cuts to `max_results` after filtering, so one bad recipe
+    doesn't shorten the list. The cache key still uses the caller's `max_results`.
   - `servings`: int 1-20 from Gemini, else `null`.
   - `uses_items`: `[{item_id, name, predicted_expiry (date)}]` — Gemini's names mapped back to the
     caller's items (case/space-insensitive exact match, then containment; soonest-expiring wins; each
@@ -513,6 +518,13 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
   | `getting_started` | only when none of the above apply | "Nothing used, donated or thrown out in the last 30 days." |
   Ties: item by name, reason and category alphabetically. `top_reason_*` codes are unchanged
   (`expired`, `forgot`, `didnt_like`, `other`); `past_expiry` and `saved_recent` are new codes.
+
+## Gemini timeouts
+Every Gemini call sets an HTTP timeout so a hung request cannot pin one of the 4 gunicorn threads. Photo
+enrichment uses `ENRICH_TIMEOUT_S` (25, no retry). All other calls (`parse_text`, `detect`, `receipt_categorize`,
+`recipes`, `shelf_life`) use `GEMINI_TIMEOUT_S` (env, default 30 s per attempt). A transient error is retried once
+after 1.5 s, so the worst case is 2 x 30 + 1.5 = 61.5 s, under gunicorn's 120 s `--timeout`. Keep
+`GEMINI_TIMEOUT_S` at or below 55 so that stays true. A timeout is an `UpstreamError` (`502 upstream_unavailable`).
 
 ## Gemini usage logging
 Every Gemini call (`parse_text`, `detect`, `receipt_categorize`, `recipes`, `shelf_life`, `enrich`) writes one INFO line on the
