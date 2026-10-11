@@ -238,7 +238,7 @@ def test_gunicorn_timeout_is_120_in_entrypoint():
 
 
 def test_ml_timeout_plus_single_gemini_read_fits_under_gunicorn():
-    """BE-28 fix: after a failed ML call the reader runs once (retry=False): 60 + 45 s < 120 s."""
+    """BE-31 fix: after a failed ML call the reader runs once (retry=False): 60 + 45 s < 120 s."""
     assert ml.TIMEOUT + READER_TIMEOUT_S < GUNICORN_TIMEOUT_S
 
 
@@ -494,7 +494,7 @@ def test_hanging_categorize_is_heuristic_200_never_500(net, clock, exc):
 
 
 def test_ml_down_60s_then_slow_gemini_read_total_stays_under_120(net, clock):
-    """BE-28 fix: no retry after a failed ML call, so 60 + 45 = 105 s and the answer is a 502."""
+    """BE-31 fix: no retry after a failed ML call, so 60 + 45 = 105 s and the answer is a 502."""
     net.enable_ml()
     net.ml(60.0, exc=requests.ReadTimeout("ml hung"))
     net.gemini(45.0, status=504)
