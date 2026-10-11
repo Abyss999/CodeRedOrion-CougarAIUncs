@@ -898,3 +898,29 @@ Independent QA of the uncommitted builder diff (`GEMINI_TIMEOUT_S`, recipe filte
 - **BE-25 VERIFIED FIXED.** `_default_timeout` and `create_app` now use `math.isfinite`. `inf`, `-inf` and `nan`, as config values and as env strings (`inf`, `-inf`, `nan`, `Infinity`), all fall back to 30 s (30000 ms on the client). The two strict xfails became normal asserts (`test_non_finite_timeout_config_falls_back`, `test_env_non_finite_falls_back_in_create_app`).
 - **Truncation VERIFIED FIXED.** `gemini.suggest_recipes` asks for `min(max_results + 2, 12)` and no longer slices; the route filters the full list, then cuts to `n`, then caches the cut list. Tests: `max_results` 1/3/9/10 ask Gemini for 3/5/11/12 (the prompt's `max_results`); a bad first recipe with `max_results=1` now returns the good second one; a Gemini that returns 12 recipes for `n=3` yields exactly 3, and the repeat call is a cache hit with the same 3; the cache key still uses `n` (not the over-request), so `n=2` then `n=3` misses and returns 3. `suggest_recipes` has no other caller, so dropping its slice affects nothing else. Residual (not a bug): if Gemini returns fewer valid recipes than `n` after filtering, the user gets fewer; the 2 spares make that rare.
 - **Runs (targeted, fwr_test on 5435):** `test_gemini_timeout`, `test_qa_gemini_timeout`, `test_gemini_retry`, `test_enrich_gemini`, `test_insights_wave2_gemini_shapes`, `test_insights_wave2_recipes`, `test_recipes_focus`, `test_macros`, `test_ai_endpoints`, `test_qa_pr79_*`, `test_gemini_usage`: **581 passed, 0 failed, 0 xfailed**. Full suite not run (orchestrator).
+
+## fix/photo-image-validation — BE-26/BE-27
+
+Independent backend QA of the uncommitted branch `fix/photo-image-validation` (worktree `fmt-photo-validate`). Stubs only, no Gemini or ML call. New file `backend/tests/test_qa_photo_validation.py` (19 tests, all pass). Targeted runs only: the new QA file, the builder's two new files and the 9 modified test files: **650 passed, 1 skipped, 0 failed, 0 xfailed** (re-run after the BE-28 fix).
+
+**Verdict: PASS** (BE-26, BE-27 and BE-28 verified fixed; one named residual, R-1, low, accepted).
+
+| Check | Result |
+|---|---|
+| BE-26 non-image to 502 | Fixed: text, PDF, GIF, a renamed file, cut-off JPEG and PNG, and a bomb all give 400 with no upstream call (stubs fail the test if called). |
+| BE-27 usage log `code` | Fixed: `status=ok code=200`; `status=error code=429/503`; `code=null` for plain exceptions and bad JSON. `docs/API.md` matches. `scripts/gemini_cost.py` parses generic `key=value`, so old lines (no `code`) and new lines both parse. |
+| Order | 401 before 400 (decorator); `mode` 400 before the image check; 413 for >10 MB still comes from `MAX_CONTENT_LENGTH` before the route runs. |
+| Data intact after `verify()` | Verified: the exact bytes (length) reach the backend; `data` is a `bytes` copy, so the file pointer is irrelevant. |
+| Memory | `verify()` never calls `load()` (tested by making `ImageFile.load` fail). Header-only; Pillow's bomb limit gives 400. |
+| HEIC | Forwarded as `image/heic` to both Gemini and `ml.detect`. Brand sniff only: a 12-byte `ftypheic` stub passes (documented limitation). Note: the YOLO service has no pillow-heif, so with `ML_SERVICE_URL` set a HEIC upload will fail there and fall back to Gemini via `MLUnavailable` (the route already falls through). Not a regression. The iOS app sends JPEG only. |
+| Builder edits to existing tests | Legitimate: 8 files swap fake JPEG bytes for a real 8x8 JPEG (`TINY_JPEG`); `test_thread_safety` regex gains `code=200` / `code=null`; `test_from_photo_enrich` forces "cannot crop" with `ENRICH_MAX_PIXELS=100` instead of garbage bytes, same assertions. No assertion weakened. |
+
+### BE-28 (low): FIXED, verified. Original finding: the "FFD9 within the last 4096 bytes" check rejects valid JPEGs with large trailing data
+- Repro: `Image.new("RGB",(8,8)).save(buf,"JPEG")` plus 50,000 trailing bytes that do not end in FFD9, then POST to `/items/from-photo` gives **400 "truncated or corrupt"**, yet `Image.open(...).load()` decodes it. Test: `test_valid_jpeg_with_50kb_nonmarker_trailer_is_wrongly_rejected` (strict xfail).
+- What still passes: up to ~4 KB of trailing bytes; a primary JPEG followed by a full second JPEG (MPO / Ultra HDR gain map layout), because the second image ends in FFD9.
+- Severity: **low for the app.** `PhotoPrep.prepare` (`ios/App/Add/PhotoCapture.swift`) re-encodes through `UIImage.jpegData`, so uploads carry no appended MPF/depth data. Other clients (raw camera originals with proprietary trailers or padding) could be falsely rejected.
+- Fix: search for FFD9 anywhere after the last SOS marker (`data.rfind(b"\xff\xd9")` past the header), or `Image.load()` the JPEG under the existing pixel cap (costs a full decode, so use `draft()` for big files).
+
+**BE-28 re-verification.** The builder replaced the tail check with `_jpeg_scan_complete` (an EOI after the first SOS). `test_valid_jpeg_with_50kb_nonmarker_trailer_is_wrongly_rejected` is now a normal assert and passes; cut-off JPEGs (half, last 2 bytes) are still 400.
+
+**R-1 (residual, low, accepted, not a bug):** an EXIF-embedded thumbnail carries its own SOS and EOI, so a JPEG whose *main* scan is cut off but which has an EXIF thumbnail passes the marker check (pinned by `test_residual_exif_thumbnail_eoi_lets_cut_main_scan_through`, 200). Judgement: low. The iOS app re-encodes through `jpegData`, so it never sends such a file. For other clients the file reaches Gemini, which fails soft: the route returns the existing 502 `upstream_unavailable`, no crash and no bad data stored. Closing it needs a real decode (`Image.load()` under the pixel cap), which costs memory for a rare case. If wanted, parse the marker segments and look for EOI after the SOS that follows the SOF.

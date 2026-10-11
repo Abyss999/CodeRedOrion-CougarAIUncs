@@ -12,6 +12,16 @@ from app.extensions import db
 from app.services import gemini, ml
 from conftest import iso_in, items_of
 
+
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
 MIG = str(Path(__file__).resolve().parents[1] / "migrations")
 GROUPS = ["protein", "veggies", "fruit", "dairy", "grains", "pantry", "leftovers", "frozen", "other"]
 
@@ -354,7 +364,7 @@ def test_group_by_combines_with_storage_filter(client, user, make_item):
 
 # ---------- candidates carry food_group ------------------------------------------------------
 def _img():
-    return {"image": (io.BytesIO(b"\xff\xd8fakejpeg"), "a.jpg", "image/jpeg")}
+    return {"image": (io.BytesIO(TINY_JPEG), "a.jpg", "image/jpeg")}
 
 
 def test_parse_text_candidates_have_food_group(client, user, monkeypatch):
