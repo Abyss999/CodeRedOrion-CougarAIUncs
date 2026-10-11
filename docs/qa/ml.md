@@ -1206,3 +1206,6 @@ Other notes (no ID):
 
 ## Files written
 `ml/eval/tests/qa_ml_compose.py` (new), this section.
+
+## `/ocr` hardening and GLM-OCR evidence (`feat/glm-ocr-live`, 2026-10-11)
+Serve layer (EXIF upright on `/ocr` only, 422 `ocr_no_text`, optional `OCR_WARMUP`): builder's 20 tests plus an **independent** `ml/eval/tests/test_ocr_endpoint_contract.py` (9 passed); `ml/serve/tests` **41 passed**. `ml/eval/tests/test_glm_ocr_engine_contract.py`: 3 passed, 8 strict xfails (GLM-1..8) that pin the engine rewrite and must be un-xfailed when it lands. GLM-OCR spike (synthetic receipts only, not the QA gate): see `docs/DECISIONS.md` 2026-10-11. The OCR gate (line recall ≥ 85%, price ≥ 90%, total ≥ 90% on ≥ 20 real receipts) has **not** been run on any engine. CORD v2 test (100 photos, CC-BY-4.0, "CORD: A Consolidated Receipt Dataset for Post-OCR Parsing", Park et al., Clova AI; rupiah prices, so only text recall is meaningful) is staged outside git: RapidOCR word recall 85.7%. Verdict on the serve layer: **PASS**; engine: **not in this PR**.
