@@ -162,6 +162,15 @@ struct Listing: Codable, Hashable, Sendable, Identifiable {
 }
 struct ListingResponse: Codable, Sendable { let listing: Listing }
 
+/// Where to collect a shared item (`pickup` on a listing you claimed or own). Everything is optional:
+/// the sharer may give a note, a pin, or both.
+struct PickupSpot: Codable, Hashable, Sendable {
+    var note: String?
+    var lat: Double?
+    var lng: Double?
+    var placeName: String?
+}
+
 /// An entry of the Food Pantry (`GET /share`), someone else's open listing.
 struct PantryListing: Codable, Hashable, Sendable, Identifiable {
     struct Source: Codable, Hashable, Sendable {
@@ -187,6 +196,10 @@ struct PantryListing: Codable, Hashable, Sendable, Identifiable {
     var createdAt: Date?
     var source: Source
     var item: Food
+    /// True when the sharer set a pickup spot. New field: nil until the backend sends it.
+    var pickupSet: Bool? = nil
+    /// The spot itself; only the claimer and the owner get it. Nil until the backend sends it.
+    var pickup: PickupSpot? = nil
 }
 struct PantryListingsResponse: Codable, Sendable { let listings: [PantryListing] }
 

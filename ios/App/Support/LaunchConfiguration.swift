@@ -31,6 +31,8 @@ import Foundation
 /// - `-UITestEmailUnknown`    adding a friend fails with 404 `not_found` (unknown email)
 /// - `-UITestFailBatch`       `remove-batch` and `restore-batch` fail (network error)
 /// - `-UITestFailShare`       `POST /share` fails (network error)
+/// - `-UITestFailSocial`     the Social lists (requests, my requests, Food Pantry) fail with a network error
+/// - `-UITestFailFulfil`      `POST /requests/:id/fulfil` and `POST /requests` fail (network error)
 /// - `-UITestUndoWindow <s>`   Undo toast window in seconds (e.g. 30) instead of 5 s (15 s with assistive tech)
 struct LaunchConfiguration: Equatable, Sendable {
     var useMockAPI = false
@@ -62,12 +64,16 @@ struct LaunchConfiguration: Equatable, Sendable {
     var emailUnknown = false
     var failBatch = false
     var failShare = false
+    var failSocial = false
+    var failFulfil = false
     /// `-UITestUndoWindow <seconds>`; nil keeps `UndoToastTiming`.
     var undoWindow: Duration?
 
     static let slowDelay: Duration = .seconds(3)
     static let defaultDelay: Duration = .milliseconds(150)
 
+    static let flagFailSocial = "-UITestFailSocial"
+    static let flagFailFulfil = "-UITestFailFulfil"
     static let flagMockAPI = "-UITestMockAPI"
     static let flagSeed = "-UITestSeed"
     static let flagSignedIn = "-UITestSignedIn"
@@ -132,6 +138,8 @@ struct LaunchConfiguration: Equatable, Sendable {
         emailUnknown = arguments.contains(Self.flagEmailUnknown)
         failBatch = arguments.contains(Self.flagFailBatch)
         failShare = arguments.contains(Self.flagFailShare)
+        failSocial = arguments.contains(Self.flagFailSocial)
+        failFulfil = arguments.contains(Self.flagFailFulfil)
         if signedOut { signedIn = false }
         if expiredSession { signedIn = true }
         if let i = arguments.firstIndex(of: Self.flagUndoWindow), arguments.indices.contains(i + 1),
@@ -145,7 +153,7 @@ struct LaunchConfiguration: Equatable, Sendable {
         if seed != nil || signedIn || failNetwork || slowNetwork || loadingForever || failList || failListOnce
             || failRemove || failRestore || restoreNotRemoved || slowRemove || slowRestore
             || signedOut || expiredSession || serverDown || photoNone || photo502 || cameraDenied || tossFails
-            || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare { useMockAPI = true }
+            || recipes502 || google409 || claimConflict || emailUnknown || failBatch || failShare || failSocial || failFulfil { useMockAPI = true }
     }
 
     /// Parsed from the process arguments in DEBUG; always empty in Release.
@@ -189,6 +197,9 @@ struct LaunchConfiguration: Equatable, Sendable {
         }
         if failBatch { b.failures["removeBatch"] = offline; b.failures["restoreBatch"] = offline }
         if failShare { b.failures["createShare"] = offline }
+        if failSocial { for k in ["listRequests", "listMyRequests", "listShares"] { b.failures[k] = offline } }
+        if failFulfil { b.failures["fulfilRequest"] = offline; b.failures["createRequest"] = offline }
+        if loadingForever { for k in ["listRequests", "listMyRequests", "listShares"] { b.delays[k] = Self.foreverDelay } }
         return b
     }
 }
