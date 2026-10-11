@@ -2,42 +2,41 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-11 (checkpoint 8). **`food-main` (VPS) orchestrates**: it plans, rules, reviews and merges,
+_Last updated: 2026-10-11 (checkpoint 9). **`food-main` (VPS) orchestrates**: it plans, rules, reviews and merges,
 and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the building**: builder + QA
 sub-agents (**Sonnet**, owner preference), Xcode and simulators, Docker and every test run, plus any
 `.github/workflows` push. The owner also lets the Mac merge a PR when it judges it ready, and edit the canvas when
-the owner asks (round 3 of wedwqc's comments is the Mac's). Both update this file and the affected `docs/` at
+the owner asks. **`food-orch`** (a second Mac session, since checkpoint 8) took over from `food-main-mac`: independent QA on
+teammate PRs, canvas rounds when handed the canvas (round 3 is done, and the canvas is back with `food-main`) and this file at
+checkpoints. All three update this file and the affected `docs/` at
 every checkpoint (`CLAUDE.md` Rules). Rules: [`CLAUDE.md`](CLAUDE.md)._
 
 ## Current status
 **Building the whole UI into the iOS app** (owner, 2026-10-11): wire it to the live backend and stub only what
 isn't done (see the honesty list). The design gate is closed (canvas v51 = #75); the backend gaps the UI needs are
-merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the screen PRs build on it.
+merged (#74, #76). **PR0 "shared foundation" is merged (#81)**, and the Fridge polish is building on it. Canvas round 3 is
+merged (v53, #82). Gemini photo enrichment (#79) is merged, and its four QA bugs are re-verified (#84).
 
 | Area | State | Evidence |
 |---|---|---|
-| Backend: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | full suite 1708 passed / 98% (#76) |
+| Backend: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | full suite 2199 passed / 98% (#79) |
 | Items wave 2 (#50), insights wave 2 + batch remove/restore (#57), Google sign-in (#60), gthread (#63), multi-audience requests + tips (#66) | merged | BE-8 … BE-16 fixed |
 | **Given to** recipient: `recipient_id` omitted / null / user on remove and remove-batch; self → 400 | merged (#74) | 1642 passed / 98%; BE-17 fixed |
 | UI gaps: `GET /requests?mine=1`, owner `share.audience`, `GET /auth/me`, `GET /people/reachable` | merged (#76) | 1708 passed / 98% |
 | Receipts → candidates, Gemini guide + retry (Jose) | merged (#54) | BE-11–14 fixed |
-| iOS foundation (#47) and **Fridge + removal + Undo** (#64) | merged | Fridge: 17 Pro + SE AX5 unit 146 / UI 51; IOS-12 fixed; IOS-13 open (low); two CI flakes fixed in tests |
+| Gemini photo enrichment: `enrich=expiry,nutrition` on from-photo, `items.nutrition` (migration 0007), `item_ids` on `/recipes/suggest` (Truc) | merged (#79) | independent QA PASS WITH OPEN BUGS; BE-19/20/22 verified fixed, BE-21 accepted as documented (#84) |
+| iOS foundation (#47), **Fridge + removal + Undo** (#64) and **PR0 shared foundation** (#81) | merged | Fridge: 17 Pro + SE AX5 unit 146 / UI 51; IOS-12 fixed; IOS-13 open (low); two CI flakes fixed in tests. PR0: 17 Pro unit 354 / UI 51, SE AX5 34/34, IOS-14–18 fixed |
 | ML data, 8 sources (#62), Colab unrar build fix (#73, Jose) | merged | independent QA PASS on both; ML-64 (low) + ML-65 (info) open for Jose |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22's track**; Colab can run | don't schedule agents for it unless the owner asks |
-| Design | 38 screens (22 + the gap audit's 16, incl. FulfilConfirm) + dark artboards; canvas v51, mirrored in #75 | `docs/design/` |
-| Open PR not from the Mac | **#79** "Gemini photo enrichment" (FrankinstyLe, backend only) | needs independent backend QA before merge |
+| Design | 38 screens (22 + the gap audit's 16, incl. FulfilConfirm) + dark artboards; canvas v53 (round 3), mirrored in #82 | `docs/design/`; design QA READY WITH FIXES, fixes applied |
 
 ## Next steps
-1. **PR0 `feat/ios-shared`** (branched from #64's head; merge `main` in before pushing):
-   - **Done:** every client method, models, Mock, fixtures, `BannerView`, `WeightFormatter`, `FormField`, `PermissionCard`, `AudienceChecklist`, flags, per-tab entry views, GoogleSignIn 9.2.0 (hidden until the client id exists), `onForestChip`.
-   - **QA:** PASS WITH OPEN BUGS: IOS-14 (medium; `item.share.audience` not decoded) and IOS-15…18 (low). A builder is fixing them; re-run, then commit, merge main, push and open the PR.
-2. **Fridge polish** (`feat/ios-fridge-polish`, branched from PR0), build notes in "Screen build notes" below.
-3. **The parallel group once PR0 lands:** Add (2a photo, 2b text/barcode/receipt), Home, Impact, Auth; Recipes after Home. **Then sequential:** Item detail → Social (7a pantry + requests, 7b connect + groups) → Settings. One PR each, with iOS QA, light/dark screenshots against the artboards, a motion clip and a Design delta.
-4. **Canvas round 3** (wedwqc 08:28–08:46): being applied on the Mac (lights only, darks via `mkdark.py`), then a design QA against wedwqc's text and a mirror PR with SCREENS / DESIGN_SYSTEM / DECISIONS.
-5. **#79** (FrankinstyLe): independent backend QA before merge.
-6. **Owner:** create the Google OAuth iOS client (`docs/SETUP.md`).
-7. **Teammate (LemurTech22):** Colab on the 8-source data. ML-64 and ML-65 go to Jose via `food-main`.
-8. **Wave 4**, integration QA on the full stack and phone; **Wave 5**, the UI review.
+1. **Fridge polish** (`feat/ios-fridge-polish`, from PR0 #81): in progress on the Mac; build notes in "Screen build notes" below.
+2. **The parallel group (Add 2a, Home, Impact and Auth have started; see In flight):** Add (2a photo, 2b text/barcode/receipt), Home, Impact, Auth; Recipes after Home. **Then sequential:** Item detail → Social (7a pantry + requests, 7b connect + groups) → Settings. One PR each, with iOS QA, light/dark screenshots against the artboards, a motion clip and a Design delta.
+3. **wedwqc's canvas threads** (round 3) are applied but still open on the canvas: they weren't sent to Claude, so a person with edit access must resolve them.
+4. **Owner:** create the Google OAuth iOS client (`docs/SETUP.md`).
+5. **Teammate (LemurTech22):** Colab on the 8-source data. ML-64 and ML-65 go to Jose via `food-main`.
+6. **Wave 4**, integration QA on the full stack and phone; **Wave 5**, the UI review.
 
 ## Screen build notes (carry into each brief)
 - **All screens:**
@@ -58,6 +57,11 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
   - **States:** PhotoAnalyzing, PhotoReviewError, CameraDenied. Toss = create + remove (on failure the item stays "Looks off" with a banner).
   - **Receipt tile:** shows unavailable while OCR isn't live.
   - **Sheet:** a shorter hero, "Boxes, cans, jars".
+  - **Photo enrichment (#79), opt-in:**
+    - send `enrich=expiry,nutrition` from Photo review, and raise the from-photo timeout above 60 s (worst case is detection + 25 s);
+    - treat `enrichment.status: "partial"` as normal, because spoiled and low-confidence items are never sent;
+    - `NewItem(candidate:)` must carry `nutrition`.
+  - **PhotoReview (round 3):** the amount is a button that opens an inline editor (amount, unit, Done); steppers are 44 pt.
 - **Item detail:**
   - **Freshness:** "Check again" PATCHes only `freshness` (+ `confidence`, `freshness_checked_at`); nothing is stored. "What to look for" is static.
   - **ItemShared:** the audience from `share.audience`; Remove → the sheet with Given to = the claimer. IOS-13 VoiceOver device check.
@@ -65,14 +69,15 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
   - **Layout:** the tip at the TOP (one line, observation only, dismissible); the **settings gear** replaces the profile button (round 3).
   - **Data:** the pill uses `range=month`; `Recipe.usesItems` objects.
   - **States:** HomeEmpty, ServerError (its "Change" → Settings › Debug "Server address").
-- **Impact:** ImpactRange is the canonical layout (week/month/all, "vs previous", used/donated) led by lb saved; round 3 copy ("carbon emissions", waste rate alone + a compare widget, "19 used" / "4 donated" on two lines).
+- **Impact:** artboards are 1126 / 1416 tall. ImpactRange is the canonical layout (week/month/all, "vs previous", used/donated) led by lb saved; round 3 copy ("carbon emissions", waste rate alone with no "vs previous" badge, plus a compare widget, "19 used" / "4 donated" on two lines).
 - **Recipes:**
   - **Filters:** "Only what I have" is on by default (client-side `missing_items` empty; request 10); its empty state offers recipes needing a few things.
   - **"I made this":** with Undo, via remove-batch / restore-batch.
   - **RecipeDetail:** a bold "Ingredients" list + serving size in grams (round 3).
+  - **"Cook with this" (`item_ids`, #79):** the server doesn't enforce the focus items (BE-21), and the result can have non-empty `missing_items`. So for a focus request, fall back to the "needs a few things" state instead of an empty "Only what I have" list.
 - **Social:**
   - **Requests:** Offer → FulfilConfirm → fulfil. "Yours" → MyRequests (`?mine=1`). Notes clamp to 4 lines + "more" (280 kept).
-  - **Pantry and audiences:** the Pantry widget links to FoodPantry. RequestComposer is a multi-audience checklist. The header "+" only ("Post one" removed).
+  - **Pantry and audiences:** the Pantry widget links to FoodPantry. RequestComposer is a multi-audience checklist. A green **+** beside "Requests" ("Ask for something") opens RequestComposer; "Post one" is removed. The header button is a person-plus icon ("Add friends or groups") → Connect. Offer is a small pill in a 44 pt hit area.
   - **Connect (round 3):** requests on top → Friends + Add friend → Groups → Create / Join a group (expands to the code).
   - **GroupDetail:** more room, invite code lower.
 - **Auth:** Launch / SessionExpired / GoogleSignInError. Google is below the email form (round 3) and hidden by a flag until the client id exists (the SDK dark button in dark mode). A global 401 → SessionExpired; the Launch check uses `GET /auth/me`.
@@ -93,10 +98,15 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| PR0 shared foundation | `feat/ios-shared` (from #64's head) | `wt/ios-shared` | A builder is fixing IOS-14…18. Then QA re-run on the 17 Pro, commit, merge `main`, push, open the PR |
-| Fridge polish | `feat/ios-fridge-polish` (not started) | - | Branch from PR0 once it's committed; notes above |
-| Canvas round 3 | canvas only (then a `design/` mirror PR) | scratchpad `canvas3/` | A design agent is editing lights; then `mkdark.py` (main), a design QA vs wedwqc's text, publish, mirror PR |
-| `docs/checkpoint-8` | this PR | `wt/checkpoint-8` | `food-main` reviews and merges |
+| Fridge polish (IOS-19…29) | `feat/ios-fridge-polish` (from #81) | `wt/ios-fridge-polish` | Builder + QA in progress, with the round 3 RemoveSheet and BatchUndo changes; then PR |
+| Add 2a: photo (IOS-30…39) | `feat/ios-add-photo` (from 0329c6d) | `wt/ios-add-photo` | Builder + QA in progress, in parallel; includes the #79 enrichment follow-ups |
+| Home (IOS-40…49) | `feat/ios-home` (from 0329c6d) | `wt/ios-home` | Builder + QA in progress, in parallel |
+| Impact (IOS-50…59) | `feat/ios-impact` (from 0329c6d) | `wt/ios-impact` | Builder + QA in progress, in parallel |
+| Auth (IOS-60…69) | `feat/ios-auth` (from 0329c6d) | `wt/ios-auth` | Builder + QA in progress, in parallel |
+| Queued | - | - | Add 2b (text/barcode/receipt) after 2a; Recipes after Home; then Item detail → Social → Settings |
+| `docs/checkpoint-9` | this PR | `wt/checkpoint-9` (`food-orch`) | `food-main` reviews and merges |
+
+Each screen PR numbers its iOS bugs inside its own block (above), so parallel branches can't collide.
 
 **Mac notes:**
 - **Worktrees** are in `../wt/<name>` next to the main checkout. Remove merged ones with `git worktree remove`, and only the ones this project created. The owner kept `api-migrate`, `fg-followups`, `food-group`, `colab`, `semi-data` and `pr21`: their ignored files (`.env` variants, YOLO runs) exist nowhere else.
@@ -114,7 +124,7 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
 - **Heavy runs** (xcodebuild, full backend suites, Docker builds, dataset builds) take the shared lock `<scratchpad>/heavy.lock`: write the owner's name and `rm -r` it after. Targeted single-file pytest is fine alongside xcodebuild, but never two runs on `fwr_test` at once.
 - **UI tests:** uninstall the stale runner `com.coderedorion.FoodWasteReducerUITests.xctrunner` before `test-without-building`. Time-based UI assertions need generous windows (the CI runner takes 1–1.5 s per query): use `-UITestUndoWindow`.
 - **Compose:** project `items-wave2` (api 5055, db 5433 with `fwr_test`). Rebuild only the api: `docker compose -p items-wave2 up -d --build --no-deps api`.
-- **Canvas:** edit LIGHT artboards only. Generate darks with `python3 docs/design/tools/mkdark.py <lights> <out>` from `main` (it fails on any untagged colour), then the href sed (`href="X.dc.html"` → `href="X.dark.dc.html"`). Read live files before editing, and publish only the changed files.
+- **Canvas:** edit LIGHT artboards only. An element on a lime card that sets `background: transparent` resets mkdark's lime scope, and its text flips to a light ink. Give it the card's lime explicitly. Generate darks with `python3 docs/design/tools/mkdark.py <lights> <out>` from `main` (it fails on any untagged colour), then the href sed (`href="X.dc.html"` → `href="X.dark.dc.html"`). Read live files before editing, and publish only the changed files.
 - **`.env`:** `ROBOFLOW_API_KEY_SECRET_KEY` (private; the publishable key is rejected), `KAGGLE_API_TOKEN`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash`, `GOOGLE_IOS_CLIENT_IDS` (empty until the owner's client exists). Never print them.
 - **QA briefs that worked:**
   - **iOS-frontend QA:** HIG and native components; XCUITest per flow; VoiceOver, AX5, 44 pt, Reduce Motion on and off; light and dark screenshots against the artboards; empty, skeleton and error states.
@@ -159,7 +169,7 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
   - #62 data: keep the new sources with named risks (ML-51/52/55, ML-62). PL-5 won't fix (beef train-only). In `stratification_check`, cross-split pHash pairs are a warning (leakage_check's ≤ 1% is the gate).
   - A teammate's branch takes `main` merged in, never a rebase or force-push.
   - iOS recipient rule (#78): send `recipient_id` only on an explicit pick; omit for the claimer default; `null` only for "Someone not on BiteDown"; batch "Shared them" omits it.
-  - Round 3 (owner): the Home profile button becomes a settings gear; the tip stays observation-only; Social keeps "+" only; request notes keep 280 chars and the board clamps to 4 lines; chat and a waste-tracking metric are out of scope.
+  - Round 3 (owner): the Home profile button becomes a settings gear; the tip stays observation-only; Social posts through one green "+" beside Requests, with a person-plus button for Connect (approved, #82); request notes keep 280 chars and the board clamps to 4 lines; chat and a waste-tracking metric are out of scope.
 - **Open owner items:**
   - the Google OAuth client
   - nothing else blocking
@@ -172,10 +182,10 @@ merged (#74, #76). **PR0 "shared foundation"** is in its bug-fix round; the scre
   - Jose's (LemurTech22) optional answers on closed #21.
 
 ## QA status
-- **Backend:** PASS on `main` after #76 (1708 passed, 98%). BE-8 … BE-17 fixed. Open: BE-7 (info).
+- **Backend:** PASS on `main` after #79 (2199 passed, 98%). BE-8 … BE-22 resolved (BE-21 accepted as documented; #84 re-verified BE-19–22). Open: BE-7 (info). Follow-up only if memory gets tight: lower `ENRICH_MAX_PIXELS` to about 25 MP.
 - **ML / pipeline:** the 8-source dataset (#62) and #73 are independent PASSes. ML-57/59/60/61/63 and PL-8 fixed; PL-5 won't-fix; ML-51/52/55/62 named risks. Open: ML-11–14, ML-28, ML-32, ML-40, ML-64 (low), ML-65 (info). YOLO not evaluated yet.
-- **Design:** the full-canvas UI/UX gate passed with fixes (v51). Round 3 is in progress.
-- **iOS:** the foundation (#47) and Fridge (#64) PASS. PR0 is PASS WITH OPEN BUGS (IOS-14 medium, IOS-15…18 low; being fixed). IOS-13 open (low).
+- **Design:** the full-canvas UI/UX gate passed with fixes (v51). Round 3 is READY WITH FIXES, with the fixes applied (v53, #82).
+- **iOS:** the foundation (#47), Fridge (#64) and PR0 (#81) PASS; IOS-14–18 fixed. IOS-13 open (low).
 - **Integration:** not run yet.
 
 The full log and bug list are in [`docs/QA.md`](docs/QA.md).
