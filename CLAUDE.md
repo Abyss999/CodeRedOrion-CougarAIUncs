@@ -30,6 +30,7 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 | DB | PostgreSQL + TimescaleDB, one database. `food_events` is a hypertable |
 | AI | Gemini (`GEMINI_MODEL`, see `docs/DECISIONS.md`) behind `services/gemini.py`, which logs token usage |
 | Vision | Ultralytics YOLO26 (version pinned in `ml/yolo/requirements.txt`), trained on Colab |
+| Data | Sources and class maps in `ml/yolo/sources.json`; fetched and staged by `python -m pipeline` (`docs/PIPELINE.md`), merged by `ml/yolo/prepare_dataset.py`. The Colab notebook runs the same commands |
 | OCR | `zai-org/GLM-OCR`, then the deterministic receipt parser |
 | Runtime | Docker Compose, ports bound to `127.0.0.1`. Phone demo goes through `scripts/demo_tunnel.sh` |
 
@@ -40,7 +41,7 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 | `backend/tests/**` | Backend QA |
 | `ios/App/**`, `ios/project.yml` | iOS builder |
 | `ios/Tests/**`, `docs/qa/ios.md` | iOS QA |
-| `ml/yolo/**`, `ml/ocr/**`, `ml/serve/**`, `pipeline/**`, `docs/ML.md`, `docs/PIPELINE.md` | ML / pipeline builder |
+| `ml/yolo/**`, `ml/ocr/**`, `ml/serve/**`, `pipeline/**`, `docs/ML.md`, `docs/PIPELINE.md` | ML / pipeline builder (the data + model track is owned by teammate LemurTech22; other sessions don't build there unless the owner asks) |
 | `ml/eval/**`, `pipeline/tests/qa_*` | ML / pipeline QA |
 | `docs/qa/<area>.md` | That area's QA |
 | `docs/design/**` and the design canvas | Orchestrator (single writer) |
@@ -66,6 +67,17 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
 - QA bug IDs are global per area (`BE-n`, `ML-n`, `IOS-n`, `PL-n`): before numbering, check the highest ID in
   `docs/QA.md` **and** in open PRs' `docs/qa/*.md`, because parallel branches have collided.
 - Big data, venvs and model runs live outside git (`../mldata/`), never in the repo or a worktree.
+
+## Data rules
+- A new dataset is used only after its licence is verified and its attribution is written in `docs/ML.md`,
+  `docs/PIPELINE.md` and `README.md`. Anything unverified stays `"pending": true` in `sources.json`.
+- Add a source as an adapter in `pipeline/ingestion/` plus a `sources.json` entry, and mirror it in the Colab notebook.
+- Verify every download (SHA-256, MD5 or the archive's own CRC). Fetch only what is used: never pull a whole archive when a
+  subset will do (MeatScan is range-read from its 25 GB RAR).
+- Exclude a release's own augmented copies, cap each class x freshness cell, and group so the same specimen, batch or
+  capture session never straddles train / val / held-out. Labels the release doesn't give (e.g. freshness from storage
+  days) are a data-owner ruling, recorded in `docs/PIPELINE.md`.
+- Roboflow downloads need the **private** API key; the `rf_`-prefixed publishable key is rejected.
 - Long-running agents wait for each other's heavy runs (xcodebuild vs the backend suite) instead of
   running them in parallel; give the waiting agent a time limit and a fallback.
 

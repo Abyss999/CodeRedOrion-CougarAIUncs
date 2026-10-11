@@ -83,6 +83,7 @@ Detail lives in [`qa/backend.md`](qa/backend.md) and [`qa/ml.md`](qa/ml.md). The
 | 2026-10-10 | #47 | iOS foundation: tokens, fonts, assets, APIClient + Live/Mock, Keychain, glass tab bar, motion, states, a11y ids | iOS QA on iPhone 17 Pro and iPhone SE at AX5: unit 117 / UI 24 each, 0 failed (3 Keychain tests skip unsigned, by design). Backend `isoformat` timestamps decode (15 tests). Reduce Motion paths, toast clip, light/dark/AX5 screenshots in `docs/qa/media/ios-foundation/`. CI green on macos-26 | **PASS** | IOS-10 residual (an inner image label in each tab button that VoiceOver doesn't reach): accepted |
 | 2026-10-10 | #60 | Backend PR 3: Google Sign-In (`POST /auth/oauth/google`), `user_identities`, nullable `password_hash` | Backend QA: full suite 1411 passed, 1 skipped, 98%, no xfails. JWKS stubbed with local RSA keys: aud, iss, exp/iat leeway, kid refetch throttle; every linking branch (gmail, hd, 409 `account_exists_use_password`, 409 `identity_conflict`, 403 unverified); migration 0005 round trip; account deletion removes identities | **PASS** | none (BE-15, BE-16 fixed in the PR) |
 | 2026-10-11 | #63 | gunicorn gthread (one process, 4 threads) | Backend QA: full suite 1421 passed, 98%. A real gunicorn with a stubbed 3 s Gemini call: fast requests < 1 s during it, 4 slow calls ≈ 3.1 s versus 12 s serial. Negative controls (old sync entrypoint, a no-op JWKS lock) fail as expected | **PASS** | none |
+| 2026-10-11 | #62 | Data: MeatScan, DaFiF, Food Spoilage Status; leakage-harness fixes (Jose / LemurTech22) | **Independent** ML + pipeline QA (food-main-mac) on the **full 8-source build** (11,762 / 1,263 / 1,526): leakage PASS on every source (AgriFreshNET pHash 0.40%, others 0%), stratification PASS (0 timestamped spans), parent_sibling 0; `--no-phash-merge` finds the same 0 spans. Held-out spoiled 495 (AgriFreshNET 338, fresh/stale 101, DaFiF 48, Food Spoilage Status 8, VegQual 0; MeatScan train-only). Suites: serve 14, ocr 89, yolo 64, eval 215, pipeline 163. The author's own 3-source QA is kept as his record | **PASS** | ML-51, 52, 55, 62 (named risks); PL-5 (won't fix) |
 
 **Not yet tested anywhere:** the live ML service and YOLO accuracy (paused: a teammate owns the models), GLM-OCR image-to-text, Google Sign-In end to end, and the integration demo path.
 
@@ -101,6 +102,18 @@ Severity: **blocker** (breaks demo path) · high · medium · low. Full repros a
 | BE-14 | low | Backend | A receipt coupon line (negative price) made the candidate batch fail on `POST /items` | fixed (#54) |
 | BE-15 | low | Backend | A malformed JWKS `keys` value caused a 500 | fixed (#60): 502 or stale cache |
 | BE-16 | low | Backend | Two `email_verified` normalisers disagreed | fixed (#60): one shared normaliser |
+| ML-45 – ML-47 | low | ML | Gemini receipt structuring | fixed (#54) |
+| ML-48, ML-49, ML-54 | medium | ML | The leakage harness skipped new sources; hyphenated timestamps weren't parsed | fixed (#62) |
+| ML-50 | high | ML | Roboflow copies of one photo could straddle splits | fixed (#62): parent-photo grouping |
+| ML-51 | info | ML | Fish held-out is one unseen batch | named risk |
+| ML-52 | medium | ML | Beef spoiled class is scene-confounded | named risk: beef train-only |
+| ML-53, ML-56 | medium | ML | Demoted cells weren't moved wholly to train | fixed (#62) |
+| ML-55 | medium | ML | Fish tray colour tracks the label | named risk |
+| ML-57, ML-61 | medium/low | ML | The notebook swallowed `train.py` crashes and failing `pip install`s | fixed (#62) |
+| ML-59, ML-60 | medium | ML | stratification_check's span rule never fired; the pHash merge loosened the check | fixed (#62) |
+| ML-62 | medium | ML | VegQual (the only real-defect potato/onion source) has 0 held-out spoiled, so it isn't measurable | named risk: report its spoiled recall as N/A |
+| PL-5 | medium | Pipeline | MeatScan minute timestamps chain into about 5 sessions | won't fix (owner): beef train-only |
+| PL-6 – PL-8 | low | Pipeline | Ingest fixes; the QA harness skipped real-CSV tests from worktrees | fixed (#62) |
 | IOS-4 – IOS-11 | medium/low | iOS | Foundation review and QA findings (tab selection after Add, date decoding, AX5 toast wrapping, a11y ids, ad-hoc sizes); detail in `qa/ios.md` | fixed (#47) |
 | ML-1 – ML-6 | medium/low | ML | Receipt parser: qty-first lines, trailing UPCs, Costco item numbers, "Merchandise Total", EUR totals, OCR-spaced decimals | fixed (#3) |
 | ML-7 – ML-9 | medium/low | ML | Mixed-case total phrases, voided items, and multi-buy lines | fixed (#8) |
