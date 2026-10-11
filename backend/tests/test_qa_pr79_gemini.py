@@ -302,7 +302,7 @@ def test_enrich_call_gets_a_client_timeout_other_purposes_do_not(app, client, us
     assert inspect.signature(gemini._generate).parameters["timeout_s"].default is None
 
 
-def test_every_existing_gemini_function_leaves_timeout_unset(app, monkeypatch, gemini_on):
+def test_every_non_enrich_gemini_function_sets_the_gemini_timeout(app, monkeypatch, gemini_on):
     fake = FakeGenai(lambda k, kw: "[]").install(monkeypatch)
     with app.app_context():
         for fn in (lambda: gemini.parse_text("milk"), lambda: gemini.suggest_recipes([], 3, []),
@@ -312,7 +312,8 @@ def test_every_existing_gemini_function_leaves_timeout_unset(app, monkeypatch, g
                 fn()
             except gemini.UpstreamError:
                 pass
-    assert fake.client_kwargs and all(k == {} for k in fake.client_kwargs)
+    # BE-23 fix: these used to be unbounded (k == {}); they now carry GEMINI_TIMEOUT_S (30 s default, in ms)
+    assert fake.client_kwargs and all(k["http_options"].timeout == 30000 for k in fake.client_kwargs)
 
 
 def test_transient_504_is_not_retried_on_enrich_so_the_budget_is_one_timeout(app, client, user, monkeypatch, gemini_on):

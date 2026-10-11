@@ -7,7 +7,7 @@ import math
 import re
 import time
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 from ..models import CATEGORIES, FOOD_GROUPS
 
@@ -85,6 +85,19 @@ def _unwrap(data, list_key):
         raise UpstreamError(f"Gemini returned an unusable response: {e}") from e
 
 
+def _default_timeout() -> float:
+    """HTTP timeout for every Gemini call except enrichment (which has ENRICH_TIMEOUT_S). Worst case one
+    call holds a request thread for 2 attempts x GEMINI_TIMEOUT_S + RETRY_DELAYS_S (30 s default: 61.5 s),
+    under gunicorn's 120 s --timeout (backend/entrypoint.sh)."""
+    if not has_app_context():  # prompt-building helpers are also called outside a request (tests, scripts)
+        return 30.0
+    try:
+        v = float(current_app.config.get("GEMINI_TIMEOUT_S", 30))
+    except (TypeError, ValueError):
+        return 30.0
+    return v if math.isfinite(v) and v > 0 else 30.0
+
+
 def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "generate",
               list_key: str | None = None, timeout_s: float | None = None, retry: bool = True,
               as_object: bool = False):
@@ -149,7 +162,8 @@ _ITEM_SCHEMA = (
 
 def parse_text(text: str) -> list[dict]:
     return _unwrap(_generate(f"Extract the grocery/food items from this text:\n{text}", _ITEM_SCHEMA,
-                             purpose="parse_text", list_key="items"), "items")
+                             purpose="parse_text", list_key="items",
+                             timeout_s=_default_timeout()), "items")
 
 
 def detect_from_image(image: bytes, mime: str, mode: str) -> list[dict]:
@@ -161,7 +175,8 @@ def detect_from_image(image: bytes, mime: str, mode: str) -> list[dict]:
             "confidence:number 0-1, freshness:fresh|semi_fresh|spoiled}." % (", ".join(CATEGORIES), ", ".join(FOOD_GROUPS)))
     part = types.Part.from_bytes(data=image, mime_type=mime)
     prompt = "Single item close-up." if mode == "single" else "Fridge/pantry shelf photo."
-    return _unwrap(_generate([part, prompt], hint, purpose="detect", list_key="candidates"), "candidates")
+    return _unwrap(_generate([part, prompt], hint, purpose="detect", list_key="candidates",
+                             timeout_s=_default_timeout()), "candidates")
 
 
 _RECEIPT_SCHEMA = {
@@ -187,7 +202,7 @@ def categorize_receipt_lines(names: list[str]) -> list[dict]:
             "return one object in the same order: display_name (plain readable product name without brand "
             "codes, sizes or prices, e.g. '2% milk'), category, food_group, storage (where it is kept at home).")
     data = _unwrap(_generate(json.dumps(names), hint, _RECEIPT_SCHEMA, purpose="receipt_categorize",
-                             list_key="items"), "items")
+                             list_key="items", timeout_s=_default_timeout()), "items")
     data = [d if isinstance(d, dict) else {} for d in data][: len(names)]
     return data + [{}] * (len(names) - len(data))
 
@@ -288,10 +303,12 @@ def suggest_recipes(items: list[dict], max_results: int, dietary: list[str]) -> 
     if any(i.get("must_use") for i in items):
         hint += (" Items marked must_use are the ones the person wants to cook now: every recipe must use at "
                  "least one of them.")
-    prompt = json.dumps({"items_soonest_expiring_first": items, "max_results": max_results,
+    ask = min(max_results + 2, 12)  # a little spare: the route drops malformed recipes, then cuts to max_results
+    prompt = json.dumps({"items_soonest_expiring_first": items, "max_results": ask,
                          "dietary": dietary})
-    return _unwrap(_generate(prompt, hint, _RECIPE_SCHEMA, purpose="recipes", list_key="recipes"),
-                   "recipes")[:max_results]
+    return _unwrap(_generate(prompt, hint, _RECIPE_SCHEMA, purpose="recipes", list_key="recipes",
+                             timeout_s=_default_timeout()),
+                   "recipes")[:ask]
 
 
 _PER_100G_SCHEMA = {
@@ -355,5 +372,6 @@ def enrich_items(items: list[dict], crops: list, facets=("expiry", "nutrition"))
 def estimate_shelf_life(items: list[dict]) -> list[int | None]:
     """Days until expiry for each {name, category, storage}; None where unknown."""
     hint = "Return JSON: a list of integers (days of shelf life), one per input item, in order."
-    data = _unwrap(_generate(json.dumps(items), hint, purpose="shelf_life", list_key="days"), "days")
+    data = _unwrap(_generate(json.dumps(items), hint, purpose="shelf_life", list_key="days",
+                             timeout_s=_default_timeout()), "days")
     return [d if isinstance(d, int) and 0 <= d <= 3650 else None for d in data][: len(items)]
