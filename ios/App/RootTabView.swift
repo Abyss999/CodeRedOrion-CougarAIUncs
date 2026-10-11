@@ -41,6 +41,8 @@ struct RootTabView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var selection: AppTab = .home
     @State private var showAdd = false
+    /// `-UITestOpenImpact` (DEBUG): ImpactView is presented on launch until Home links to it.
+    @State private var showImpact = false
     private let tabOrder: [AppTab] = [.home, .recipes, .add, .fridge, .social]
 
     var body: some View {
@@ -63,6 +65,12 @@ struct RootTabView: View {
         .tint(Theme.Colors.forest)
         .background(TabBarIdentifiers(entries: tabOrder.map { .init(id: $0.accessibilityID, label: $0.title) }))
         .sheet(isPresented: $showAdd) { AddSheetView() }
+        .fullScreenCover(isPresented: $showImpact) { ImpactView(api: env.api) }
+        .task {
+            #if DEBUG
+            if env.launch.openImpact { showImpact = true }
+            #endif
+        }
     }
 
     /// Selecting Add presents the sheet and never writes `.add` to `selection`, so the bar keeps
