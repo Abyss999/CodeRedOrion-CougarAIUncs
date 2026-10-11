@@ -869,3 +869,21 @@ Re-check of the four PR #79 bugs against main at `02b06e8` (builder fix `d6b0a52
 Nothing needed restoring. The extra strictness lives in `test_qa_be19_22.py`.
 
 **Runs (targeted):** `test_qa_be19_22.py`, `test_qa_pr79_crops.py`, `test_qa_pr79_gemini.py`, `test_qa_pr79_contract.py`, `test_enrich_gemini.py`, `test_crops.py` and `test_recipes_focus.py`: 301 passed. No failures, so no full-suite run. No new bugs (highest id stays BE-22; `gh pr list` shows no open PRs).
+
+## B1-B4 sweep verification (qa/page-sweep-2026-10-11)
+
+New tests: `backend/tests/test_qa_sweep_b1_b4.py` (60 tests, includes parametrized cases). No feature code was edited. No new bugs (highest id stays BE-22); three low notes below.
+
+| Fix | Verdict | Evidence |
+|---|---|---|
+| B1 group items need current membership | **VERIFIED FIXED** | Ex-member who added the item: PATCH, remove and restore are `403 forbidden` and nothing is written (item, events and `/impact` unchanged). `remove-batch` and `restore-batch` are `404 not_found` for the ex-member item alone and mixed with a valid personal item, with nothing removed or restored. Current owner and a non-owner member still work, and rejoining restores access. |
+| B2 NUL in JSON | **VERIFIED FIXED** | `\u0000` in a value, a nested list or dict value, a dict key or a nested key returns `400 validation_error` on signup, login, friends, groups, join, items (create, PATCH, remove), parse-text, requests, remove-batch and share. The `DataError` handler returns 400, calls rollback, leaks no driver text, and the next request works. |
+| B3 caps | **VERIFIED FIXED** | Exactly at the limit is accepted and limit+1 is `400` for item name 200 (checked after strip), unit 32 (POST and PATCH), display_name 60, email 254 (signup, login, `POST /friends`), password 256 (signup and login), invite_code 64. A batch with one over-long name creates nothing. A failed PATCH does not half-apply. |
+| B4 path ids | **VERIFIED FIXED** | Malformed ids give `404 not_found` with "Group/User/Request/Listing/Item not found." on 12 routes. |
+
+**Notes (low, not fixed by QA):**
+- `POST /recipes/suggest` parses its own body and does not use `json_body`, so NUL in `dietary` is not rejected. It goes into the prompt only, not the database, so it is not a 500 (`test_recipes_suggest_nul_is_not_500`).
+- An ex-member's group items still count as "theirs" in `/recipes/suggest` and `/tips` (`Item.owner_id == uid` with no group filter, `routes/insights.py:230` and `:359`), and `GET /people/reachable?item_id=` still treats the owner as able to see the item (`routes/people.py:15`). These only read data the user added, and edits are blocked, but the item names stay visible to the ex-member.
+- Existence is consistent: the 403 for the ex-member owner only reveals an item the user already owned; single endpoints already returned 403 for other users' items, and batch returns 404.
+
+**Runs:** targeted 60 passed. Full suite (containerized runner, whole repo mounted): 2284 passed, 3 skipped, 1 failed on the first run (a wrong assertion in my own new recipes test, fixed); the targeted file then passed, so 2285 passed and 3 skipped in total. The earlier 8 env-only failures are gone.
