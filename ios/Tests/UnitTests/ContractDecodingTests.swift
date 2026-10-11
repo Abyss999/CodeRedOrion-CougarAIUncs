@@ -197,7 +197,7 @@ final class ContractDecodingTests: XCTestCase {
         XCTAssertEqual(a.audiences.hiddenCount, 2)
         XCTAssertEqual(a.audiences.groups.map(\.name), ["Dorm 4", "Roomies"])
         XCTAssertTrue(a.audiences.friends)
-        XCTAssertEqual(a.source, .group)
+        XCTAssertEqual(a.source.type, .group)
         XCTAssertEqual(a.groupId, "g-1")
         XCTAssertEqual(a.status, .open)
         XCTAssertNil(a.fulfilledBy)
@@ -205,10 +205,10 @@ final class ContractDecodingTests: XCTestCase {
         XCTAssertEqual(b.status, .fulfilled)
         XCTAssertEqual(b.fulfilledBy, "u-sam")
         XCTAssertEqual(b.fulfilledByName, "Sam")
-        XCTAssertEqual(b.source, .me)
+        XCTAssertEqual(b.source.type, .me)
         XCTAssertFalse(b.audiences.friends)
         XCTAssertNil(b.groupId)
-        XCTAssertEqual(r.requests[2].source, .friend)
+        XCTAssertEqual(r.requests[2].source.type, .friend)
     }
 
     func testRequestAudiencesToleratesMissingHiddenCountAndUnknownSource() throws {
@@ -217,7 +217,7 @@ final class ContractDecodingTests: XCTestCase {
          "fulfilled_by_name":null,"created_at":null,"audiences":{"friends":true,"groups":[]},"source":"other-future-value"}}
         """)
         XCTAssertEqual(r.request.audiences.hiddenCount, 0)
-        XCTAssertEqual(r.request.source, .friend)
+        XCTAssertEqual(r.request.source.type, .friend)
         XCTAssertEqual(r.request.status, .cancelled)
         XCTAssertNil(r.request.groupId)
         XCTAssertNil(r.request.createdAt)
