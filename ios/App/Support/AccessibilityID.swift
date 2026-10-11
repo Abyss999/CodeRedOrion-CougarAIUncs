@@ -40,7 +40,33 @@ enum AccessibilityID {
     enum Impact { static let screen = "impact" }
     enum Recipes { static let screen = "recipes" }
     enum Social { static let screen = "social" }
-    enum Auth { static let screen = "auth" }
+    enum Auth {
+        static let screen = "auth"
+        static let launch = "auth.launch"
+        static let launchError = "auth.launch.error"
+        static let launchRetry = "auth.launch.error.retry"
+        static let landing = "auth.landing"
+        static let landingSignUp = "auth.landing.signup"
+        static let landingLogIn = "auth.landing.login"
+        static let expiredBanner = "auth.expired.banner"
+        static let signUp = "auth.signup"
+        static let signUpName = "auth.signup.name"
+        static let signUpEmail = "auth.signup.email"
+        static let signUpPassword = "auth.signup.password"
+        static let signUpSubmit = "auth.signup.submit"
+        static let signUpError = "auth.signup.error"
+        static let signUpToLogIn = "auth.signup.login"
+        static let logIn = "auth.login"
+        static let logInEmail = "auth.login.email"
+        static let logInPassword = "auth.login.password"
+        static let logInSubmit = "auth.login.submit"
+        static let logInError = "auth.login.error"
+        static let logInToSignUp = "auth.login.signup"
+        /// Show/hide password toggle; `field` is `signup` or `login`.
+        static func passwordToggle(_ field: String) -> String { "auth.\(field).password.toggle" }
+        static let google = "auth.google"
+        static let googleAlert = "auth.google.alert"
+    }
     enum Settings { static let screen = "settings" }
 
     // Shared components. Per-instance ids (banner, form field) are passed in by the owning screen.

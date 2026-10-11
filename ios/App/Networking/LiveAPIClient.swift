@@ -145,7 +145,7 @@ final class LiveAPIClient: APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.network("No HTTP response") }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 && authenticated {
-                await auth.signOut()
+                await auth.expireSession()
                 throw APIError.unauthorized
             }
             if let body = try? APICoding.decoder.decode(APIErrorBody.self, from: data) {

@@ -59,7 +59,7 @@ actor MockAPIClient: APIClient {
         if let e = behavior.failures[method] { throw e }
         if authenticated, behavior.expiredSession {
             signedInUser = nil
-            await auth?.signOut()
+            await auth?.expireSession()
             throw APIError.unauthorized
         }
         if authenticated, auth != nil, signedInUser == nil, await auth?.isSignedIn == false { throw APIError.unauthorized }

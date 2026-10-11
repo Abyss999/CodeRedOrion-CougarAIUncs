@@ -8,7 +8,7 @@ struct FoodWasteReducerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootTabView()
+            AuthGate()
                 .environment(env)
                 .environment(\.reduceMotionOverride, env.launch.reduceMotion ? true : nil)
                 .environment(\.undoWindowOverride, env.launch.undoWindow)
