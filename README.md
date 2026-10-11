@@ -134,32 +134,9 @@ For the product plan, read [IDEA.md](docs/IDEA.md). Technical choices are record
 [DECISIONS.md](docs/DECISIONS.md), with architecture in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Contributors and coding agents should start with [CLAUDE.md](CLAUDE.md) and [HANDOFF.md](HANDOFF.md).
 
-## Data and models
-
-Food detection and freshness (`fresh`, `semi_fresh` shown as "Use soon", `spoiled`) are YOLO26 models trained on
-Colab from `ml/yolo/train_colab.ipynb`; until a trained model is served, photos use the Gemini fallback. The data
-pipeline (`python -m pipeline`, see [PIPELINE.md](docs/PIPELINE.md)) fetches and stages each source, and
-`ml/yolo/prepare_dataset.py` merges them into one leakage-checked dataset. Sources and class maps are in
-[`ml/yolo/sources.json`](ml/yolo/sources.json); training steps are in [ML.md](docs/ML.md) section 0.
-
-| Source | What it adds | Licence |
-|---|---|---|
-| VegQual (figshare) | fresh vs defective vegetables, boxes | CC BY 4.0 |
-| Fridge objects, Hien_Fridge (Roboflow) | fridge items, boxes | CC BY 4.0 |
-| Fresh and stale fruits and vegetables (Kaggle, raghavrpotdar) | fresh vs stale produce | CC0 |
-| AgriFreshNET (Mendeley) | 8 produce x fresh / semi-fresh / rotten | CC BY 4.0 |
-| MeatScan (Zenodo) | fresh vs spoiled cow meat | CC BY 4.0 |
-| DaFiF (Mendeley) | fresh vs spoiled fish (mackerel, tilapia, tuna), labelled by days on ice | CC BY 4.0 |
-| Food Spoilage Status (Roboflow) | fresh vs spoiled apple, banana, pepper, orange, potato, bitter gourd | CC BY 4.0 |
-| food-hvk7g (Roboflow) | bananas, oranges | CC BY 4.0; pending (no downloadable version) |
-
-Known data risks (beef train-only and scene-confounded, fish tray colour tracks the label, fish held-out is one
-unseen batch) are listed in [PIPELINE.md](docs/PIPELINE.md#named-risks-of-the-2026-10-10-sources-data-owner-keep-them-in-risks-labelled).
-
 ## Data attribution
 
-The vision pipeline's dataset sources include **Fridge objects** (wajeeha workspace, Roboflow), **Hien_Fridge**
-(gracelearning, Roboflow), **VegQual** (figshare), **AgriFreshNET** (Risdin et al., Mendeley Data), **MeatScan**
-(Data in Brief 2025, Zenodo), **DaFiF** (Prasetyo et al., Mendeley Data) and **Food Spoilage Status** (food-monitoring,
-Roboflow), all under CC BY 4.0, plus a CC0 fresh/stale fruit and vegetable dataset from Kaggle. Authors, source links,
-preparation changes, and licensing details are listed in [ML attributions](docs/ML.md#attributions).
+The vision pipeline’s dataset sources include **Fridge objects** (wajeeha workspace, Roboflow),
+**Hien_Fridge** (gracelearning, Roboflow), and **VegQual** under CC BY 4.0, plus a CC0 fresh/stale
+fruit and vegetable dataset from Kaggle. Authors, source links, preparation changes, and
+licensing details are listed in [ML attributions](docs/ML.md#attributions).

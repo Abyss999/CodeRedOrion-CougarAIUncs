@@ -2,7 +2,7 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-10 (checkpoint 5b; "Data / ML track" section updated by the data owner's session, LemurTech22, with #62 open). **`food-main` (VPS) only orchestrates**: it plans, rules,
+_Last updated: 2026-10-10 (checkpoint 5b). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
 building** (owner decision): builder + QA sub-agents, Xcode and simulators, Docker and every test run,
 backend included, plus any `.github/workflows` push (the VPS token can't). It starts from the "In flight on
@@ -21,22 +21,20 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **merged (#57)** | 965 passed / 98%; BE-9, BE-10, BE-13 fixed |
 | Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **merged (#60)**; 1411 passed / 98% | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **merged (#47)** | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
-| ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS; **8 sources once #62 merges** |
-| New data sources: **MeatScan** (cow meat), **DaFiF** (fish), **Food Spoilage Status** (Roboflow); food-hvk7g pending | `feat/datasets-spoilage-meat-fish`, **#62** | Pipeline QA PASS (PL-5 open), ML QA PASS with named risks (ML-51/52/55); see "Data / ML track" |
-| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22 owns it** (owner, 2026-10-10). Other sessions don't schedule it unless the owner asks | notebook ready; the next Colab run picks up the new sources |
+| ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
+| ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **paused: a teammate owns the models** (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
 | Receipts → full candidates (#54, Jose / LemurTech22) | **merged (#54)**; BE-11–14 fixed | ML check PASS (independent) |
 | Design | 22 screens approved; canvas is the source (renamed BiteDown) | `docs/design/SCREENS.md`, `MOTION.md`, `DESIGN_SYSTEM.md` |
 | Demo connectivity | merged | `scripts/demo_tunnel.sh` (Cloudflare quick tunnel, HTTP/2) |
 
 ## Next steps
-1. **ML models: the teammate's track (owner decision, 2026-10-10; teammate = LemurTech22, see "Data / ML track").** Other sessions don't schedule agents for any of these unless the owner asks:
+1. **ML models: off the queue (owner decision, 2026-10-10).** A teammate is working on them. Don't schedule agents for any of these unless the owner asks:
    - the Colab run and the `export.zip` YOLO gate
    - weights in `ml/serve` and the from-photo `source: "yolo"` check
    - GLM-OCR on MPS
    - further `ml/yolo`, `ml/eval` or pipeline data work
 
    What's merged stays as it is. The photo flow uses the Gemini fallback.
-   **Data owner's next actions:** get #62 merged (Pipeline + ML QA PASS, CI green), then run Colab: T4, Secrets `ROBOFLOW_API_KEY` (private) + `KAGGLE_API_TOKEN`, DRY_RUN then the real run with the same RUN_ID. Hand `export.zip` to ML QA for the YOLO gate; quote spoiled recall per source with Wilson CIs (named risks in `docs/PIPELINE.md`).
 2. **Mac (`food-main-mac`):** the iOS foundation (#47) re-verify, then merge. Then build the screens in this order, one PR each with iOS QA, screenshots, a motion recording and a Design delta:
    1. Fridge + removal (+ Undo)
    2. Add + photo review + text / barcode / receipt
@@ -51,22 +49,6 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
-
-## Data / ML track (teammate LemurTech22)
-| Item | Branch / PR | State | Next action |
-|---|---|---|---|
-| Receipt candidates + Gemini guide/retry | `feat/receipt-gemini-link`, **#54** | **merged** | `food-main`: record the receipt-categorisation ruling in `DECISIONS.md` if not done |
-| MeatScan + DaFiF + Food Spoilage Status sources | `feat/datasets-spoilage-meat-fish`, **#62** | Pipeline QA PASS; ML QA PASS (gates on real data), named risks ML-51/52/55 kept by the data owner | `food-main`: review, merge, record the data owner's keep-with-risks ruling in `DECISIONS.md`. The PR also edits `CLAUDE.md` (data rules) and this file at the data owner's request |
-| Roboflow `food-spoilage-status` | enabled (v1) | done | the private key in `.env` works (2026-10-10); use the same key as the Colab secret |
-| Roboflow `food-hvk7g` | `pending` in `sources.json` | blocked | 0 generated versions and no freshness labels: fork it into our workspace and generate a version, or drop it |
-| Colab training run | `ml/yolo/train_colab.ipynb` | waiting | **data owner, in the browser:** T4, Secrets `ROBOFLOW_API_KEY` (private) + `KAGGLE_API_TOKEN`, DRY_RUN then the real run with the same RUN_ID. The Drive cache is now keyed by a `sources.json` hash (`fwr_runs/<RUN_ID>/data_<DATA_VER>/`), so the new sources are always used. Hand `export.zip` to ML QA for the YOLO gate |
-| Real fridge photos (ML-15, ML-17) | - | open | about 50 dim / warm-bulb fridge photos incl. spoiled items, plus a few dozen fridge-shelf shots, hand-tagged; only a person can take them |
-
-**Data notes:**
-- Data lives in `../mldata/` (`raw/agrifreshnet`, `raw/meatscan`, `raw/dafif`); the repo holds none.
-- MeatScan is **never downloaded whole** (25.4 GB RAR, Zenodo serves about 1.6 MB/s): `fetch-meatscan` range-reads originals via the archive's QuickOpen index and needs `pip install unrar-cffi==0.2.2` (Debian/Ubuntu `7z` has no RAR codec).
-- DaFiF labels come from storage days (owner rule: 1-3 fresh, 9-11 spoiled, 4-8 dropped); the companion paper's exact cut-offs are paywalled.
-- PL-5 (medium, open): MeatScan's minute-resolution capture times chain into about 4-5 sessions under the 300 s rule, so beef held-out and val are each a whole session (honest, but coarse).
 
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
@@ -128,7 +110,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 
 ## QA status
 - **Backend:** PASS on `main` after #57 (965 passed, 98%). Open: BE-7 (info). BE-11, 12 and 14 are fixed on #54, pending merge.
-- **ML:** data, pipeline, parser and notebook PASS. #62 (new sources): Pipeline QA PASS, ML QA PASS on real data with named risks ML-51/52/55. YOLO not evaluated yet (the teammate's Colab run). Open: ML-11–14, ML-28, ML-32, ML-40, PL-5.
+- **ML:** data, pipeline, parser and notebook PASS. YOLO not evaluated (paused: a teammate owns the models). Open: ML-11–14, ML-28, ML-32, ML-40.
 - **Design / motion:** motion demos PASS (two rounds).
 - **iOS:** first build and dark theme PASS. Foundation in QA.
 - **Integration:** not run yet.

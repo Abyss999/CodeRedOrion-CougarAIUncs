@@ -85,7 +85,6 @@ Detail lives in [`qa/backend.md`](qa/backend.md) and [`qa/ml.md`](qa/ml.md). The
 | 2026-10-11 | #63 | gunicorn gthread (one process, 4 threads) | Backend QA: full suite 1421 passed, 98%. A real gunicorn with a stubbed 3 s Gemini call: fast requests < 1 s during it, 4 slow calls ≈ 3.1 s versus 12 s serial. Negative controls (old sync entrypoint, a no-op JWKS lock) fail as expected | **PASS** | none |
 
 **Not yet tested anywhere:** the live ML service and YOLO accuracy (paused: a teammate owns the models), GLM-OCR image-to-text, Google Sign-In end to end, and the integration demo path.
-| 2026-10-10 | #62 | Data: MeatScan, DaFiF, Food Spoilage Status sources; `prepare_dataset` leakage fixes | Pipeline QA: `qa_new_sources.py` 95 passed + 1 strict xfail (PL-5), `pipeline/tests` 163; PL-6/PL-7 fixed. ML QA on the real data (three new sources prepared: train 1,236 / val 119 / held-out 120): leakage gate ML-21 PASS, stratification PASS, `parent_sibling_check` 0, flagged MeatScan pHash pairs inspected by eye (same cuts); `ml/eval` 215 | **PASS** (named risks ML-51/52/55 kept by the data owner) | PL-5 (medium), ML-51/52/55 (named risks) |
 
 ## Bug list
 Severity: **blocker** (breaks demo path) · high · medium · low. Full repros are in the area logs.
@@ -118,14 +117,5 @@ Severity: **blocker** (breaks demo path) · high · medium · low. Full repros a
 | ML-42 | high | ML | Mendeley returns 403 for urllib's default User-Agent, which would have stopped the AgriFreshNET cell on Colab | fixed (#31) |
 | ML-43, ML-44 | low | ML | Pin the AgriFreshNET SHA-256 and select by filename; reject a RUN_ID ending `_dry` | fixed (#31) |
 | ML-32 | medium | ML | hien_fridge is one fixed camera, so its detection metrics are optimistic (logged as ML-27 in `qa/ml.md`; renumbered because A1 used ML-27) | open: report separately |
-| ML-45 – ML-47 | low/medium | ML | Gemini receipt numbers: thousands separators, NaN/inf, null Gemini total discarding the parser's | fixed (#54) |
-| ML-48, ML-49, ML-54 | medium/low | ML QA harness | leakage_check hard-coded sources; hyphenated Roboflow timestamps missed; None-vs-0 false failure | fixed (#62) |
-| ML-50 | high | ML | Roboflow's own rotations/crops of one photo straddled splits (food_spoilage_status) | fixed (#62, `parent_stem`) |
-| ML-51 | info | ML | DaFiF held-out is one unseen species-batch (tuna) | named risk (#62) |
-| ML-52 | medium | ML | MeatScan spoiled class is one scene; all beef is one split unit (train-only) | named risk (#62) |
-| ML-53, ML-56 | medium | ML | demoted cells kept held-out groups; potato/spoiled train share < 50% | fixed (#62) |
-| ML-55 | medium | ML | DaFiF tray colour tracks the freshness label | named risk (#62) |
-| PL-5 | medium | Pipeline | MeatScan minute-resolution times chain into about 5 sessions | open |
-| PL-6, PL-7 | low | Pipeline | impossible workbook dates raised; archive without CSV raised StopIteration | fixed (#62) |
 
 **Blind sets:** holdout v1 and v2 have both been used to fix bugs, so neither is blind any more. **The next parser change needs a fresh blind set v3**, written by QA and never shown to the builder.

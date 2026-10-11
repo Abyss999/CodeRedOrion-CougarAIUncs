@@ -117,16 +117,6 @@ so stop it after the demo.
 
 Never commit them.
 
-**Fetching the training sources locally** (outside the repo, in `../mldata/`; the Colab notebook runs the same commands):
-```bash
-.venv/bin/pip install -r pipeline/requirements.txt unrar-cffi==0.2.2     # unrar-cffi: MeatScan only (Debian/Ubuntu 7z has no RAR codec)
-.venv/bin/python -m pipeline fetch-meatscan --out ../mldata/raw/meatscan --per-class 450   # range reads; never downloads the 25 GB RAR
-.venv/bin/python -m pipeline fetch-dafif --out ../mldata/raw/dafif --max-per-cell 300
-.venv/bin/python -m pipeline --data-root ../mldata/pipeline_data ingest-dataset --dir ../mldata/raw/meatscan --name meatscan --adapter meatscan --max-per-cell 300
-.venv/bin/python -m pipeline --data-root ../mldata/pipeline_data ingest-dataset --dir ../mldata/raw/dafif --name dafif --adapter dafif --max-per-cell 300
-```
-Roboflow sources (fridge_objects, hien_fridge, food_spoilage_status) need the private key; see `docs/PIPELINE.md` for every source.
-
 Light, CPU-only tests (no torch) run anywhere:
 ```bash
 python3.12 -m venv .venv-ml && .venv-ml/bin/pip install pytest flask pillow numpy
