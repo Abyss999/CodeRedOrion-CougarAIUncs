@@ -339,7 +339,7 @@ No new bugs (BE-10 unused). Observation: a receipt price above numeric(10,2) (e.
 
 _Independent backend QA (food-main-mac). Supersedes the PASS in the section above: it found BE-11..BE-13, which the author-side run did not cover. Tests live in `tests/test_receipt_candidates_qa.py`, alongside the author's `tests/test_receipt_candidates.py`._
 
-**Result: PASS pending the full-suite run, no open bugs.** BE-13 is fixed via #57 (main) and verified on #54 after the merge (8a1f961); see the last subsection. BE-11 and BE-12 are fixed on #54 (ported fix, commit 7044932) and re-verified; see the re-verification below. First run (before the fix): `pytest -q tests/test_receipt_candidates_qa.py` = 85 passed, 14 xfailed (strict: BE-11 x6, BE-12 x4, BE-13 x4). The full suite has not been run yet (shared DB, possible xcodebuild). Gemini is never called: stubbed at `google.genai.Client` (so the real `_generate` retry/logging and the SDK's `GenerateContentConfig` validation of the receipt enum schema run) or at `gemini.categorize_receipt_lines`; OCR stubbed at `ml.ocr`; `requests.get/post` raise.
+**Result: PASS (final).** Full suite at d4ced95: 1215 passed, 1 skipped, coverage 98%. No open bugs; see "Final verdict" at the end of this section. History follows. BE-13 is fixed via #57 (main) and verified on #54 after the merge (8a1f961); see the last subsection. BE-11 and BE-12 are fixed on #54 (ported fix, commit 7044932) and re-verified; see the re-verification below. First run (before the fix): `pytest -q tests/test_receipt_candidates_qa.py` = 85 passed, 14 xfailed (strict: BE-11 x6, BE-12 x4, BE-13 x4). The full suite has not been run yet (shared DB, possible xcodebuild). Gemini is never called: stubbed at `google.genai.Client` (so the real `_generate` retry/logging and the SDK's `GenerateContentConfig` validation of the receipt enum schema run) or at `gemini.categorize_receipt_lines`; OCR stubbed at `ml.ocr`; `requests.get/post` raise.
 
 New file: `backend/tests/test_receipt_candidates_qa.py`.
 
@@ -409,7 +409,7 @@ Targeted runs, from `backend/` on `fwr_test`:
 - **Never sent to Gemini:** in the stubbed request, the contents are exactly `["GV 2% MLK GAL", "Coupon Cookies"]`.
 - **Changed test:** `test_route_price_never_500[-1.00--1.0]` is removed from that parametrisation. A negative price is now dropped, not returned, and `test_route_negative_price_dropped_not_500` checks this for `"-1.00"`, -0.5, `"$-1.00"` and `"-$1.00"`.
 
-**Verdict for #54 backend: PASS pending the full suite.** BE-11, BE-12 and BE-14 are fixed. BE-13 is tracked (strict xfail) until the rebase onto PR 2.
+**Interim verdict for #54 backend (superseded by the final verdict below): PASS pending the full suite.** BE-11, BE-12 and BE-14 are fixed. BE-13 is tracked (strict xfail) until the rebase onto PR 2.
 
 ### BE-13 fixed via #57, verified on #54 after merge 8a1f961
 Main (#57) was merged into #54 at 8a1f961. `_generate` now runs the retry loop, then `json.loads`, then the `_as_list` shape check. Any scalar or unusable shape raises `UpstreamError` there, with one usage line. `categorize_receipt_lines` passes `list_key="items"`.
@@ -432,4 +432,16 @@ Targeted runs, from `backend/` on `fwr_test`:
 | `test_ai_endpoints.py` | 28 passed |
 | **Total** | **384 passed, 0 xfail/xpass** |
 
-**Verdict for #54 backend: PASS pending the full suite, no open bugs** (BE-11, BE-12 and BE-14 fixed on #54; BE-13 fixed via #57).
+**Interim verdict for #54 backend (superseded by the final verdict below): PASS pending the full suite, no open bugs** (BE-11, BE-12 and BE-14 fixed on #54; BE-13 fixed via #57).
+
+### Final verdict for #54 (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `feat/receipt-gemini-link` at HEAD d4ced95 (the merge of main plus the BE-13 test flip, clean tree), from `backend/` on `fwr_test`: `pytest -q --cov=app` = **1215 passed, 1 skipped in 122 s, total coverage 98%**. No xfails or xpasses remain.
+
+| ID | Severity | Fixed in | Status |
+|---|---|---|---|
+| BE-11 | low | #54 (ported fix): total/tax/payment lines dropped by the tail rule, never sent to Gemini | fixed, verified |
+| BE-12 | low | #54 (ported fix): `categorized_by` is `"gemini"` only when an entry contributed a field | fixed, verified |
+| BE-13 | low | #57 (main), merged into #54: scalar/unusable Gemini JSON is an `UpstreamError` -> heuristic + 200, one `status=error` usage line | fixed, verified on #54 |
+| BE-14 | low/medium | #54 (ported fix): coupon/discount lines and negative prices dropped, posting the Add batch back gives 201 | fixed, verified |
+
+**No open bugs.** This independent verdict supersedes the author's self-signed PASS in the "receipt candidates + Gemini category guide + retry" section above for the merge gate; that section is kept as the author's record. The known-behaviour notes above (tail rule; a bare card-network line such as "MC" or "DISCOVER" is dropped as payment) still apply and are for the orchestrator's record, not open bugs.
