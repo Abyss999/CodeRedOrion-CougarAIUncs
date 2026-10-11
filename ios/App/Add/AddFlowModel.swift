@@ -1,8 +1,7 @@
 import SwiftUI
 import Observation
 
-/// Where the Add sheet's other entry points lead. Add text, barcode and receipt are built in the next PR (2b);
-/// until then they land on `AddPlaceholderView`.
+/// Where the Add sheet's other entry points lead (routed by `AddDestinationView`).
 enum AddDestination: String, Hashable {
     case text, say, barcode, receipt
 
