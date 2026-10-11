@@ -13,18 +13,21 @@ system body type).
 
 | Screen | Artboard | Status |
 |---|---|---|
-| Sign in (sign up / log in, green buttons with light text) | `screens/Main.dc.html` | awaiting approval |
-| Home + tab bar (Home, Recipes, + Add, Fridge, Social) | `screens/Home.dc.html` | awaiting approval |
-| Fridge / Pantry list (segmented storage, expiry badges, swipe to remove, spoilage flag) | `screens/Fridge.dc.html` | awaiting approval |
-| Removal sheet, step 1: outcome (used / gave away / threw away) | `screens/RemoveSheet.dc.html` | awaiting approval |
-| Removal sheet, step 2: waste reason (one tap) | `screens/RemoveReason.dc.html` | awaiting approval |
-| Add sheet (fridge photo, one item, type/say, barcode, receipt) | `screens/AddSheet.dc.html` | awaiting approval |
-| Social (Food Pantry widget, sticky-note requests, + friends/groups) | `screens/Social.dc.html` | awaiting approval |
-| Impact Dashboard (CO₂e hero, saved/money, weekly chart, waste reasons) | `screens/Impact.dc.html` | awaiting approval |
-| Add: review photo results (detected items, predicted expiry, spoilage flag, untick to skip) | `screens/PhotoReview.dc.html` | awaiting approval |
-| Recipes tab (filters, best match using expiring items, more suggestions) | `screens/Recipes.dc.html` | awaiting approval |
+| Sign in (sign up / log in, green buttons with light text) | `screens/Main.dc.html` | approved 2026-10-10 |
+| Home + tab bar (Home, Recipes, + Add, Fridge, Social) | `screens/Home.dc.html` | approved 2026-10-10 |
+| Fridge / Pantry list (segmented storage, expiry badges, swipe to remove, spoilage flag) | `screens/Fridge.dc.html` | approved 2026-10-10 |
+| Removal sheet, step 1: outcome (used / gave away / threw away) | `screens/RemoveSheet.dc.html` | approved 2026-10-10 |
+| Removal sheet, step 2: waste reason (one tap) | `screens/RemoveReason.dc.html` | approved 2026-10-10 |
+| Add sheet (fridge photo, one item, type/say, barcode, receipt) | `screens/AddSheet.dc.html` | approved 2026-10-10 |
+| Social (Food Pantry widget, sticky-note requests, + friends/groups) | `screens/Social.dc.html` | approved 2026-10-10 |
+| Impact Dashboard (CO₂e hero, saved/money, weekly chart, waste reasons) | `screens/Impact.dc.html` | approved 2026-10-10 |
+| Add: review photo results (detected items, predicted expiry, spoilage flag, untick to skip) | `screens/PhotoReview.dc.html` | approved 2026-10-10 |
+| Recipes tab (filters, best match using expiring items, more suggestions) | `screens/Recipes.dc.html` | approved 2026-10-10 |
+| Sign up (Google / email) | `screens/SignUp.dc.html` | added 2026-10-10 |
+| Log in (Google / email, inline error state) | `screens/LogIn.dc.html` | added 2026-10-10 |
+| Item detail / edit, Type or say it, Receipt review, Barcode result, Recipe detail, Food Pantry, Ask for something, Friends & groups, Group, Profile & settings | `screens/*.dc.html` | added 2026-10-10 (idea audit), see [`SCREENS.md`](SCREENS.md) |
 
-**Approval:** record who approved and the date here before Wave 2 (iOS) starts. Changes requested
+**Approval:** ✅ **Approved by the owner on 2026-10-10** (relayed through the Mac session), including feedback rounds 1–2, the native glass tab bar, "Use soon" and the colourful food-group icons. Wave 2 (iOS) has started. Changes requested
 on the canvas get mirrored back into `screens/` and `DESIGN_SYSTEM.md`.
 
 ## Owner feedback round 1 (2026-10-10), applied
@@ -37,12 +40,27 @@ These need two backend additions (see `docs/API.md` once built):
 - `food_group` on items and candidates.
 - `macros` on recipe suggestions.
 
+## Owner decisions, 2026-10-10 (round 2)
+- **Native glass tab bar**, with Add as a tab. All tabbed artboards are updated.
+- **`semi_fresh` is a product feature.** Food that's fine but should be eaten soon gets a **"Use soon"** badge on the Fridge, and "ripe, use soon" on photo review.
+- **Food-group icons are colourful**, and the removal sheet header uses them too.
+- **Approved on 2026-10-10.** Wave 2 started.
+
+## Sign-in (owner decision, 2026-10-10)
+- **Email and Google only.** Sign in with Apple was removed, because it can't be signed without a paid Apple Developer team.
+- The landing screen keeps **Sign up / Log in** (green, as in the brief), then "or continue with", then a full-width **Continue with Google**. Sign up and Log in put Google first, then the email form.
+- **Use Google's official button**: the Google Sign-In SDK button, or one built strictly to Google's branding guidelines (white, `#747775` border, `#1F1F1F` text, the official four-colour "G"). The mockups show the mark.
+- Email: labels above the fields, a show-password toggle, the "At least 8 characters" hint, and inline errors under the field (Log in shows the error state). Forgot-password is **deferred**.
+
+## Keeping the canvas in sync during Wave 2
+The **orchestrator owns the canvas** and `docs/design/`, so there's a single writer and no publish conflicts. When an iOS PR deviates from an artboard, for a platform reason or a new state, the PR description includes a **"Design delta"** section: the artboard, what changed and why, plus a Simulator screenshot in `docs/qa/ios/`. The orchestrator updates the canvas and `screens/` to match when it merges the PR.
+
 ## Interaction notes for iOS
 - **Removal is one or two taps.** Swipe left on a row to reveal **Remove**, which opens the sheet.
   *Used it* and *Gave it away* finish immediately. *Threw it away* goes to the reason grid, where
   one tap finishes. *Gave it away* shows a "Gave it to" picker only when the item has an open Share
   listing.
-- The **Add** tab-bar button is a raised 60 pt circle that opens the Add sheet. It is not a real tab.
+- **Tab bar (decided):** the native iOS 26 glass `TabView`. **Add is a tab** that presents the Add sheet and doesn't change the selected tab. There's no raised button.
 - **Photo review** is the demo path's middle step. Snap your fridge → `POST /items/from-photo` →
   this screen → `POST /items`. Every detected item starts ticked, except ones the classifier flags
   as spoiled, which start unticked with "Looks spoiled. Toss it?". Low-confidence items say "not

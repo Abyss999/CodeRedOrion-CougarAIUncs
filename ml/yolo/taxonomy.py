@@ -36,7 +36,37 @@ CLASS_CATEGORY: dict[str, str] = {
     "pasta": "pantry_dry", "rice": "pantry_dry", "canned_food": "pantry_dry",
     "juice": "other", "soda": "other", "sauce": "other", "bottle": "other",
     "frozen_food": "frozen",
+    # appended 2026-10-10 for AgriFreshNET (soft, short-life produce -> produce_leafy, 5 d in expiry.py)
+    "papaya": "produce_leafy", "pineapple": "produce_leafy", "bitter_melon": "produce_leafy",
 }
+FOOD_GROUPS = ("protein", "veggies", "fruit", "dairy", "grains", "pantry", "leftovers", "frozen", "other")
+
+# detector class -> user-facing food group (separate from the spoilage category above).
+CLASS_FOOD_GROUP: dict[str, str] = {
+    "lettuce": "veggies", "spinach": "veggies", "kale": "veggies", "cabbage": "veggies",
+    "broccoli": "veggies", "cauliflower": "veggies", "herbs": "veggies", "strawberry": "fruit",
+    "grapes": "fruit", "tomato": "veggies", "cucumber": "veggies", "bell_pepper": "veggies",
+    "zucchini": "veggies", "mushroom": "veggies", "banana": "fruit", "mango": "fruit",
+    "peach": "fruit", "avocado": "fruit",
+    "apple": "fruit", "orange": "fruit", "lemon": "fruit", "lime": "fruit", "carrot": "veggies",
+    "potato": "veggies", "sweet_potato": "veggies", "onion": "veggies", "garlic": "veggies",
+    "pear": "fruit", "pomegranate": "fruit", "eggplant": "veggies", "beetroot": "veggies",
+    "ginger": "veggies",
+    "milk": "dairy", "cheese": "dairy", "yogurt": "dairy", "butter": "dairy", "cream": "dairy",
+    "egg": "protein",
+    "chicken": "protein", "beef": "protein", "pork": "protein", "sausage": "protein",
+    "bacon": "protein", "ham": "protein",
+    "fish": "protein", "shrimp": "protein",
+    "bread": "grains", "tortilla": "grains",
+    "leftovers": "leftovers",
+    "pasta": "grains", "rice": "grains", "canned_food": "pantry",
+    "juice": "other", "soda": "other", "sauce": "pantry", "bottle": "other",
+    "frozen_food": "frozen",
+    "papaya": "fruit", "pineapple": "fruit", "bitter_melon": "veggies",
+}
+assert set(CLASS_FOOD_GROUP) == set(CLASS_CATEGORY), "CLASS_FOOD_GROUP must cover every class"
+assert set(CLASS_FOOD_GROUP.values()) <= set(FOOD_GROUPS)
+
 CLASS_NAMES: list[str] = list(CLASS_CATEGORY)
 CLASS_ID: dict[str, int] = {n: i for i, n in enumerate(CLASS_NAMES)}
 
@@ -56,30 +86,49 @@ ALIASES: dict[str, str] = {
     "juice_carton": "juice", "soft_drink": "soda", "coke": "soda", "sauce_bottle": "sauce",
     "ketchup": "sauce", "mayonnaise": "sauce", "container": "leftovers", "tupperware": "leftovers",
     "pomegranates": "pomegranate", "peaches": "peach", "pears": "pear", "avocados": "avocado",
-    "sweetpotato": "sweet_potato", "bittergourd": "other", "okra": "other",
+    "sweetpotato": "sweet_potato", "bittergourd": "bitter_melon", "bitter_gourd": "bitter_melon",
+    "bittermelon": "bitter_melon", "karela": "bitter_melon", "papayas": "papaya", "pineapples": "pineapple",
+    "eggplants": "eggplant", "okra": "other",
 }
+# Freshness classes (output values). Sidecar codes are FRESHNESS_CODE (0/1 kept for old data).
+FRESHNESS = ("fresh", "semi_fresh", "spoiled")
+FRESHNESS_CODE = {"fresh": 0, "spoiled": 1, "semi_fresh": 2}  # freshness/<split>/*.txt sidecar values
+SEMI_WORDS = ("semi_fresh", "semifresh", "semi", "half_fresh", "halffresh", "medium_fresh")
 SPOILED_WORDS = ("rotten", "rotting", "spoiled", "spoilt", "stale", "bad", "defective", "decayed",
                  "mouldy", "moldy", "mold", "mould", "damaged", "overripe", "unhealthy")
 FRESH_WORDS = ("fresh", "good", "healthy", "ripe", "unripe")
 
+_DAY_RANGE = re.compile(r"\(\s*\d+\s*-\s*\d+\s*\)\s*$")
+
 
 def normalize(s: str) -> str:
+    """'Semi fresh Pineapple (15-25)' -> 'semi_fresh_pineapple' (trailing day ranges dropped)."""
+    s = _DAY_RANGE.sub("", s.strip())
     return re.sub(r"[^a-z0-9]+", "_", s.strip().lower()).strip("_")
 
 
 def split_freshness(raw: str) -> tuple[str, str | None]:
-    """'rotten_apple' / 'freshapples' / 'Apple__Rotten' -> ('apple', 'spoiled') ; no marker -> (name, None)."""
+    """'rotten_apple' / 'freshapples' / 'Apple__Rotten' -> ('apple', 'spoiled');
+    'Semi fresh banana(4-7)' / 'Semi_Fresh eggplant' -> ('banana'|'eggplant', 'semi_fresh'); no marker -> (name, None).
+    Semi words are checked first, else 'semi fresh X' would read as fresh 'semi_X'."""
     n = normalize(raw)
     freshness = None
-    for w in SPOILED_WORDS + FRESH_WORDS:
+    for w in SEMI_WORDS + SPOILED_WORDS + FRESH_WORDS:
+        label = "semi_fresh" if w in SEMI_WORDS else "spoiled" if w in SPOILED_WORDS else "fresh"
+        if w == "semi":  # bare 'semi' only counts when followed by a fresh word ('semi_ripe')
+            m = re.search(r"(^|_)semi_?(?:fresh|ripe)(_|$)", n)
+            if m:
+                freshness, n = label, (n[:m.start()] + "_" + n[m.end():]).strip("_")
+                break
+            continue
         pat = re.compile(rf"(^|_){w}(_|$)")
         if pat.search(n):
-            freshness = "spoiled" if w in SPOILED_WORDS else "fresh"
+            freshness = label
             n = pat.sub("_", n).strip("_")
             break
         # glued forms: rottenapples, freshbanana
         if n.startswith(w) and len(n) > len(w):
-            freshness = "spoiled" if w in SPOILED_WORDS else "fresh"
+            freshness = label
             n = n[len(w):].strip("_")
             break
     return n, freshness
@@ -96,3 +145,7 @@ def canonical_name(raw: str) -> str | None:
 
 def category_for(name: str) -> str:
     return CLASS_CATEGORY.get(normalize(name), "other")
+
+
+def food_group_for(name: str) -> str:
+    return CLASS_FOOD_GROUP.get(normalize(name), "other")

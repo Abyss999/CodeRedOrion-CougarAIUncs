@@ -42,10 +42,10 @@ This is an active hackathon prototype. The backend is ahead of the iOS interface
 | Guided onboarding | Product flow specified | Food catalog, checklist UI, and completion/resume state |
 | Vision and receipts | Training pipeline, inference service, receipt-text parser, and evaluation tools | Validate trained models and real image-to-text performance |
 
-The [backend QA report](docs/qa/backend.md) records **158 passing tests and 94% coverage**,
-with external AI services stubbed. The [iOS report](docs/qa/ios.md) covers the shell and theme;
-it does not establish that the product flows work. The [ML report](docs/qa/ml.md) distinguishes
-parser and service checks from model evaluation, and records dataset limitations.
+The [latest handoff](HANDOFF.md) records **523 backend tests and 96% coverage** on main,
+with additional backend and iOS work in QA. These are recorded results, not a fresh validation
+of this branch. The [area QA reports](docs/qa/) distinguish component checks from full product
+verification. YOLO accuracy and the complete phone demo still need validation.
 
 ### How to interpret estimates
 
@@ -61,7 +61,7 @@ parser and service checks from model evaluation, and records dataset limitations
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| iOS | SwiftUI, iOS 17+, XcodeGen | Native app and shared UI theme |
+| iOS | SwiftUI, XcodeGen | Native app and shared UI theme |
 | API | Flask, SQLAlchemy, Alembic, JWT | Accounts, inventory, sharing, and insights |
 | Data | PostgreSQL with TimescaleDB | App state and timestamped food events |
 | AI | Google Gemini | Photo fallback, text parsing, recipe suggestions, and shelf-life estimates |
@@ -109,8 +109,9 @@ xcodegen generate
 open FoodWasteReducer.xcodeproj
 ```
 
-The internal project and scheme names are currently `FoodWasteReducer`. Choose an iOS 17+
-simulator in Xcode. Device signing and TestFlight instructions are in the
+The internal project and scheme names are currently `FoodWasteReducer`. Use the documented
+Xcode 26 toolchain and a compatible simulator. The phone demo uses a free Personal Team;
+device signing and demo tunnel instructions are in the
 [setup guide](docs/SETUP.md#4-ios).
 
 ### Development and verification

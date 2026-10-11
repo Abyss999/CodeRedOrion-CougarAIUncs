@@ -1,0 +1,203 @@
+{
+ "_comment": "Pipeline-only receipt vocabulary, applied AFTER the backend table (backend/app/services/food_group.py ABBREVIATIONS, loaded by category_cleanup/names.py) has expanded a token. 'expand' holds only what the backend table lacks: remaining abbreviations that are too ambiguous for the backend table (see docs/PIPELINE.md), plural/variety words that map to a detector class (gala -> apple), class-mapping words (mozzarella -> cheese) and empty expansions that drop a token (lg, org). Never repeat a key the backend table has; tests/test_category_cleanup.py enforces it. 'noise' tokens are dropped before matching. 'phrases' (checked first) pin compound names to a class or category; 'keywords' map a word with no detector class to a backend category. Extend freely; tests pin a few.",
+ "phrases": {
+  "peanut butter": {
+   "canonical": null,
+   "category": "pantry_dry"
+  },
+  "almond milk": {
+   "canonical": "milk",
+   "category": "dairy"
+  },
+  "ice cream": {
+   "canonical": null,
+   "category": "frozen"
+  },
+  "cream cheese": {
+   "canonical": "cheese",
+   "category": "dairy"
+  },
+  "sour cream": {
+   "canonical": "cream",
+   "category": "dairy"
+  },
+  "hot dog": {
+   "canonical": "sausage",
+   "category": "meat"
+  },
+  "fish sticks": {
+   "canonical": "frozen_food",
+   "category": "frozen"
+  },
+  "frozen pizza": {
+   "canonical": "frozen_food",
+   "category": "frozen"
+  },
+  "egg noodles": {
+   "canonical": "pasta",
+   "category": "pantry_dry"
+  },
+  "bread crumbs": {
+   "canonical": null,
+   "category": "pantry_dry"
+  },
+  "tomato sauce": {
+   "canonical": "sauce",
+   "category": "other"
+  },
+  "chicken broth": {
+   "canonical": null,
+   "category": "pantry_dry"
+  },
+  "orange juice": {
+   "canonical": "juice",
+   "category": "other"
+  },
+  "apple juice": {
+   "canonical": "juice",
+   "category": "other"
+  }
+ },
+ "expand": {
+  "bnnas": "banana",
+  "ban": "banana",
+  "bananas": "banana",
+  "gr": "ground",
+  "hvy": "heavy",
+  "egg": "egg",
+  "eggs": "egg",
+  "lg": "",
+  "xl": "",
+  "dz": "",
+  "dzn": "",
+  "wht": "white",
+  "whlwht": "bread",
+  "torts": "tortilla",
+  "toms": "tomato",
+  "roma": "tomato",
+  "pot": "potato",
+  "pots": "potato",
+  "russet": "potato",
+  "swt": "sweet",
+  "onions": "onion",
+  "yel": "",
+  "grn": "green",
+  "romaine": "lettuce",
+  "icebrg": "lettuce",
+  "carrots": "carrot",
+  "straw": "strawberry",
+  "berr": "strawberry",
+  "gala": "apple",
+  "fuji": "apple",
+  "honeycrisp": "apple",
+  "org": "",
+  "orgnc": "",
+  "organic": "",
+  "bell": "bell",
+  "pine": "pineapple",
+  "sda": "soda",
+  "pasta": "pasta",
+  "spaghetti": "pasta",
+  "tilapia": "fish",
+  "mozzarella": "cheese",
+  "parmesan": "cheese",
+  "mushrooms": "mushroom"
+ },
+ "noise": [
+  "gv",
+  "kirk",
+  "ks",
+  "kroger",
+  "hfc",
+  "ss",
+  "great",
+  "value",
+  "store",
+  "brand",
+  "gal",
+  "gallon",
+  "oz",
+  "fl",
+  "lb",
+  "lbs",
+  "kg",
+  "g",
+  "ct",
+  "pk",
+  "pack",
+  "ea",
+  "each",
+  "qt",
+  "pt",
+  "btl",
+  "bag",
+  "box",
+  "pkg",
+  "f",
+  "t",
+  "n",
+  "x",
+  "fresh",
+  "natural",
+  "large",
+  "small",
+  "med",
+  "family",
+  "size"
+ ],
+ "keywords": {
+  "cereal": "pantry_dry",
+  "oats": "pantry_dry",
+  "oatmeal": "pantry_dry",
+  "flour": "pantry_dry",
+  "sugar": "pantry_dry",
+  "chips": "pantry_dry",
+  "crackers": "pantry_dry",
+  "beans": "pantry_dry",
+  "noodles": "pantry_dry",
+  "coffee": "pantry_dry",
+  "tea": "pantry_dry",
+  "peanut": "pantry_dry",
+  "turkey": "meat",
+  "deli": "meat",
+  "salami": "meat",
+  "lamb": "meat",
+  "wings": "meat",
+  "tuna": "seafood",
+  "cod": "seafood",
+  "crab": "seafood",
+  "tilapia": "seafood",
+  "bagel": "bakery",
+  "muffin": "bakery",
+  "croissant": "bakery",
+  "buns": "bakery",
+  "rolls": "bakery",
+  "pizza": "frozen",
+  "ice": "frozen",
+  "nuggets": "frozen",
+  "kefir": "dairy",
+  "creamer": "dairy",
+  "cottage": "dairy",
+  "sour": "dairy",
+  "celery": "produce_leafy",
+  "berries": "produce_leafy",
+  "blueberry": "produce_leafy",
+  "blueberries": "produce_leafy",
+  "raspberry": "produce_leafy",
+  "cilantro": "produce_leafy",
+  "parsley": "produce_leafy",
+  "basil": "produce_leafy",
+  "asparagus": "produce_leafy",
+  "melon": "produce_hardy",
+  "watermelon": "produce_hardy",
+  "squash": "produce_hardy",
+  "salad": "leftovers",
+  "rotisserie": "leftovers",
+  "soup": "leftovers",
+  "water": "other",
+  "beer": "other",
+  "wine": "other",
+  "salsa": "other",
+  "dressing": "other"
+ }
+}

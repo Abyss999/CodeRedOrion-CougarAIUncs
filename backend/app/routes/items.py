@@ -6,9 +6,9 @@ from sqlalchemy import func
 from ..auth import require_auth
 from ..errors import ApiError, not_found, upstream_unavailable, validation_error
 from ..extensions import db
-from ..models import (CATEGORIES, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
+from ..models import (CATEGORIES, FOOD_GROUPS, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
                       ShareListing, User)
-from ..services import barcode, candidates, expiry, gemini, impact, ml, social
+from ..services import barcode, candidates, expiry, food_group, gemini, impact, ml, social
 from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item)
 
 bp = Blueprint("items", __name__, url_prefix="/items")
@@ -48,6 +48,16 @@ def _event(item, event_type, user_id=None, **extra):
                      est_price=item.est_price, **extra)
 
 
+# Section order follows the Fridge design (Protein, Veggies, Fruit, Dairy), then the rest of the enum.
+SECTION_ORDER = FOOD_GROUPS
+
+
+def _check_food_group(value):
+    if not isinstance(value, str) or value not in FOOD_GROUPS:
+        raise validation_error(f"food_group must be one of {', '.join(FOOD_GROUPS)}.")
+    return value
+
+
 @bp.get("")
 @require_auth
 def list_items():
@@ -62,7 +72,17 @@ def list_items():
         raise validation_error("include_removed must be true or false.")
     if inc in ("false", "0"):
         q = q.filter(Item.removed_at.is_(None))
-    items = q.order_by(Item.predicted_expiry, Item.added_at).all()
+    group_by = request.args.get("group_by")
+    if group_by is not None and group_by != "food_group":
+        raise validation_error("group_by must be food_group.")
+    items = q.order_by(Item.predicted_expiry.asc().nulls_last(), Item.added_at).all()
+    if group_by == "food_group":
+        buckets = {}
+        for i in items:
+            ser = serialize_item(i)
+            buckets.setdefault(ser["food_group"], []).append(ser)
+        return jsonify(sections=[{"food_group": fg, "items": buckets[fg]}
+                                 for fg in SECTION_ORDER if fg in buckets])
     return jsonify(items=[serialize_item(i) for i in items])
 
 
@@ -84,8 +104,10 @@ def _validate_new(raw: dict) -> dict:
     unit = raw.get("unit", "piece")
     if not isinstance(unit, str) or not unit.strip():
         raise validation_error("unit must be a non-empty string.")
+    fg = raw.get("food_group")
+    fg = _check_food_group(fg) if fg is not None else food_group.derive(category, name)
     return {
-        "name": name.strip(), "category": category, "storage": storage, "source": source,
+        "name": name.strip(), "category": category, "food_group": fg, "storage": storage, "source": source,
         "quantity": parse_number(raw.get("quantity", 1), "quantity", positive=True),
         "unit": unit.strip(),
         "est_price": parse_number(raw.get("est_price"), "est_price", allow_none=True),
@@ -155,7 +177,7 @@ def patch_item(item_id):
     item = _owned(item_id, lock=True)
     if item.removed_at is not None:
         raise not_found("Item not found.")
-    allowed = {"name", "quantity", "unit", "storage", "category", "predicted_expiry",
+    allowed = {"name", "quantity", "unit", "storage", "category", "food_group", "predicted_expiry",
                "est_price", "est_weight_kg"}
     unknown = set(body) - allowed
     if unknown:
@@ -178,6 +200,10 @@ def patch_item(item_id):
         if body["category"] not in CATEGORIES:
             raise validation_error(f"category must be one of {', '.join(CATEGORIES)}.")
         item.category = body["category"]
+        if "food_group" not in body:
+            item.food_group = food_group.derive(item.category, item.name)
+    if "food_group" in body:
+        item.food_group = _check_food_group(body["food_group"])
     if "est_price" in body:
         item.est_price = parse_number(body["est_price"], "est_price", allow_none=True)
     if "est_weight_kg" in body:
@@ -283,7 +309,7 @@ def from_photo():
             raws, source = gemini.detect_from_image(data, mime, mode), "gemini"
         except gemini.UpstreamError as e:
             raise upstream_unavailable(f"No vision backend available: {e}")
-    return jsonify(candidates=candidates.normalize_all(raws), source=source)
+    return jsonify(candidates=candidates.normalize_all(raws, source), source=source)
 
 
 @bp.post("/from-receipt")
@@ -300,7 +326,7 @@ def from_receipt():
         if not name:
             continue
         q, p = line.get("quantity"), line.get("price")
-        out.append({"name": name, "quantity": float(q) if q is not None else 1.0,
+        out.append({"name": name, "food_group": food_group.derive_from_name(name), "quantity": float(q) if q is not None else 1.0,
                     "price": float(p) if p is not None else None})
     total = body.get("total")
     return jsonify(candidates=out, total=float(total) if total is not None else None)

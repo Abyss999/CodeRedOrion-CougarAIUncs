@@ -27,7 +27,7 @@ class FakeDetector:
 
 class YoloDetector:
     """Two-stage YOLO (detector + optional freshness classifier). Weights from env:
-    YOLO_WEIGHTS (required), FRESHNESS_WEIGHTS, YOLO_CONF, SPOILED_THRESHOLD, YOLO_DEVICE.
+    YOLO_WEIGHTS (required), FRESHNESS_WEIGHTS, YOLO_CONF, SPOILED_THRESHOLD, SEMI_FRESH_THRESHOLD, YOLO_DEVICE.
     Loaded on first predict() (or via warmup()), never at import."""
 
     def __init__(self, ts=None):

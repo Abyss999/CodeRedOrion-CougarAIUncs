@@ -4,6 +4,7 @@ from datetime import date, datetime
 from flask import request
 
 from ..errors import ApiError, not_found, validation_error
+from ..services import food_group
 
 
 def json_body() -> dict:
@@ -61,7 +62,8 @@ def serialize_item(i) -> dict:
     return {
         "id": str(i.id), "owner_id": str(i.owner_id),
         "group_id": str(i.group_id) if i.group_id else None,
-        "name": i.name, "category": i.category, "storage": i.storage,
+        "name": i.name, "category": i.category,
+        "food_group": i.food_group or food_group.derive(i.category, i.name), "storage": i.storage,
         "quantity": f(i.quantity), "unit": i.unit, "est_weight_kg": f(i.est_weight_kg),
         "est_price": f(i.est_price), "source": i.source, "added_at": iso(i.added_at),
         "predicted_expiry": i.predicted_expiry.isoformat(), "expiry_source": i.expiry_source,

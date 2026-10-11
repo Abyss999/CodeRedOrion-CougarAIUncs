@@ -17,10 +17,24 @@ Definitions (all documented so the numbers can be audited):
     name, across all images, sorted by confidence; AP is the all-point-interpolated area under the
     precision envelope (VOC2010+ / COCO "all point"). Classes with no GT are skipped. A class with
     GT but no predictions has AP 0. No confidence threshold is applied for AP.
-  * Fresh/spoiled precision & recall: for each freshness class c, only predictions with
-    freshness==c (and confidence >= --conf) compete for GT with freshness==c. By default matching
-    ignores `name` (localisation + freshness label); pass --match-name to also require the name.
+  * Freshness is three-class in the data (fresh | semi_fresh | spoiled) but the GATED metrics are
+    BINARY, spoiled vs not-spoiled (docs/QA.md "Freshness gates"). semi_fresh is folded into
+    not_spoiled in BOTH ground truth and predictions before matching, so a fresh<->semi_fresh
+    confusion costs nothing. Two-class files (no semi_fresh) give identical numbers to before.
+  * Not-spoiled / spoiled precision & recall: for each binary class c, only predictions with
+    folded freshness==c (and confidence >= --conf) compete for GT with folded freshness==c. By
+    default matching ignores `name` (localisation + freshness label); pass --match-name to also
+    require the name.
         precision = TP/(TP+FP), recall = TP/(TP+FN); None when the denominator is 0.
+    The result key "not_spoiled" holds the not-spoiled numbers; the legacy key "fresh" is an
+    identical alias (so it means fresh+semi_fresh, NOT fresh alone). The "fresh precision" gate
+    reads as NOT-SPOILED precision.
+  * INFORMATION ONLY, never gated ("freshness_3way"): every GT box is matched to a prediction on
+    localisation alone (IoU >= 0.5, greedy by confidence, freshness ignored), then counted in a
+    3x3 confusion matrix confusion[gt][pred] with an extra "missed" column (GT with no match) and
+    a "false_positive" row (prediction with no GT). Per-class 3-way precision = diag / column sum
+    (incl. false positives), recall = diag / row sum (incl. missed). Each comes with a 95% Wilson CI
+    (`precision_ci95`, `recall_ci95`; informational), also semi_fresh per source (`semi_fresh_by_source`, needs --manifest).
   * Lighting split: the same metrics on the images of each lighting group; `recall_drop` is
     (normal recall - group recall) * 100, in percentage points (negative = group is better).
 """
@@ -32,7 +46,8 @@ import sys
 from collections import defaultdict
 
 IOU_THRESHOLD = 0.5
-FRESHNESS = ("fresh", "spoiled")
+FRESHNESS3 = ("fresh", "semi_fresh", "spoiled")   # data labels
+FRESHNESS = ("not_spoiled", "spoiled")             # gated binary classes (semi_fresh folds into not_spoiled)
 LIGHTING = ("normal", "low", "warm")
 
 
@@ -72,6 +87,15 @@ def _index(rows, key, what):
     return out
 
 
+def fold(freshness) -> str:
+    """Binary gate class of a freshness label. Unknown labels raise (never silently dropped)."""
+    if freshness == "spoiled":
+        return "spoiled"
+    if freshness in ("fresh", "semi_fresh"):
+        return "not_spoiled"
+    raise ValueError(f"unknown freshness label {freshness!r} (expected one of {FRESHNESS3})")
+
+
 def _ratio(num, den):
     return None if den == 0 else num / den
 
@@ -101,19 +125,65 @@ def _match_counts(preds_by_img, gts_by_img, same):
 
 
 def freshness_metrics(gt_rows, pred_rows, conf=0.0, match_name=False):
+    """Binary (gated) metrics: not_spoiled vs spoiled, semi_fresh folded into not_spoiled."""
     out = {}
     tot_tp = tot_fp = tot_fn = 0
     for cls in FRESHNESS:
-        pb = {r["image"]: [p for p in r.get("predictions", []) if p["freshness"] == cls and p["confidence"] >= conf]
+        pb = {r["image"]: [p for p in r.get("predictions", []) if fold(p["freshness"]) == cls and p["confidence"] >= conf]
               for r in pred_rows}
-        gb = {r["image"]: [g for g in r.get("labels", []) if g["freshness"] == cls] for r in gt_rows}
+        gb = {r["image"]: [g for g in r.get("labels", []) if fold(g["freshness"]) == cls] for r in gt_rows}
         same = (lambda p, g: p["name"] == g["name"]) if match_name else (lambda p, g: True)
         tp, fp, fn = _match_counts(pb, gb, same)
         out[cls] = {"precision": _ratio(tp, tp + fp), "recall": _ratio(tp, tp + fn),
                     "tp": tp, "fp": fp, "fn": fn, "n_gt": tp + fn}
         tot_tp += tp; tot_fp += fp; tot_fn += fn
+    out["fresh"] = dict(out["not_spoiled"])  # legacy alias: fresh+semi_fresh, see module docstring
     out["overall"] = {"precision": _ratio(tot_tp, tot_tp + tot_fp), "recall": _ratio(tot_tp, tot_tp + tot_fn),
                       "tp": tot_tp, "fp": tot_fp, "fn": tot_fn, "n_gt": tot_tp + tot_fn}
+    return out
+
+
+def freshness_3way(gt_rows, pred_rows, conf=0.0, match_name=False):
+    """INFORMATION ONLY (no gate): 3x3 freshness confusion + per-class P/R, localisation-only matching."""
+    pi = {r["image"]: r for r in pred_rows}
+    conf_m = {g: {p: 0 for p in FRESHNESS3} for g in FRESHNESS3}
+    for g in FRESHNESS3:
+        conf_m[g]["missed"] = 0
+    fp_row = {p: 0 for p in FRESHNESS3}
+    for r in gt_rows:
+        gts = r.get("labels", [])
+        for g in gts:
+            if g["freshness"] not in FRESHNESS3:
+                raise ValueError(f"unknown freshness label {g['freshness']!r} (expected one of {FRESHNESS3})")
+        preds = [p for p in pi.get(r["image"], {}).get("predictions", []) if p["confidence"] >= conf]
+        for p in preds:
+            if p["freshness"] not in FRESHNESS3:
+                raise ValueError(f"unknown freshness label {p['freshness']!r} (expected one of {FRESHNESS3})")
+        used = [False] * len(gts)
+        for p in sorted(preds, key=lambda x: -x["confidence"]):
+            best, best_iou = -1, IOU_THRESHOLD
+            for i, g in enumerate(gts):
+                if used[i] or (match_name and p["name"] != g["name"]):
+                    continue
+                v = iou(p["bbox"], g["bbox"])
+                if v >= best_iou and (best < 0 or v > best_iou):
+                    best, best_iou = i, v
+            if best >= 0:
+                used[best] = True
+                conf_m[gts[best]["freshness"]][p["freshness"]] += 1
+            else:
+                fp_row[p["freshness"]] += 1
+        for i, g in enumerate(gts):
+            if not used[i]:
+                conf_m[g["freshness"]]["missed"] += 1
+    out = {"gated": False, "labels": list(FRESHNESS3), "confusion": conf_m, "false_positive": fp_row}
+    for c in FRESHNESS3:
+        tp = conf_m[c][c]
+        n_gt = sum(conf_m[c].values())
+        n_pred = sum(conf_m[g][c] for g in FRESHNESS3) + fp_row[c]
+        out[c] = {"precision": _ratio(tp, n_pred), "recall": _ratio(tp, n_gt), "tp": tp, "n_gt": n_gt, "n_pred": n_pred,
+                  # informational 95% Wilson CIs (like the spoiled per-source numbers); (None, None) when the denominator is 0
+                  "precision_ci95": list(wilson_ci(tp, n_pred)), "recall_ci95": list(wilson_ci(tp, n_gt))}
     return out
 
 
@@ -175,7 +245,8 @@ def map50(gt_rows, pred_rows):
 def evaluate_group(gt_rows, pred_rows, conf=0.0, match_name=False):
     m, aps = map50(gt_rows, pred_rows)
     return {"n_images": len(gt_rows), "map50": m, "ap_per_class": aps,
-            "freshness": freshness_metrics(gt_rows, pred_rows, conf, match_name)}
+            "freshness": freshness_metrics(gt_rows, pred_rows, conf, match_name),
+            "freshness_3way": freshness_3way(gt_rows, pred_rows, conf, match_name)}
 
 
 def evaluate(gt_rows, pred_rows, conf=0.0, match_name=False) -> dict:
@@ -196,17 +267,7 @@ def evaluate(gt_rows, pred_rows, conf=0.0, match_name=False) -> dict:
         p = [pi.get(r["image"], {"image": r["image"], "predictions": []}) for r in g]
         by[lt] = evaluate_group(g, p, conf, match_name)
     res["detection"]["by_lighting"] = by
-    drops = {}
-    base = by.get("normal")
-    for lt, grp in by.items():
-        if lt == "normal":
-            continue
-        d = {}
-        for key in ("overall", "spoiled", "fresh"):
-            b = base["freshness"][key]["recall"] if base else None
-            v = grp["freshness"][key]["recall"]
-            d[key] = None if b is None or v is None else (b - v) * 100.0
-        drops[lt] = d
+    drops = _drops(by)
     res["detection"]["recall_drop_points"] = drops
     return res
 
@@ -215,20 +276,29 @@ def load_manifest(path):
     """heldout_manifest.csv -> {image: {"lighting_method", "variant_of"}} (columns per docs/ML.md)."""
     import csv
     with open(path, newline="", encoding="utf-8") as f:
-        return {r["image"]: {"lighting_method": r.get("lighting_method", ""), "variant_of": r.get("variant_of", "")}
+        return {r["image"]: {"lighting_method": r.get("lighting_method", ""), "variant_of": r.get("variant_of", ""),
+                             "source": r.get("source", "")}
                 for r in csv.DictReader(f)}
 
 
+def _recall_of(grp, key):
+    if key == "semi_fresh":  # information only, from the 3-way block
+        return grp["freshness_3way"]["semi_fresh"]["recall"]
+    return grp["freshness"][key]["recall"]
+
+
 def _drops(by):
+    """Recall drop in points vs normal. overall/spoiled/not_spoiled(+legacy fresh) are the gated binary
+    numbers; semi_fresh is information only."""
     base = by.get("normal")
     out = {}
     for lt, grp in by.items():
         if lt == "normal":
             continue
         out[lt] = {}
-        for key in ("overall", "spoiled", "fresh"):
-            b = base["freshness"][key]["recall"] if base else None
-            v = grp["freshness"][key]["recall"]
+        for key in ("overall", "spoiled", "not_spoiled", "fresh", "semi_fresh"):
+            b = _recall_of(base, key) if base else None
+            v = _recall_of(grp, key)
             out[lt][key] = None if b is None or v is None else (b - v) * 100.0
     return out
 
@@ -263,6 +333,60 @@ def evaluate_lighting_sources(gt_rows, pred_rows, manifest, conf=0.0, match_name
     return out
 
 
+def wilson_ci(k, n, z=1.96):
+    """Wilson score interval (default 95%) for k successes of n. (None, None) when n == 0. NOT a gate (ML-18):
+    it is there so thin cells and one-source recalls are not over-read. Boxes in the same photo/session are
+    not independent, so the true interval is wider than this one."""
+    if n <= 0:
+        return (None, None)
+    p = k / n
+    d = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / d
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / d
+    return (max(0.0, centre - half), min(1.0, centre + half))
+
+
+def spoiled_recall_by_source(gt_rows, pred_rows, manifest, conf=0.0, match_name=False, real_only=True):
+    """Spoiled recall (binary: semi_fresh counted as not-spoiled) per SOURCE and per source x class, each with
+    a 95% Wilson CI and n_gt. INFORMATION ONLY. real_only drops the synthetic low/warm copies (they reuse
+    the same boxes, so they add no independent samples, ML-22)."""
+    pi = {r["image"]: r for r in pred_rows}
+    rows = [r for r in gt_rows if not (real_only and manifest.get(r["image"], {}).get("lighting_method") == "synthetic")]
+    def one(sub, name=None):
+        if name is not None:
+            sub = [{**r, "labels": [g for g in r.get("labels", []) if g["name"] == name]} for r in sub]
+        pr = [pi.get(r["image"], {"image": r["image"], "predictions": []}) for r in sub]
+        if name is not None:
+            pr = [{**p, "predictions": [x for x in p.get("predictions", []) if x["name"] == name]} for p in pr]
+        sp = freshness_metrics(sub, pr, conf, match_name)["spoiled"]
+        lo, hi = wilson_ci(sp["tp"], sp["n_gt"])
+        return {"recall": sp["recall"], "tp": sp["tp"], "n_gt": sp["n_gt"], "ci95": [lo, hi]}
+    out = {}
+    for src in sorted({manifest.get(r["image"], {}).get("source", "") for r in rows}):
+        sub = [r for r in rows if manifest.get(r["image"], {}).get("source", "") == src]
+        classes = sorted({g["name"] for r in sub for g in r.get("labels", []) if fold(g["freshness"]) == "spoiled"})
+        out[src or "unknown"] = {"all": one(sub), "by_class": {c: one(sub, c) for c in classes}}
+    return out
+
+
+def semi_fresh_by_source(gt_rows, pred_rows, manifest, conf=0.0, match_name=False, real_only=True):
+    """semi_fresh 3-way precision and recall (localisation-only matching, as freshness_3way) overall and per SOURCE,
+    each with a 95% Wilson CI and its counts. INFORMATION ONLY, never gated (docs/QA.md "Freshness gates"): every
+    semi_fresh label comes from one source (ML-16), so the per-source split mostly shows that one source; n is small
+    for several classes (ML-41). real_only drops synthetic low/warm copies (same boxes, not independent samples)."""
+    pi = {r["image"]: r for r in pred_rows}
+    rows = [r for r in gt_rows if not (real_only and manifest.get(r["image"], {}).get("lighting_method") == "synthetic")]
+    def one(sub):
+        pr = [pi.get(r["image"], {"image": r["image"], "predictions": []}) for r in sub]
+        c = freshness_3way(sub, pr, conf, match_name)["semi_fresh"]
+        return {k: c[k] for k in ("precision", "precision_ci95", "recall", "recall_ci95", "tp", "n_gt", "n_pred")}
+    out = {"all": one(rows), "by_source": {}}
+    for src in sorted({manifest.get(r["image"], {}).get("source", "") for r in rows}):
+        sub = [r for r in rows if manifest.get(r["image"], {}).get("source", "") == src]
+        out["by_source"][src or "unknown"] = one(sub)
+    return out
+
+
 def _fmt(x):
     return "n/a" if x is None else f"{x:.3f}"
 
@@ -272,14 +396,25 @@ def print_report(res):
     print(f"images: {d['n_images']}  mAP@0.5: {_fmt(d['map50'])}")
     for n, ap in d["ap_per_class"].items():
         print(f"  AP[{n}] = {_fmt(ap)}")
+    print("-- gated (binary: semi_fresh folded into not_spoiled) --")
     for cls in (*FRESHNESS, "overall"):
         f = d["freshness"][cls]
-        print(f"{cls:8s} P={_fmt(f['precision'])} R={_fmt(f['recall'])} (tp={f['tp']} fp={f['fp']} fn={f['fn']})")
+        print(f"{cls:11s} P={_fmt(f['precision'])} R={_fmt(f['recall'])} (tp={f['tp']} fp={f['fp']} fn={f['fn']})")
+    t = d["freshness_3way"]
+    print("-- information only, NOT gated: 3x3 freshness confusion (rows = ground truth, cols = prediction) --")
+    cols = [*FRESHNESS3, "missed"]
+    print(f"{'':11s}" + "".join(f"{c:>12s}" for c in cols))
+    for g in FRESHNESS3:
+        print(f"{g:11s}" + "".join(f"{t['confusion'][g][c]:12d}" for c in cols))
+    print(f"{'false_pos':11s}" + "".join(f"{t['false_positive'][c]:12d}" for c in FRESHNESS3))
+    for c in FRESHNESS3:
+        pc, rc = t[c]["precision_ci95"], t[c]["recall_ci95"]
+        print(f"3-way {c:11s} P={_fmt(t[c]['precision'])} CI95=[{_fmt(pc[0])}, {_fmt(pc[1])}] R={_fmt(t[c]['recall'])} CI95=[{_fmt(rc[0])}, {_fmt(rc[1])}] (n_gt={t[c]['n_gt']}, n_pred={t[c]['n_pred']})")
     for lt, g in d["by_lighting"].items():
         o = g["freshness"]["overall"]; s = g["freshness"]["spoiled"]
         print(f"[{lt}] n={g['n_images']} mAP={_fmt(g['map50'])} recall={_fmt(o['recall'])} spoiled_recall={_fmt(s['recall'])}")
     for lt, dr in d["recall_drop_points"].items():
-        print(f"recall drop {lt} vs normal (points): overall={dr['overall']} spoiled={dr['spoiled']}")
+        print(f"recall drop {lt} vs normal (points): overall={dr['overall']} spoiled={dr['spoiled']} semi_fresh(info)={dr['semi_fresh']}")
 
 
 def main(argv=None):
@@ -296,13 +431,32 @@ def main(argv=None):
         gi = {r["image"]: r for r in load_jsonl(a.gt)}
         res["detection"]["lighting_sources"] = evaluate_lighting_sources(
             list(gi.values()), load_jsonl(a.pred), load_manifest(a.manifest), a.conf, a.match_name)
+    if a.manifest:
+        man = load_manifest(a.manifest)
+        res["detection"]["spoiled_recall_by_source"] = spoiled_recall_by_source(
+            list(gi.values()), load_jsonl(a.pred), man, a.conf, a.match_name)
+        res["detection"]["semi_fresh_by_source"] = semi_fresh_by_source(
+            list(gi.values()), load_jsonl(a.pred), man, a.conf, a.match_name)
     print_report(res)
+    sr = res["detection"].get("spoiled_recall_by_source")
+    if sr:
+        print("-- spoiled recall by source, real images only, 95% Wilson CI (information only, NOT a gate; boxes in a session are not independent) --")
+        for src, v in sr.items():
+            for lab_, g in (("all", v["all"]), *((f"  {c}", x) for c, x in v["by_class"].items())):
+                ci = g["ci95"]
+                print(f"{src:24s} {lab_:14s} n_gt={g['n_gt']:4d} recall={_fmt(g['recall'])} CI95=[{_fmt(ci[0])}, {_fmt(ci[1])}]")
+    sf = res["detection"].get("semi_fresh_by_source")
+    if sf:
+        print("-- semi_fresh precision / recall with 95% Wilson CI, real images only (information only, NOT a gate; semi_fresh comes from one source, ML-16) --")
+        for src, g in (("ALL", sf["all"]), *sf["by_source"].items()):
+            print(f"{src:24s} P={_fmt(g['precision'])} CI95=[{_fmt(g['precision_ci95'][0])}, {_fmt(g['precision_ci95'][1])}] (n_pred={g['n_pred']})  "
+                  f"R={_fmt(g['recall'])} CI95=[{_fmt(g['recall_ci95'][0])}, {_fmt(g['recall_ci95'][1])}] (n_gt={g['n_gt']})")
     ls = res["detection"].get("lighting_sources")
     if ls:
         print(f"-- lighting by source (real n={ls['n_real']}, synthetic n={ls['n_synthetic']}; synthetic is usually EASIER) --")
         for src in ("real", "synthetic"):
             for lt, dr in ls[src]["recall_drop_points"].items():
-                print(f"{src:9s} {lt}: recall drop overall={dr['overall']} spoiled={dr['spoiled']}")
+                print(f"{src:9s} {lt}: recall drop overall={dr['overall']} spoiled={dr['spoiled']} semi_fresh(info)={dr['semi_fresh']}")
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:
             json.dump(res, f, indent=2)

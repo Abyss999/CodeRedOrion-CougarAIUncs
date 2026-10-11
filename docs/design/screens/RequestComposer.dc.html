@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ask for something</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
+a{color:#1F4D2B}a:hover{color:#13261A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #4C5A4F; display: flex; flex-direction: column; justify-content: flex-end">
+  <section role="dialog" aria-modal="true" aria-labelledby="rq-title" style="background: #F4F8E8; border-radius: 28px 28px 0 0; padding: 10px 20px 34px; display: flex; flex-direction: column; gap: 16px">
+    <div style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #C3D1B3"></div>
+    <header style="display: flex; justify-content: space-between; align-items: center">
+      <a href="Social.dc.html" style="min-height: 44px; display: flex; align-items: center; font-size: 16px; font-weight: 500">Cancel</a>
+      <h2 id="rq-title" style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 18px">Ask for something</h2>
+      <button style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 22px; background: #1F4D2B; color: #F4F8E8; font-size: 15px; font-weight: 600">Post</button>
+    </header>
+
+    <div style="background: #FFF6C7; border-radius: 4px 4px 14px 4px; padding: 16px; box-shadow: 0 2px 6px rgba(31,77,43,0.12); display: flex; flex-direction: column; gap: 8px; transform: rotate(-0.6deg)">
+      <label for="rq-text" style="font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #2B3D30">Your note</label>
+      <textarea id="rq-text" rows="3" style="border: 0; outline: none; resize: none; background: transparent; font-family: Outfit, sans-serif; font-size: 19px; font-weight: 500; line-height: 1.3; color: #13261A">Anyone have 2 eggs? Baking tonight.</textarea>
+      <span style="align-self: flex-end; font-size: 12px; color: #45584A">36 / 280</span>
+    </div>
+
+    <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+      <legend style="font-size: 14px; font-weight: 600; color: #2B3D30; margin-bottom: 8px">Who can see it</legend>
+      <sc-for list="{{audiences}}" as="a" hint-placeholder-count="3">
+        <label style="{{a.rowStyle}}">
+          <input type="radio" name="aud" checked="{{a.checked}}" style="width: 22px; height: 22px; accent-color: #1F4D2B; margin: 0">
+          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">{{a.name}}</span><span style="font-size: 13px; color: #45584A">{{a.meta}}</span></span>
+        </label>
+      </sc-for>
+    </fieldset>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const row = 'display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-radius: 14px; background: #FFFFFF; ';
+return {
+audiences: [
+{ name: 'Friends', meta: '12 friends', checked: false, rowStyle: row + 'box-shadow: inset 0 0 0 1px #D3E0BF' },
+{ name: 'Moody Hall 4F', meta: 'Group · 18 members', checked: true, rowStyle: row + 'box-shadow: inset 0 0 0 2px #1F4D2B' },
+{ name: 'CougarCS Kitchen', meta: 'Group · 41 members', checked: false, rowStyle: row + 'box-shadow: inset 0 0 0 1px #D3E0BF' }
+]
+};
+}
+}
+</script>
+</body>
+</html>

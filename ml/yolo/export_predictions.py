@@ -22,9 +22,12 @@ def main(argv=None):
     ap.add_argument("--out", default="predictions.jsonl")
     ap.add_argument("--conf", type=float, default=0.10, help="low conf so QA can sweep thresholds")
     ap.add_argument("--spoiled-threshold", type=float, default=0.5)
+    ap.add_argument("--semi-fresh-threshold", type=float, default=0.5)
+    ap.add_argument("--device", default=None, help="e.g. mps, cpu, 0 (default: ultralytics picks)")
     a = ap.parse_args(argv)
     from PIL import Image
-    ts = TwoStage(a.det, a.cls, conf=a.conf, spoiled_threshold=a.spoiled_threshold).load()
+    ts = TwoStage(a.det, a.cls, conf=a.conf, spoiled_threshold=a.spoiled_threshold,
+                  semi_fresh_threshold=a.semi_fresh_threshold, device=a.device).load()
     data = Path(a.data)
     n = 0
     with open(a.out, "w") as f:

@@ -133,6 +133,24 @@ def get_tips():
     return jsonify(tips=tips)
 
 
+def _num_in(v, hi):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+        return None
+    return float(v) if 0 <= v <= hi else None
+
+
+def clean_macros(m):
+    """Per-serving macros or None when missing/invalid (never an error)."""
+    if not isinstance(m, dict):
+        return None
+    kcal, p, c, f = (_num_in(m.get(k), hi) for k, hi in
+                     (("kcal", 3000), ("protein_g", 300), ("carbs_g", 300), ("fat_g", 300)))
+    if None in (kcal, p, c, f):
+        return None
+    return {"kcal": int(round(kcal)), "protein_g": round(p, 1), "carbs_g": round(c, 1),
+            "fat_g": round(f, 1)}
+
+
 @bp.post("/recipes/suggest")
 @require_auth
 def suggest_recipes():
@@ -155,4 +173,12 @@ def suggest_recipes():
         recipes = gemini.suggest_recipes(payload, n, dietary)
     except gemini.UpstreamError as e:
         raise upstream_unavailable(str(e))
-    return jsonify(recipes=recipes)
+    out = []
+    for r in recipes:
+        if not isinstance(r, dict):
+            continue
+        r = dict(r)
+        r["macros"] = clean_macros(r.get("macros"))
+        r["macros_estimated"] = True
+        out.append(r)
+    return jsonify(recipes=out)

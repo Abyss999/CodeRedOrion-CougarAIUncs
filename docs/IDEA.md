@@ -30,7 +30,7 @@ Every removal records an outcome. That turns the app into a measurement tool:
 
 ## Supporting intelligence
 - **Expiry prediction** — category defaults + Gemini inference, shown with its source.
-- **Spoilage detection** from photos (YOLO, fresh vs spoiled).
+- **Spoilage detection** from photos (YOLO: fresh / use soon / spoiled).
 - **Learning from removals** — an item removed after its predicted expiry is feedback for the
   prediction. Waste reasons feed personal tips ("you always forget the spinach").
 
@@ -47,7 +47,7 @@ Smart shopping list, allergy onboarding, group fridge.
 
 ## UI direction
 - Colors: light green-yellow, deeper greens for contrast.
-- Sign-in: simple, two buttons (log in / sign up), green with light text.
+- Sign-in: simple, two buttons (log in / sign up), green with light text, plus **Continue with Google**. There is no Apple sign-in, because it needs a paid developer account.
 - Bottom tab bar (Instagram / MyFitnessPal style): **Home, Recipes, [ + Add ], Fridge/Pantry, Social**.
 - Social tab: Food Pantry widget first (tap to expand), then a sticky-note feed of requests, each
   headed with its source (friend or group). A **+** at the top adds friends or joins/creates a group.

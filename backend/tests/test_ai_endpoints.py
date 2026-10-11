@@ -148,8 +148,9 @@ def test_receipt_success(app, client, user, monkeypatch):
     assert r.status_code == 200
     b = r.get_json()
     assert b["total"] == 11.0
-    assert b["candidates"] == [{"name": "Milk", "quantity": 2.0, "price": 3.5},
-                               {"name": "Eggs", "quantity": 1.0, "price": 4.0}]
+    assert [{k: c[k] for k in ("name", "quantity", "price")} for c in b["candidates"]] == [
+        {"name": "Milk", "quantity": 2.0, "price": 3.5}, {"name": "Eggs", "quantity": 1.0, "price": 4.0}]
+    assert all(c["food_group"] for c in b["candidates"])  # added in 0003
 
 
 def test_receipt_missing_image(client, user):

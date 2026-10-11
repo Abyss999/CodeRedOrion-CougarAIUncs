@@ -64,6 +64,31 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   stay `403`; non-members of the group get `403`. `PATCH` stays owner-only. If the item's open
   listing was claimed and `recipient_id` is omitted, the claimer becomes `recipient_id`.
 
+## Food groups (`food_group`)
+`food_group` is the user-facing grouping: `protein | veggies | fruit | dairy | grains | pantry |
+leftovers | frozen | other`. It is separate from the spoilage `category` (which still drives expiry and
+CO2e). Returned on every item response and every candidate (parse-text, from-photo, from-receipt,
+barcode). `POST /items` and `PATCH /items/:id` accept it (invalid -> `400 validation_error`); when
+omitted on create it is derived from `category` + name (meat/seafood/eggs -> protein, bakery -> grains,
+pantry_dry -> pantry, dairy/leftovers/frozen/other -> same name, produce_* -> `fruit` if the name is a
+known fruit else `veggies`).
+**PATCH rules:** (1) an explicit `food_group` always wins (valid value, else `400`), including when
+`category` is sent in the same request; (2) `category` without `food_group` re-derives `food_group`
+from the new category + current name (this overwrites a previous manual choice); (3) a `name`-only
+change does **not** re-derive (the user's grouping is left alone); `name` + `category` re-derives. Sending `"food_group": null` returns `400` (to clear a manual group, send `category` again so it re-derives).
+Receipt lines (`from-receipt`) have no category, so `food_group` comes from a deterministic keyword
+match on whole, case-insensitive name tokens (with receipt abbreviations such as `CHKN`, `GRND BF`,
+`YGRT`, `BRD`, `FROZ`, `MLK`, `OJ`, `TOM`, `SLMN` expanded): frozen, then pantry modifiers (juice, sauce, broth, soup, peanut
+butter...), dairy, protein, grains, fruit, common vegetables, other pantry staples; no match -> `other`.
+No Gemini call is involved. Tables: `backend/app/services/food_group.py`.
+Candidates use the ML service's `food_group` when present, else Gemini's (validated), else the heuristic.
+- ✅ `GET /items?group_by=food_group` (only valid value; anything else -> `400`) →
+  `200 {sections: [{food_group, items: [item…]}]}`. Sections follow the Fridge design order
+  (protein, veggies, fruit, dairy, then grains, pantry, leftovers, frozen, other); **empty sections
+  are omitted**; items within a section sort by `predicted_expiry` ascending (nulls last). Other
+  filters (`storage`, `include_removed`) still apply. Without `group_by` the response is unchanged
+  (`{items: [...]}`).
+
 ## Adding food
 Candidates are **not saved** until `POST /items`. Every candidate also carries a suggested
 `storage`, `quantity`, `unit`, `est_price`, `predicted_expiry` and `expiry_source` so the client can
@@ -71,9 +96,15 @@ post it straight back.
 - ✅ `POST /items/parse-text` `{text (<=4000 chars)}` → `200 {candidates: [item…]}` (Gemini);
   `502 upstream_unavailable` when Gemini is not configured/failing.
 - ✅ `POST /items/from-photo` multipart `image` (required), `mode=fridge|single` (default `fridge`) →
-  `200 {candidates: [{name, category, confidence, freshness: "fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
+  `200 {candidates: [{name, category, confidence, freshness: "fresh"|"semi_fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
   …}], source: "yolo"|"gemini"}`. Uses `ML_SERVICE_URL`/detect when set; if unset **or the ML
   service errors**, falls back to Gemini vision; neither → `502`.
+  `freshness` is normalised server-side for both sources (`candidates.normalize_freshness`): the
+  three values pass through; variants map `semi-fresh`/`semi fresh`/`use soon`/… → `semi_fresh`
+  and `rotten`/`stale`/`moldy`/`overripe`/`decayed`/… → `spoiled` (case/hyphen/space-insensitive; the word
+  lists mirror `SEMI_WORDS`/`SPOILED_WORDS` in `ml/yolo/taxonomy.py`, and `ripe` is fresh in both); anything unknown or
+  missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). It is
+  informational only: not stored, and it does not change `predicted_expiry`.
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [{name, quantity, price}], total}`
   via `ML_SERVICE_URL`/ocr; `502` when unset or failing. `quantity` defaults to 1.
 - ✅ `GET /items/barcode/:code` (6-14 digits, else 400) → `200 {candidate}` (Open Food Facts, adds
@@ -152,8 +183,10 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
 
 ## Recipes, impact, tips
 - ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str]}` → `200 {recipes: [{title,
-  minutes, uses_items, missing_items, steps}]}` built from the caller's 20 soonest-expiring active
-  items. With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
+  minutes, uses_items, missing_items, steps, macros, macros_estimated}]}` built from the caller's 20 soonest-expiring active
+  items. `macros` = `{kcal: int, protein_g, carbs_g, fat_g}` per serving, estimated by Gemini
+  (validated: kcal 0-3000, grams 0-300, numeric); missing/invalid -> `macros: null` (no error).
+  `macros_estimated` is always `true`. With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
 - ✅ `GET /impact?range=week|month|all` (default `all`; week=last 7 days, month=last 30; bad → 400) →
   `{saved: {count, kg, money, co2e_kg}, wasted: {count, kg, money, co2e_kg}, waste_rate, weekly:
   [{week (date of bucket start), saved, wasted}]}`. `saved` = `used`+`donated` removals, `wasted` =
@@ -163,3 +196,20 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
 - ✅ `GET /tips` → `200 {tips: [{code, message}]}`. Based on the last 90 days of `thrown_out` events
   (top reason, most-wasted item, most-wasted category) plus items expiring within 2 days. Zero data
   → one `getting_started` tip.
+
+## Gemini usage logging
+Every Gemini call (`parse_text`, `detect`, `recipes`, `shelf_life`) writes one INFO line on the
+logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compose logs api`):
+
+    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
+
+Tokens come from the response's `usage_metadata` (`output_tokens` includes thinking tokens); they are
+`null` when it is missing, and on `status=error` when the call failed. Prompts, response text, user
+data and the API key are never logged. Cost report:
+
+    docker compose logs api | python scripts/gemini_cost.py
+    python scripts/gemini_cost.py api.log --price gemini-2.5-flash=0.30,2.50 --default-price 0.30,2.50
+
+`scripts/gemini_cost.py` prints calls, errors, tokens and USD per model + purpose and a total. Its
+price table (USD per 1M input/output tokens) is a placeholder dated 2026-10-10 and must be verified
+against Google's pricing page; override per model with `--price MODEL=IN,OUT`.

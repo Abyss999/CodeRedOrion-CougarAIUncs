@@ -6,6 +6,28 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **Datasets and licences, verified on each source page:** fridge_objects (Roboflow, wajeeha workspace), hien_fridge (Roboflow, gracelearning) and VegQual (figshare 30596084) are all **CC BY 4.0**, which requires attribution (see `docs/ML.md` "Attributions" and the README). The fresh/stale fruit set is **raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle, CC0)**.
 - **Dropped `sriramr/fruits-fresh-and-rotten-for-classification`.** The Kaggle API reports its licence as "Unknown", so we can't confirm our use is allowed. `muhammad0subhan/fruit-and-vegetable-disease-healthy-vs-rotten` (CC0) was also rejected: at 5.2 GB it breaks the 8 GB disk budget on the Mac.
 
+## 2026-10-10 — Sign-in and screen set
+- **Sign-in is email + Google only.** Sign in with Apple was removed: the capability can't be
+  signed without a paid Apple Developer team, and passkeys need associated domains (also paid).
+  SMS and magic links were rejected because they need paid or unbuilt email/SMS sending.
+  `user_identities.provider` stays generic so a provider can be added later.
+- **The screen set is complete for the idea: 22 screens** (`docs/design/SCREENS.md`), after an
+  audit against `IDEA.md`. Preferences (units, default storage, currency) are stored on the device
+  for v1. Forgot-password, onboarding, widgets, reminders, grocery list and dietary restrictions
+  are deferred.
+- **"I made this" on a recipe** marks its fridge ingredients as `used`, which closes the loop from
+  recipes to Impact.
+
+## 2026-10-10 — Wave 2 (iOS) decisions
+- **Minimum iOS 18, built with Xcode 26 / the iOS 26 SDK.** iOS 26 gets the Liquid Glass tab bar, and iOS 18 gets the standard one. Xcode is pinned in `ios.yml`.
+- **No TestFlight.** The owner doesn't have the paid Apple Developer Program. Development and QA use the **Simulator**. The demo runs on the **owner's iPhone, signed with a free Personal Team** (builds last 7 days). The team id and bundle id live in a gitignored `ios/Local.xcconfig`. Capabilities a free team can't sign are avoided: push, iCloud and App Groups, so **widgets are deferred**.
+- **Demo connectivity: a Cloudflare quick tunnel from the Mac** (`scripts/demo_tunnel.sh`). It's HTTPS, so there are no ATS exceptions. The app's base URL is set at runtime in a Debug settings screen, because the tunnel URL changes per run. Compose stays bound to 127.0.0.1.
+- **Freshness is stored on items** (`freshness`, `freshness_checked_at`, `confidence`), because flagging spoilage from photos is a core feature.
+- **Account deletion** (`DELETE /auth/me`) is in scope, since the App Store requires it once sign-up exists. Undo-remove uses `POST /items/:id/restore` within 10 min.
+- **Screen states:** empty and error use native `ContentUnavailableView`, loading uses skeleton rows, and an expired item's badge reads **"Expired"**.
+- **The inactive tab colour** follows the system under Liquid Glass (IOS-3 closed as won't-fix).
+- **Deferred:** dark artboards (the tokens cover dark mode), onboarding, notifications, localisation, widgets.
+
 ## 2026-10-10 — Gemini model, training venue
 - **`GEMINI_MODEL=gemini-3.8-flash`.** This is the newest non-preview Flash model in the key's model list, as listed on the Mac on 2026-10-10. `gemini-3.8-flash-lite` is the fallback if cost or latency becomes a problem. Re-check the list before the demo, because preview and retired ids change.
 - **The full YOLO26s training runs on Colab, not the Mac.** The MPS smoke run measured 173 s/epoch for yolo26s on VegQual alone, which puts the merged dataset at about 7.5 h for 80 epochs (6.5–9 h). The budget was 3 h. Short smoke runs and the pipeline checks stay on the Mac.
@@ -13,7 +35,7 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 
 ## 2026-10-10 — Wave 1 decisions (backend core, ML, design)
 - **YOLO26 via `ultralytics==8.4.175`.** That was the latest on PyPI on 2026-10-10, and Ultralytics' docs recommend YOLO26 for new projects (YOLO11 is the mature fallback). It is **AGPL-3.0**: fine for this public repo, but it matters if the code is ever closed. Details are in `docs/ML.md`.
-- **Two-stage vision.** The detector predicts food *names* (about 50 classes, `ml/yolo/taxonomy.py`), and a separate `yolo26n-cls` classifier labels each crop fresh or spoiled. *Why:* the fridge datasets have no freshness labels and the produce datasets have no fridge scenes. The consequence is that spoiled recall is effectively a produce-only number.
+- **Two-stage vision.** The detector predicts food *names* (about 50 classes, `ml/yolo/taxonomy.py`), and a separate `yolo26n-cls` classifier labels each crop fresh, semi_fresh ("use soon") or spoiled. semi_fresh was added on 2026-10-10 from teammate LemurTech22's work, and its gates stay binary (see `docs/QA.md`). *Why:* the fridge datasets have no freshness labels and the produce datasets have no fridge scenes. The consequence is that spoiled recall is effectively a produce-only number.
 - **The receipt parser is deterministic.** It turns GLM-OCR text into lines and a total, with an optional Gemini structuring hook. *Why:* it can be tested on CPU, it costs nothing to run, and QA can gate it.
 - **The backend calls the ML service and falls back to Gemini vision** when `ML_SERVICE_URL` is unset *or the service errors*. Receipts have no fallback and return 502.
 - **`food_events` primary key is `(id, time)`.** A hypertable's unique keys must include the partition column.
