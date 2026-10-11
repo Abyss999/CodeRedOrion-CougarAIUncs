@@ -121,7 +121,60 @@ enum AccessibilityID {
         static let compareChip = "impact.compare.chip"
     }
     enum Recipes { static let screen = "recipes" }
-    enum Social { static let screen = "social" }
+    enum Social {
+        static let screen = "social"
+        static let title = "social.title"
+        static let connect = "social.connect"
+        static let pantryWidget = "social.pantry"
+        static let requestsTitle = "social.requests.title"
+        static let yours = "social.yours"
+        static let ask = "social.ask"
+        static let board = "social.board"
+        static func note(_ id: String) -> String { "social.note.\(id)" }
+        static func noteMore(_ id: String) -> String { "social.note.\(id).more" }
+        static func offer(_ id: String) -> String { "social.note.\(id).offer" }
+        static let banner = "social.banner"
+    }
+
+    enum Fulfil {
+        static let sheet = "fulfil.sheet"
+        static let confirm = "fulfil.confirm"
+        static let cancel = "fulfil.cancel"
+        static let banner = "fulfil.banner"
+    }
+
+    enum Composer {
+        static let screen = "composer"
+        static let text = "composer.text"
+        static let count = "composer.count"
+        static let post = "composer.post"
+        static let cancel = "composer.cancel"
+        static let banner = "composer.banner"
+    }
+
+    enum MyRequests {
+        static let screen = "myrequests"
+        static func row(_ id: String) -> String { "myrequests.row.\(id)" }
+        static func cancel(_ id: String) -> String { "myrequests.row.\(id).cancel" }
+        static let banner = "myrequests.banner"
+    }
+
+    enum Pantry {
+        static let screen = "pantry"
+        static let filter = "pantry.filter"
+        static func row(_ id: String) -> String { "pantry.row.\(id)" }
+        static func claim(_ id: String) -> String { "pantry.row.\(id).claim" }
+        static func claimed(_ id: String) -> String { "pantry.row.\(id).claimed" }
+        static func pickupHint(_ id: String) -> String { "pantry.row.\(id).pickup" }
+        static let banner = "pantry.banner"
+    }
+
+    enum ClaimedItem {
+        static let screen = "claimed"
+        static let pickup = "claimed.pickup"
+        static let map = "claimed.map"
+        static let openMaps = "claimed.maps"
+    }
     enum Auth { static let screen = "auth" }
     enum Settings { static let screen = "settings" }
 

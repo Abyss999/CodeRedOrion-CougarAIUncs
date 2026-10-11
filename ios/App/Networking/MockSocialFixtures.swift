@@ -63,13 +63,16 @@ extension MockData {
         let pantry = [
             PantryListing(id: "share-sourdough", itemId: "item-marcus-sourdough", ownerId: marcusFull.id, ownerName: "Marcus Ojeda",
                           groupId: nil, status: .open, claimedByMe: false, createdAt: ago(3),
-                          source: .init(type: .friend, name: "Marcus Ojeda"), item: food("Sourdough loaf", .bakery, 1, "loaf", 2)),
+                          source: .init(type: .friend, name: "Marcus Ojeda"), item: food("Sourdough loaf", .bakery, 1, "loaf", 2), pickupSet: true),
             PantryListing(id: "share-rice", itemId: "item-ana-rice", ownerId: ana.id, ownerName: "Ana Reyes",
                           groupId: moody.id, status: .open, claimedByMe: false, createdAt: ago(8),
                           source: .init(type: .group, name: "Moody Hall 4F"), item: food("Cooked rice", .leftovers, 3, "cup", 1)),
             PantryListing(id: "share-apples", itemId: "item-marcus-apples", ownerId: marcusFull.id, ownerName: "Marcus Ojeda",
                           groupId: ccs.id, status: .open, claimedByMe: true, createdAt: ago(26),
-                          source: .init(type: .group, name: "CougarCS Kitchen"), item: food("Gala apples", .produceHardy, 6, "piece", 9)),
+                          source: .init(type: .group, name: "CougarCS Kitchen"), item: food("Gala apples", .produceHardy, 6, "piece", 9),
+                          pickupSet: true,
+                          pickup: PickupSpot(note: "Paper bag on the lobby shelf, says Marcus", lat: 29.7199, lng: -95.3422,
+                                             placeName: "Cougar Village 2, lobby")),
         ]
 
         let listings = [

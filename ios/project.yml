@@ -53,6 +53,10 @@ targets:
             CFBundleTypeRole: Editor
             CFBundleURLSchemes:
               - $(GOOGLE_REVERSED_CLIENT_ID:default=com.coderedorion.googlesignin.unset)
+          - CFBundleURLName: BiteDownFriendLink
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - bitedown
         UIAppFonts:
           - Outfit-Medium.ttf
           - Outfit-SemiBold.ttf
