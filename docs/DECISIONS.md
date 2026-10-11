@@ -2,6 +2,10 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — The app is called BiteUp (owner)
+- **Product name: BiteUp**, with the tagline "Use what you have. Share what you spare." It was proposed by teammate Truc (FrankinstyLe) in #49 and approved by the owner. The positioning leans to students and shared households, which fits the social features.
+- **The rename is user-facing only.** That covers the canvas (sign-in mark, settings version line, titles), the doc titles, the README and the iOS `CFBundleDisplayName`. Internal names stay: the Xcode target and scheme `FoodWasteReducer`, the repo, the Docker services and the bundle id. Renaming those would churn every open branch for no user-visible gain.
+
 ## 2026-10-10 — ML models handed to a teammate (owner)
 - **ML model work is paused on our side.** A teammate is building the models. The Colab run, the `export.zip` YOLO gate, weights in `ml/serve`, the from-photo `source: "yolo"` check, GLM-OCR on MPS and further `ml/yolo` / `ml/eval` / pipeline data work are off the active queue until the owner says otherwise. The merged datasets, split rules, notebook and pipeline stay as they are. **The photo add flow, and so the demo path, runs on the existing Gemini-vision fallback** (`/items/from-photo` with `ML_SERVICE_URL` unset). Receipt OCR has no fallback (502), so receipt scan isn't available until the teammate's OCR lands.
 
