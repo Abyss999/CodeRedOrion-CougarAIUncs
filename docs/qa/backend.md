@@ -848,3 +848,24 @@ Gemini photo enrichment (`enrich=expiry,nutrition` on `POST /items/from-photo`),
 - Keep `expirySource` a `String?` (or add an unknown-case fallback); `gemini` is already a valid value on post-back, but a strict enum on read would be fragile.
 - Item detail: a Nutrition section reading the per-100 g object, with the "estimated" flag always shown. Not editable (PATCH is 400).
 - Recipes: for "Cook with this", send `item_ids` (1-10 ids, from the caller's active items; any 404 means refresh the list), keep each response the same shape, and handle the empty "Only what I have" state by falling back to the "needs a few things" state, or by turning the chip off for a focus request. Remember the recipe cache is one slot per user.
+
+## BE-19..22 re-verification on main (food-orch)
+
+Re-check of the four PR #79 bugs against main at `02b06e8` (builder fix `d6b0a52`). New tests: `backend/tests/test_qa_be19_22.py` (24 tests). Each fails on the pre-fix code (reasoned from the diff; BE-22 also measured) and passes now. **Targeted runs only (orchestrator):** the full suite was not run.
+
+| Bug | Verdict | Evidence |
+|---|---|---|
+| BE-19 | **VERIFIED FIXED** | `crops._cut` sets `crop.info = {}` after the crop and RGB convert, so Pillow has no `comment` to write. With a real COM segment in the upload (RGB and L, EXIF orientation 1 and 6), the crop has no 0xFE marker and no comment text, and `im.info` has no `comment`. With EXIF, GPS, XMP, ICC and a comment all present, the crop's markers are a subset of {APP0, DQT, SOF0/2, DHT}. Also checked through the route: the bytes sent to Gemini have no COM and no comment text. |
+| BE-20 | **VERIFIED FIXED** | `enrich_items` passes `retry=False`, so the loop is `(None,)`. For each of 429, 503, 504, "DEADLINE_EXCEEDED", "503 UNAVAILABLE" and "429 RESOURCE_EXHAUSTED": exactly one `generate_content` call and no `time.sleep`, both through the route and through `enrich_items`. `parse_text`, `suggest_recipes` and `estimate_shelf_life` still retry once (two calls on a persistent 503, never three). `retry` defaults to True and `retry=False` appears at one call site only. `docs/API.md` now states one 25 s attempt and a worst case of detection (skipped past 30 s) plus 25 s; 30 + 25 = 55 s fits the documented 60 s. |
+| BE-21 | **ACCEPTED AS DOCUMENTED** (limitation stays) | The fix is wording only in `docs/API.md`. It now says the rule is an instruction to Gemini that the server does not check, and that `uses_items` can report a same-name twin. That is honest best effort. No server filter or flag was added and `match_uses_items` is unchanged, so `test_server_does_not_verify_that_a_recipe_uses_a_focus_item` and `test_focus_item_with_a_same_name_twin_can_be_mapped_to_the_twin` still pass (they document the behaviour). A filter or a focus-first mapping would still be cheap if iOS wants a hard guarantee; no demo path depends on it. |
+| BE-22 | **VERIFIED FIXED** (halved, one decode remains) | Same image class: 7062 x 7062 RGBA PNG (49.87 MP, 207 KB), one crop. Pre-fix `crops.py`: RSS 39 MB to 441 MB (+402 MB). Fixed: 39 MB to 242 MB (+203 MB), which is the single unavoidable RGBA decode (about 200 MB). The full-size RGB copy is gone. Residual: a 200 KB upload still costs about 200 MB, and concurrent requests multiply it; `ENRICH_MAX_PIXELS` is still 50 MP (header-checked before decode, tested again; Pillow's global bomb limit untouched). Not worth a new bug; lowering the ceiling to about 25 MP would be the next step if memory is tight. Regression test measures the delta in a subprocess and requires under 1.4 x the raw decode (pre-fix 2.0 x). |
+
+**Audit of the builder's edits to QA-owned tests in `d6b0a52`:** clean.
+- `test_qa_pr79_crops.py`: only the strict `xfail` marker on `test_jpeg_comment_segment_is_stripped` was removed. The assertions are unchanged, and the test now passes for the right reason (BE-19 is fixed).
+- `test_qa_pr79_gemini.py`: the BE-20 evidence test was renamed and flipped from `len(calls) == 2` to `== 1`, with the same inputs (504 / DEADLINE_EXCEEDED, `upstream_error`, HTTP 200). That is the intended behaviour change, not a weakening. The plain-read-timeout and timeout-kwarg tests are untouched.
+- `test_qa_pr79_contract.py` (BE-21 evidence) was not touched.
+- The non-QA `test_enrich_gemini.py` swapped its "retried once" test for a no-retry enrich test plus a `parse_text` retry test, so retry coverage for other purposes is kept.
+
+Nothing needed restoring. The extra strictness lives in `test_qa_be19_22.py`.
+
+**Runs (targeted):** `test_qa_be19_22.py`, `test_qa_pr79_crops.py`, `test_qa_pr79_gemini.py`, `test_qa_pr79_contract.py`, `test_enrich_gemini.py`, `test_crops.py` and `test_recipes_focus.py`: 301 passed. No failures, so no full-suite run. No new bugs (highest id stays BE-22; `gh pr list` shows no open PRs).

@@ -109,10 +109,10 @@ Severity: **blocker** (breaks demo path) · high · medium · low. Full repros a
 | BE-15 | low | Backend | A malformed JWKS `keys` value caused a 500 | fixed (#60): 502 or stale cache |
 | BE-16 | low | Backend | Two `email_verified` normalisers disagreed | fixed (#60): one shared normaliser |
 | BE-17 | low | Backend | `remove-batch` with recipient omitted ran one UPDATE per claimed listing, breaking the constant-query promise | fixed (#74): one bulk statement |
-| BE-19 | low | Backend | A JPEG comment segment in the uploaded photo survived into the crop sent to Gemini (docs said metadata is dropped) | fixed by the builder in `d6b0a52` (#79), not re-verified by QA |
-| BE-20 | low | Backend | The shared retry re-sent the enrich call on 429/503/504, so worst case was about 80 s on top of detection | fixed by the builder in `d6b0a52` (#79): enrich is never retried; not re-verified by QA |
-| BE-21 | low | Backend | "Every recipe must use a focus item" is a prompt instruction the server does not check; `uses_items` can map to a same-name twin | fixed by the builder in `d6b0a52` (#79) as wording in `docs/API.md` only; the twin mapping is unchanged |
-| BE-22 | low | Backend | A 49.9 MP PNG raised peak memory from 68 MB to 468 MB while cropping | fixed by the builder in `d6b0a52` (#79): only the crop is converted; not re-verified by QA |
+| BE-19 | low | Backend | A JPEG comment segment in the uploaded photo survived into the crop sent to Gemini (docs said metadata is dropped) | fixed (#79, `d6b0a52`), **verified** by QA on main: crops carry no COM segment; EXIF/GPS/XMP/ICC absent (`test_qa_be19_22.py`) |
+| BE-20 | low | Backend | The shared retry re-sent the enrich call on 429/503/504, so worst case was about 80 s on top of detection | fixed (#79, `d6b0a52`), **verified** by QA on main: enrich makes exactly one attempt on 429/503/504/DEADLINE_EXCEEDED; other purposes still retry once; worst case detection + 25 s |
+| BE-21 | low | Backend | "Every recipe must use a focus item" is a prompt instruction the server does not check; `uses_items` can map to a same-name twin | **accepted as documented** (#79, `d6b0a52`), verified by QA: `docs/API.md` states the focus-item rule is a Gemini instruction the server does not check, and that `uses_items` can name a same-name twin |
+| BE-22 | low | Backend | A 49.9 MP PNG raised peak memory from 68 MB to 468 MB while cropping | fixed (#79, `d6b0a52`), **verified** by QA on main: only the crop is converted; a 49.9 MP RGBA PNG now peaks at +203 MB (was +402 MB). Next step if memory is tight: lower `ENRICH_MAX_PIXELS` to about 25 MP |
 | ML-45 – ML-47 | low | ML | Gemini receipt structuring | fixed (#54) |
 | ML-48, ML-49, ML-54 | medium | ML | The leakage harness skipped new sources; hyphenated timestamps weren't parsed | fixed (#62) |
 | ML-50 | high | ML | Roboflow copies of one photo could straddle splits | fixed (#62): parent-photo grouping |
