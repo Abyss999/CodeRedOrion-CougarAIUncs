@@ -6,7 +6,9 @@ renders as the Liquid Glass bar. The project is generated: `cd ios && xcodegen g
 ## Layout
 - `App/Networking`: `APIClient` protocol, `LiveAPIClient`, `MockAPIClient` + `MockFixtures`, Codable `Models`, `AuthStore` (Keychain), `BaseURLProvider`.
 - `App/Components`: `FoodGroupIcon`, `ExpiryBadge`, `EmptyStateView` / `ErrorStateView`, `SkeletonRow`, `GroupHeaderText`.
-- `App/Support`: `AppEnvironment` (DI, Mock vs Live), `LaunchConfiguration`, `AccessibilityID`, `DebugSettings`.
+- `App/Support`: `AppEnvironment` (DI, Mock vs Live), `LaunchConfiguration`, `AccessibilityID`, `DebugSettings`, `DebugProbes` (UI-test probes).
+- `App/Fridge`: `FridgeView` (Fridge tab), `FridgeModel` (per-storage state, optimistic remove / Undo / rollback), row, group header, storage control, error banner.
+- `App/Remove`: `RemoveSheet` (outcome, plus the claimer line), `RemoveReasonView` (waste reason, pushed inside the sheet), tiles.
 - `Resources`: `Assets.xcassets` (AccentColor, placeholder AppIcon, food-group glyphs), `Fonts` (Outfit 500/600 + OFL licence).
 - `Config/*.xcconfig`: per-configuration settings (`API_BASE_URL`).
 
@@ -34,15 +36,33 @@ builds work without `Local.xcconfig` (`CODE_SIGNING_ALLOWED=NO`).
 | `-UITestSlowNetwork` | every mock call takes 3 s (default 150 ms) |
 | `-UITestShowToast` | shows the Undo toast on launch inside the Home tab; tapping Undo shows `toast.undo.marker` |
 | `-UITestReduceMotion` | forces Reduce Motion on (root `reduceMotionOverride`; simctl has no switch for it) |
-Seed, signed-in, fail and slow imply `-UITestMockAPI`. Mock login accepts any credentials except password `wrong-password` (401); signup with `taken@example.com` returns 409 `email_taken`.
+| `-UITestLoadingForever` | the item list never returns (skeleton `fridge.loading` stays up) |
+| `-UITestFailList` | only the item list fails (error state); other calls succeed |
+| `-UITestFailListOnce` | the first item list call fails, the retry succeeds |
+| `-UITestFailRemove` | only `POST /items/:id/remove` fails (row rolls back, `fridge.remove.error` banner) |
+| `-UITestFailRestore` | only `POST /items/:id/restore` fails (Undo rolls back, banner) |
+| `-UITestRestoreNotRemoved` | restore throws 409 `not_removed` (item already active): the row stays, no banner |
+| `-UITestSlowRemove` / `-UITestSlowRestore` | that call alone takes 3 s |
+| `-UITestRecordHaptics` | records haptics and exposes them on the `debug.haptics` probe |
+| `-UITestUndoWindow <seconds>` | Undo toast window in seconds (e.g. `30`) instead of 5 s (15 s with VoiceOver / Switch Control) |
+
+Seeds: `fridge` (default) is the Fridge artboard: 8 items, all in the fridge (pantry and freezer are empty), covering
+fresh, `semi_fresh` (bananas, "Use soon") and spoiled (strawberries, "Check"). `item-spinach` has an open Share listing
+claimed by Marcus Ojeda (`user-marcus`), so its sheet shows `remove.recipient`; `item-carrots` has an open listing with
+no claimer (no recipient line). `listing` returns the same data. `expired` has past-date items ("Expired"), `empty` has none, `long` has 36 across all 9 groups.
+In the mock, a donated removal fulfils the open listing and restore reopens it.
+
+Every flag above except `-UITestShowToast`, `-UITestReduceMotion`, `-UITestRecordHaptics` and `-UITestUndoWindow` implies `-UITestMockAPI`. Mock login accepts any credentials except password `wrong-password` (401); signup with `taken@example.com` returns 409 `email_taken`.
 
 ## Accessibility identifiers
 Convention `screen.element[.id]`, lowercase, defined in `App/Support/AccessibilityID.swift`; tests use the same constants.
 - Tabs: `tab.home`, `tab.recipes`, `tab.add`, `tab.fridge`, `tab.social`. Add sheet: `add.sheet`.
-- Fridge: `fridge.list`, `fridge.storage`, `fridge.storage.<fridge|pantry|freezer>`, `fridge.group.<food_group>`, `fridge.row.<id>`, `fridge.row.<id>.remove`, `fridge.row.<id>.badge`.
-- Remove: `remove.sheet`, `remove.outcome.used|donated|thrown_out`, `remove.reason.<expired|forgot|didnt_like|other>`.
+- Fridge: `fridge.list`, `fridge.title`, `fridge.storage`, `fridge.storage.<fridge|pantry|freezer>` (selected segment has the `isSelected` trait), `fridge.group.<food_group>`, `fridge.row.<id>` (container), `fridge.row.<id>.badge`, `fridge.row.<id>.remove` (swipe action; may not reach XCUITest, fall back to the "Remove" label), `fridge.remove.error`, `fridge.remove.error.retry`, `fridge.remove.error.dismiss`.
+- Remove: `remove.sheet`, `remove.title`, `remove.cancel`, `remove.outcome.used|donated|thrown_out`, `remove.outcome.<raw>.check`, `remove.recipient` (static, non-interactive "Gave it away goes to <claimer>" line; shown only when the open listing has a claimer; the app sends no `recipient_id`, the server credits the claimer).
+- Remove reason: tiles `remove.reason.<expired|forgot|didnt_like|other>`; screen `removereason.screen`, `removereason.title`, `removereason.tip`.
 - States: `<screen>.empty`, `<screen>.error`, `<screen>.error.retry`, `<screen>.loading`, `<screen>.skeleton.<n>`.
 - Debug: `debug.versionLabel`, `debug.settings`, `debug.baseURL.field|save|reset|error|current`.
+- Probes (DEBUG, mock launches, on the Fridge tab): `debug.haptics` (label and value = comma-joined events, e.g. `success,warning`; `none` when empty; needs `-UITestRecordHaptics`) and `debug.stagger.count` (stagger restarts; staggers run on a storage's first load only). Content behind an open sheet may be hidden from accessibility, so read probes after it dismisses.
 
 ## Motion (docs/design/MOTION.md)
 All animation goes through the Reduce Motion choke point; screen code never calls `withAnimation` or `.animation` directly,

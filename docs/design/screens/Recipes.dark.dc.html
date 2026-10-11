@@ -25,18 +25,21 @@ body{background:#0F1A12}</style>
     </header>
 
     <div role="group" aria-label="Filters" style="display: flex; gap: 8px; flex-wrap: wrap">
-      <button aria-pressed="true" style="height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: #B9D871; color: #13261A; font-size: 14px; font-weight: 600">Expiring first</button>
+      <button aria-pressed="true" style="height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: #B9D871; color: #13261A; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Only what I have</button>
+      <button aria-pressed="true" style="height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: #B9D871; color: #13261A; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Expiring first</button>
       <button aria-pressed="false" style="height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; color: #E8F0DA; font-size: 14px; font-weight: 500">Under 30 min</button>
       <button aria-pressed="false" style="height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; color: #E8F0DA; font-size: 14px; font-weight: 500">Vegetarian</button>
     </div>
 
     <article style="background: #B9D871; color: #13261A; border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
       <span style="font-size: 13px; color: #13261A; font-weight: 600">Best match · uses 3 expiring items</span>
-      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 22px; font-weight: 600; line-height: 1.2">Chicken thighs with garlicky spinach and yogurt sauce</h2>
+      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-size: 22px; font-weight: 600; line-height: 1.2">Chicken thighs with wilted spinach and yogurt sauce</h2>
       <div style="display: flex; gap: 6px; flex-wrap: wrap">
-        <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2C4A26; color: #13261A">Chicken, today</span>
-        <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2C4A26; color: #13261A">Spinach, 1 day</span>
-        <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2C4A26; color: #13261A">Yogurt, 3 days</span>
+        <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2C4A26; color: #E8F0DA">Chicken · Today</span>
+        <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2C4A26; color: #E8F0DA">Spinach · Tomorrow</span>
+        <span style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #2C4A26; color: #E8F0DA">Yogurt · 2–3 days</span>
       </div>
       <dl aria-label="Macros per serving" style="margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; background: #2C4A26; border-radius: 14px; overflow: hidden">
         <sc-for list="{{macros}}" as="m" hint-placeholder-count="4">
@@ -47,8 +50,8 @@ body{background:#0F1A12}</style>
         </sc-for>
       </dl>
       <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #2F4A2A">
-        <span>35 min · 2 servings · need: 1 lemon</span>
-        <a href="#" style="color: #13261A; font-weight: 600">Cook it</a>
+        <span>35 min · 2 servings</span>
+        <a href="RecipeDetail.dark.dc.html" style="min-height: 44px; display: flex; align-items: center; color: #13261A; font-weight: 600">Cook it</a>
       </div>
     </article>
 
@@ -57,7 +60,7 @@ body{background:#0F1A12}</style>
       <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
         <sc-for list="{{more}}" as="r" hint-placeholder-count="3">
           <li style="border-bottom: 1px solid #2A3A2D">
-            <a href="#" style="text-decoration: none; color: #E8F0DA; display: flex; align-items: center; gap: 12px; padding: 14px 16px">
+            <a href="RecipeDetail.dark.dc.html" style="text-decoration: none; color: #E8F0DA; display: flex; align-items: center; gap: 12px; padding: 14px 16px">
               <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
                 <span style="font-size: 16px; font-weight: 600">{{r.title}}</span>
                 <span style="font-size: 13px; color: #9DB09F">{{r.meta}}</span>
@@ -98,7 +101,7 @@ macros: [
 ],
 more: [
 { title: 'Spinach and cheddar omelette', meta: '15 min · 410 kcal · 27 g protein', uses: 'Uses 3' },
-{ title: 'Strawberry yogurt overnight oats', meta: '10 min + overnight · 380 kcal · 21 g protein', uses: 'Uses 2' },
+{ title: 'Banana yogurt overnight oats', meta: '10 min + overnight · 380 kcal · 21 g protein', uses: 'Uses 2' },
 { title: 'Sourdough panzanella', meta: '20 min · 330 kcal · 9 g protein', uses: 'Uses 1' }
 ]
 };

@@ -20,8 +20,11 @@ body{background:#0F1A12}</style>
   <main style="flex: 1; overflow: hidden; padding: 64px 20px 0; display: flex; flex-direction: column; gap: 14px">
     <header style="display: flex; justify-content: space-between; align-items: center">
       <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 30px; letter-spacing: -0.01em">Your food</h1>
+      <div style="display: flex; align-items: center; gap: 8px">
+      <a href="FridgeSelect.dark.dc.html" style="min-height: 44px; padding: 0 8px; display: flex; align-items: center; text-decoration: none; color: #B9D871; font-size: 17px; font-weight: 600">Select</a>
       <button aria-label="Search your food" style="width: 44px; height: 44px; border: 0; border-radius: 22px; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; display: flex; align-items: center; justify-content: center">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></button>
+      </div>
     </header>
     <div role="tablist" aria-label="Storage" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #223024; border-radius: 14px">
       <button role="tab" aria-selected="true" style="height: 36px; border: 0; border-radius: 10px; background: #18261B; color: #E8F0DA; font-weight: 600; font-size: 15px">Fridge</button>
@@ -36,13 +39,13 @@ body{background:#0F1A12}</style>
         <div style="background: #18261B; border-radius: 16px; overflow: hidden">
           <sc-for list="{{g.items}}" as="item" hint-placeholder-count="2">
             <div style="display: flex; align-items: stretch; border-bottom: 1px solid #2A3A2D; background: {{item.rowBg}}">
-              <div style="{{item.rowStyle}}">
+              <a href="ItemDetail.dark.dc.html" style="text-decoration: none; color: #E8F0DA; {{item.rowStyle}}">
                 <div style="{{g.tileStyle}}">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{g.stroke}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{g.icon}}"></path></svg>
                 </div>
                 <div style="flex: 1; min-width: 0"><div style="font-size: 16px; font-weight: 600">{{item.name}}</div><div style="font-size: 13px; color: #9DB09F">{{item.meta}}</div></div>
                 <span style="{{item.badgeStyle}}">{{item.when}}</span>
-              </div>
+              </a>
             </div>
           </sc-for>
         </div>
@@ -93,7 +96,7 @@ const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-rad
 const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #24361F; color: #B9D871; white-space: nowrap';
 const warn = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #3A3112; color: #FFD970; white-space: nowrap';
 const rowStyle = 'flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 16px';
-const it = (name, m, when, badge) => ({ name, meta: m, when, badgeStyle: badge || soon, rowStyle, rowBg: '#FFFFFF' });
+const it = (name, m, when, badge) => ({ name, meta: m, when, badgeStyle: badge || soon, rowStyle, rowBg: '#18261B' });
 return {
 groups: [
 { name: 'Protein', icon: ICON.protein, stroke: COLOR.protein.stroke, tileStyle: COLOR.protein.tileStyle, count: 1, items: [

@@ -16,7 +16,17 @@ enum UndoToastTiming {
     /// MOTION.md sets 5 s and says nothing more; per HIG (time-limited UI needs extra time for
     /// assistive tech) the toast stays 3x longer while VoiceOver or Switch Control is running.
     static let assistiveDuration: Duration = .seconds(15)
-    static let tick: Duration = .milliseconds(50)
+}
+
+private struct UndoWindowOverrideKey: EnvironmentKey { static let defaultValue: Duration? = nil }
+
+extension EnvironmentValues {
+    /// DEBUG/UI-test override for the Undo window (`-UITestUndoWindow <seconds>`); nil in production.
+    /// When set it replaces both the 5 s and the assistive-tech 15 s windows.
+    var undoWindowOverride: Duration? {
+        get { self[UndoWindowOverrideKey.self] }
+        set { self[UndoWindowOverrideKey.self] = newValue }
+    }
 }
 
 /// Bottom toast: message, "Undo" button (44 pt target) and a 5 s progress bar.
@@ -26,10 +36,13 @@ struct UndoToastView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.undoWindowOverride) private var windowOverride
 
     let item: UndoToastItem
     let dismiss: () -> Void
-    @State private var progress: Double = 1
+    /// The countdown window, set once when the toast appears. The bar is a timer-driven
+    /// `ProgressView`, so there is no per-tick @State re-render and the app can go idle.
+    @State private var window: ClosedRange<Date>?
 
     /// At accessibility text sizes the message gets the full width with Undo below it (IOS-11), so
     /// it wraps on whole words instead of being squeezed beside the button.
@@ -40,7 +53,10 @@ struct UndoToastView: View {
             : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
     }
 
-    private var duration: Duration { (voiceOver || switchControl) ? UndoToastTiming.assistiveDuration : UndoToastTiming.duration }
+    private var duration: Duration {
+        if let windowOverride { return windowOverride }
+        return (voiceOver || switchControl) ? UndoToastTiming.assistiveDuration : UndoToastTiming.duration
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,12 +86,22 @@ struct UndoToastView: View {
             .padding(.trailing, Theme.Spacing.s)
             .padding(.vertical, stacked ? Theme.Spacing.s : Theme.Spacing.xs)
 
-            GeometryReader { geo in
-                Rectangle().fill(Theme.Colors.onForestMuted)
-                    .frame(width: geo.size.width * progress, height: Theme.Size.toastProgress)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            // A timer indicator, not decorative motion, so it also runs under Reduce Motion.
+            Group {
+                if let window {
+                    ProgressView(timerInterval: window, countsDown: true) {
+                        EmptyView()
+                    } currentValueLabel: {
+                        EmptyView()
+                    }
+                    .progressViewStyle(.linear)
+                    .tint(Theme.Colors.onForestMuted)
+                } else {
+                    Color.clear
+                }
             }
             .frame(height: Theme.Size.toastProgress)
+            .clipped()
             .accessibilityHidden(true)
             .accessibilityIdentifier(AccessibilityID.Toast.progress)
         }
@@ -92,20 +118,15 @@ struct UndoToastView: View {
         }
     }
 
+    /// One sleep for the whole window (no polling), then time out. The countdown starts when the
+    /// toast appears; callers show it only once it's visible (FridgeView sets it after the sheet dismisses).
     private func run() async {
-        progress = 1
-        let clock = ContinuousClock()
-        let start = clock.now
         let total = duration
-        while !Task.isCancelled {
-            let elapsed = clock.now - start
-            if elapsed >= total { break }
-            // Linear countdown in 50 ms steps (a timer indicator, so it also runs under Reduce Motion).
-            progress = max(0, 1 - elapsed / total)
-            try? await Task.sleep(for: UndoToastTiming.tick)
-        }
+        let start = Date()
+        let c = total.components
+        window = start...start.addingTimeInterval(Double(c.seconds) + Double(c.attoseconds) / 1e18)
+        try? await Task.sleep(for: total)
         guard !Task.isCancelled else { return }
-        progress = 0
         item.onTimeout()
         dismiss()
     }

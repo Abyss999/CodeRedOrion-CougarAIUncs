@@ -23,25 +23,25 @@ body{background:#0F1A12}</style>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
       <div>
         <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 24px">Kroger receipt</h1>
-        <p style="margin: 2px 0 0; font-size: 14px; color: #9DB09F">7 food items · non-food lines skipped</p>
+        <p style="margin: 2px 0 0; font-size: 14px; color: #9DB09F">6 food items</p>
       </div>
     </header>
 
     <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
       <sc-for list="{{lines}}" as="l" hint-placeholder-count="7">
-        <li style="border-bottom: 1px solid #2A3A2D">
-          <label style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 44px">
-            <input type="checkbox" checked="{{l.checked}}" style="width: 22px; height: 22px; accent-color: #B9D871; margin: 0; flex-shrink: 0">
-            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+        <li style="border-bottom: 1px solid #2A3A2D; display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 14px">
+          <div role="checkbox" aria-checked="{{l.checked}}" tabindex="0" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px">
+            <span style="{{l.boxStyle}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#13261A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="{{l.tickStyle}}"><path d="M5 12l5 5L20 7"></path></svg></span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
               <span style="font-size: 16px; font-weight: 600">{{l.name}}</span>
               <span style="font-size: 12px; color: #9DB09F; font-family: ui-monospace, SFMono-Regular, Menlo, monospace">{{l.raw}}</span>
+              <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px"><span style="font-size: 13px; color: #9DB09F">{{l.meta}}</span><span style="{{l.badgeStyle}}">{{l.when}}</span></span>
             </span>
-            <span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">{{l.price}}</span>
-          </label>
+          </div>
+          <span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">{{l.price}}</span>
         </li>
       </sc-for>
     </ul>
-    <p style="margin: 0; font-size: 13px; color: #9DB09F">We matched each line to a food. Tap a line to fix the name, amount or group.</p>
   </main>
   <footer style="padding: 12px 20px 34px; border-top: 1px solid #2A3A2D; display: flex; flex-direction: column; gap: 8px">
     <div style="display: flex; justify-content: space-between; font-size: 15px"><span style="color: #9DB09F">Receipt total</span><span style="font-weight: 600; font-variant-numeric: tabular-nums">$38.42</span></div>
@@ -52,15 +52,19 @@ body{background:#0F1A12}</style>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
 renderVals() {
+const soon = 'font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #24361F; color: #B9D871; white-space: nowrap';
+const none = 'display: none';
+const box = (on) => 'width: 24px; height: 24px; box-sizing: border-box; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; ' + (on ? 'background: #B9D871; border: 2px solid #B9D871' : 'background: transparent; border: 2px solid #9DB09F');
+const line = (name, raw, price, meta, when, on) => ({ name, raw, price, meta, when, badgeStyle: when ? soon : none, checked: on ? 'true' : 'false', boxStyle: box(on), tickStyle: on ? 'display: block' : 'display: none' });
 return {
 lines: [
-{ name: 'Whole milk, 1 gal', raw: 'KRO WHL MLK GAL   3.49', price: '$3.49', checked: true },
-{ name: 'Large eggs, 12', raw: 'LG EGGS 12CT       2.99', price: '$2.99', checked: true },
-{ name: 'Chicken thighs, 1.4 lb', raw: '1.40 lb @ 3.49/lb  4.89', price: '$4.89', checked: true },
-{ name: 'Baby spinach', raw: 'ORG BBY SPINACH    3.99', price: '$3.99', checked: true },
-{ name: 'Bananas, 5', raw: 'BANANAS            1.12', price: '$1.12', checked: true },
-{ name: 'Sourdough loaf', raw: 'PRV SRDGH LOAF     4.29', price: '$4.29', checked: true },
-{ name: 'Paper towels', raw: 'BTY PPR TWL 6R    11.99', price: '$11.99', checked: false }
+line('Whole milk, 1 gal', 'KRO WHL MLK GAL   3.49', '$3.49', 'Dairy', '1–2 weeks', true),
+line('Large eggs, 12', 'LG EGGS 12CT       2.99', '$2.99', 'Protein', '3+ weeks', true),
+line('Chicken thighs, 1.4 lb', '1.40 lb @ 3.49/lb  4.89', '$4.89', 'Protein', '2–3 days', true),
+line('Paper towels', 'BTY PPR TWL 6R    11.99', '$11.99', 'Not food', '', false),
+line('Baby spinach', 'ORG BBY SPINACH    3.99', '$3.99', 'Veggies', '4–5 days', true),
+line('Bananas, 5', 'BANANAS            1.12', '$1.12', 'Fruit', '4–5 days', true),
+line('Sourdough loaf', 'PRV SRDGH LOAF     4.29', '$4.29', 'Grains', '4–5 days', true)
 ]
 };
 }

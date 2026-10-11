@@ -83,7 +83,7 @@ const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radiu
 const warn = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #3A3112; color: #FFD970; white-space: nowrap';
 const rowBase = 'flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 0';
 const box = (on) => 'width: 24px; height: 24px; box-sizing: border-box; border-radius: 12px; display: flex; align-items: center; justify-content: center; ' + (on ? 'background: #B9D871; border: 2px solid #B9D871' : 'background: transparent; border: 2px solid #9DB09F');
-const it = (name, m, when, on, badge) => ({ name, meta: m, when, badgeStyle: badge || soon, rowStyle: rowBase, rowBg: on ? '#EEF5D6' : '#FFFFFF', leadBg: 'transparent', checked: on ? 'true' : 'false', label: 'Select ' + name, boxStyle: box(on), tickStyle: on ? 'display: block' : 'display: none' });
+const it = (name, m, when, on, badge) => ({ name, meta: m, when, badgeStyle: badge || soon, rowStyle: rowBase, rowBg: on ? '#24361F' : '#18261B', leadBg: 'transparent', checked: on ? 'true' : 'false', label: 'Select ' + name, boxStyle: box(on), tickStyle: on ? 'display: block' : 'display: none' });
 return {
 groups: [
 { name: 'Protein', icon: ICON.protein, stroke: COLOR.protein.stroke, tileStyle: COLOR.protein.tileStyle, count: 2, items: [

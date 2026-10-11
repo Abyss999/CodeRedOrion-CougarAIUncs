@@ -13,6 +13,8 @@ enum AccessibilityID {
     }
 
     enum Fridge {
+        static let screen = "fridge"
+        static let title = "fridge.title"
         static let list = "fridge.list"
         static let storage = "fridge.storage"            // segmented control
         static func storageOption(_ s: String) -> String { "fridge.storage.\(s)" }  // fridge|pantry|freezer
@@ -20,6 +22,10 @@ enum AccessibilityID {
         static func row(_ id: String) -> String { "fridge.row.\(id)" }
         static func rowRemove(_ id: String) -> String { "fridge.row.\(id).remove" }
         static func rowBadge(_ id: String) -> String { "fridge.row.\(id).badge" }
+        /// Rollback / refresh error banner, with its retry and dismiss buttons.
+        static let removeError = "fridge.remove.error"
+        static let removeErrorRetry = "fridge.remove.error.retry"
+        static let removeErrorDismiss = "fridge.remove.error.dismiss"
     }
 
     enum Add {
@@ -34,6 +40,19 @@ enum AccessibilityID {
         static func outcome(_ rawValue: String) -> String { "remove.outcome.\(rawValue)" }
         /// `reason` is the API value: expired | forgot | didnt_like | other.
         static func reason(_ rawValue: String) -> String { "remove.reason.\(rawValue)" }
+        static let title = "remove.title"
+        static let cancel = "remove.cancel"
+        /// Static "Gave it away goes to <claimer>" line, shown only when the open listing has a claimer.
+        static let recipient = "remove.recipient"
+        /// Checkmark that scales in on the tapped tile.
+        static func checkmark(_ rawValue: String) -> String { "remove.outcome.\(rawValue).check" }
+    }
+
+    /// The waste-reason step (pushed inside the remove sheet). Tiles use `Remove.reason(_:)`.
+    enum RemoveReason {
+        static let screen = "removereason.screen"
+        static let title = "removereason.title"
+        static let tip = "removereason.tip"
     }
 
     /// Shared states (empty, error, loading). `screen` is the owning screen, e.g. "fridge".
@@ -57,6 +76,14 @@ enum AccessibilityID {
     enum Listening {
         /// Pulse ring around the mic while listening (present only while shown).
         static let pulse = "listening.pulse"
+    }
+
+    /// DEBUG-only probes for UI tests (mock launches only).
+    enum Probe {
+        /// Label/value: comma-joined haptic events (`-UITestRecordHaptics`), e.g. "success,warning".
+        static let haptics = "debug.haptics"
+        /// Label/value: how many times the Fridge stagger has restarted.
+        static let staggerCount = "debug.stagger.count"
     }
 
     /// Debug-only runtime API base URL entry point (long-press the version label).

@@ -37,6 +37,9 @@ extension Theme {
         /// Shimmer highlight: a `surface` band at this opacity, this fraction of the row wide.
         static let shimmerHighlightOpacity: Double = 0.65
         static let shimmerBandWidth: CGFloat = 0.6
+        /// How long a removal sheet stays up after a tile is tapped, so the checkmark scale-in
+        /// (`quick`, 0.15 s) is seen before the sheet dismisses. The removal itself is not delayed.
+        static let confirmHold: Duration = .milliseconds(200)
         /// One-shot animations finish within this.
         static let oneShotLimit: Double = 0.5
 

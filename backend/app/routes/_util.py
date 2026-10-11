@@ -97,10 +97,11 @@ def serialize_item(i, share=None, include_share=True) -> dict:
 
 
 def share_summaries(item_ids) -> dict:
-    """{item_id: {id, status, claimed_by: {id, name}|None}} for the most recent NOT-cancelled listing of
-    each item, in ONE query (no N+1). Items without such a listing are absent from the dict."""
+    """{item_id: {id, status, claimed_by: {id, name}|None, audience: {friends, groups: [{id, name}]}}} for
+    the most recent NOT-cancelled listing of each item, in TWO queries (listings, then the names of the
+    listing groups; no N+1). Items without such a listing are absent from the dict. Owner view only."""
     from ..extensions import db
-    from ..models import ShareListing, User
+    from ..models import Group, ShareListing, User
     ids = list(item_ids)
     if not ids:
         return {}
@@ -108,12 +109,20 @@ def share_summaries(item_ids) -> dict:
             .outerjoin(User, User.id == ShareListing.claimed_by)
             .filter(ShareListing.item_id.in_(ids), ShareListing.status != "cancelled")
             .order_by(ShareListing.created_at.desc(), ShareListing.id).all())
-    out = {}
+    latest = {}
     for l, uid, name in rows:
-        if l.item_id in out:
-            continue
-        out[l.item_id] = {"id": str(l.id), "status": l.status,
-                          "claimed_by": {"id": str(uid), "name": name} if uid else None}
+        if l.item_id not in latest:
+            latest[l.item_id] = (l, uid, name)
+    gids = {l.group_id for l, _, _ in latest.values() if l.group_id}
+    names = dict(db.session.execute(db.select(Group.id, Group.name).where(Group.id.in_(gids))).all()) if gids else {}
+    out = {}
+    for iid, (l, uid, name) in latest.items():
+        # A listing is for the owner's friends (group_id null) or for exactly one group.
+        audience = ({"friends": False, "groups": [{"id": str(l.group_id), "name": names.get(l.group_id, "")}]}
+                    if l.group_id else {"friends": True, "groups": []})
+        out[iid] = {"id": str(l.id), "status": l.status,
+                    "claimed_by": {"id": str(uid), "name": name} if uid else None,
+                    "audience": audience}
     return out
 
 

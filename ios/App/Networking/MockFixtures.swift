@@ -3,6 +3,7 @@ import Foundation
 /// Named data sets for `MockAPIClient` (`-UITestSeed <name>`). The default, `fridge`, matches the
 /// Fridge artboard: Priya's fridge with chicken today, spinach in 1 day, strawberries flagged
 /// spoiled and bananas ripe ("Use soon"). Dates are relative to `now` so badges are stable.
+/// Spinach has an open Share listing claimed by Marcus; carrots have an open, unclaimed listing.
 enum MockFixture: String, CaseIterable, Sendable {
     case fridge
     case empty
@@ -10,6 +11,8 @@ enum MockFixture: String, CaseIterable, Sendable {
     case expired
     /// 30+ items across all groups, for scrolling.
     case long
+    /// Same items as `fridge` (which carries the listings); named for UI tests of "Gave it to".
+    case listing
 
     init(name: String?) { self = name.flatMap(MockFixture.init(rawValue:)) ?? .fridge }
 }
@@ -24,23 +27,26 @@ enum MockData {
         }
         func make(_ id: String, _ name: String, _ cat: FoodCategory, _ group: FoodGroup, _ qty: Double, _ unit: String,
                   expiry: Int?, storage: Storage = .fridge, addedDaysAgo: Int = 3, price: Double? = 4.5,
-                  freshness: Freshness? = nil) -> Item {
+                  freshness: Freshness? = nil, share: ItemShare? = nil) -> Item {
             Item(id: id, ownerId: priya.id, groupId: nil, name: name, category: cat, foodGroup: group,
                  storage: storage, quantity: qty, unit: unit, estWeightKg: 0.5, estPrice: price, source: "photo",
                  addedAt: day(-addedDaysAgo), predictedExpiry: expiry.map(day), expirySource: "default",
                  removedAt: nil, outcome: nil, wasteReason: nil, removedAfterExpiry: nil,
                  freshness: freshness, freshnessCheckedAt: freshness == nil ? nil : day(-1),
-                 confidence: freshness == nil ? nil : 0.9, share: nil)
+                 confidence: freshness == nil ? nil : 0.9, share: share)
         }
         switch fixture {
         case .empty:
             return []
-        case .fridge:
+        case .fridge, .listing:
             return [
                 make("item-chicken", "Chicken thighs", .meat, .protein, 1.4, "lb", expiry: 0, addedDaysAgo: 3, price: 8.9),
                 make("item-eggs", "Eggs", .eggs, .protein, 8, "piece", expiry: 12, price: 4.2),
-                make("item-spinach", "Baby spinach", .produceLeafy, .veggies, 5, "oz", expiry: 1, addedDaysAgo: 6, price: 3.5),
-                make("item-carrots", "Carrots", .produceHardy, .veggies, 2, "lb", expiry: 18, price: 2.8),
+                make("item-spinach", "Baby spinach", .produceLeafy, .veggies, 5, "oz", expiry: 1, addedDaysAgo: 6, price: 3.5,
+                     share: ItemShare(id: "share-spinach", status: .open,
+                                      claimedBy: .init(id: friend.id, name: "Marcus Ojeda"))),
+                make("item-carrots", "Carrots", .produceHardy, .veggies, 2, "lb", expiry: 18, price: 2.8,
+                     share: ItemShare(id: "share-carrots", status: .open, claimedBy: nil)),
                 make("item-strawberries", "Strawberries", .produceLeafy, .fruit, 1, "pack", expiry: 2, price: 5.0, freshness: .spoiled),
                 make("item-bananas", "Bananas", .produceHardy, .fruit, 5, "piece", expiry: 3, price: 1.9, freshness: .semiFresh),
                 make("item-yogurt", "Greek yogurt", .dairy, .dairy, 32, "oz", expiry: 3, price: 5.5),

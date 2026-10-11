@@ -37,7 +37,7 @@ body{background:#0F1A12}</style>
     <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 0 16px; border-bottom: 1px solid #2A3A2D">
         <span style="font-size: 16px; color: #C9D6BC">{{r.label}}</span>
-        <span style="display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; color: #E8F0DA">{{r.value}}
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; color: #E8F0DA">{{r.value}}<span style="{{r.chipStyle}}">{{r.chip}}</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9DB09F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
       </div>
     </sc-for>
@@ -67,8 +67,8 @@ body{background:#0F1A12}</style>
   </section>
 
   <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
-    <button type="button" style="height: 56px; border: 0; border-radius: 16px; background: #B9D871; color: #13261A; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M5 12l5 5L20 7"></path></svg>Mark as given to Marcus</button>
+    <a href="RemoveSheet.dark.dc.html" aria-label="Remove Baby spinach" style="text-decoration: none; height: 56px; border-radius: 16px; background: #B9D871; color: #13261A; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 14v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5M12 15V4M8 8l4-4 4 4"></path></svg>Remove</a>
     <button type="button" style="height: 52px; border-radius: 14px; background: #18261B; border: 1px solid #34483A; color: #B9D871; font-size: 16px; font-weight: 600">Stop sharing</button>
   </div>
 </main>
@@ -76,12 +76,14 @@ body{background:#0F1A12}</style>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":864}}'>
 class Component extends DCLogic {
 renderVals() {
+const est = 'font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 8px; background: #24361F; color: #B9D871';
+const none = 'display: none';
 return {
 rows: [
-{ label: 'Quantity', value: '5 oz bag' },
-{ label: 'Food group', value: 'Veggies' },
-{ label: 'Stored in', value: 'Fridge' },
-{ label: 'Use by', value: 'Oct 11' }
+{ label: 'Quantity', value: '5 oz bag', chip: '', chipStyle: none },
+{ label: 'Food group', value: 'Veggies', chip: '', chipStyle: none },
+{ label: 'Stored in', value: 'Fridge', chip: '', chipStyle: none },
+{ label: 'Use by', value: 'Oct 11', chip: 'estimated', chipStyle: est }
 ]
 };
 }

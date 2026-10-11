@@ -348,8 +348,12 @@ def test_group_item_removal_rules_still_apply(world, sql):
 def test_group_item_removal_donated_with_recipient(world, sql):
     w = world
     item = w.post(w.alice, "/items", {"items": [{"name": "Rice", "group_id": w.G["id"]}]}).get_json()["items"][0]
+    # the recipient is checked against the remover (erin): bob is alice's friend, not erin's friend or mate
     r = w.post(w.erin, f"/items/{item['id']}/remove",
                {"outcome": "donated", "recipient_id": w.bob["user"]["id"]})
+    assert r.status_code == 404
+    r = w.post(w.erin, f"/items/{item['id']}/remove",
+               {"outcome": "donated", "recipient_id": w.alice["user"]["id"]})  # alice is erin's group mate
     assert r.status_code == 200
     assert w.post(w.erin, f"/items/{item['id']}/remove", {"outcome": "used"}).status_code == 409
 

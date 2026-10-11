@@ -32,8 +32,8 @@ body{background:#0F1A12}</style>
   </div>
 
   <div role="tablist" aria-label="Group view" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: #223024; border-radius: 14px">
-    <button role="tab" aria-selected="true" style="height: 40px; border: 0; border-radius: 10px; background: #18261B; color: #E8F0DA; font-weight: 600; font-size: 15px">Group pantry · 9</button>
-    <button role="tab" aria-selected="false" style="height: 40px; border: 0; border-radius: 10px; background: transparent; color: #9DB09F; font-weight: 500; font-size: 15px">Requests · 2</button>
+    <button role="tab" aria-selected="true" style="height: 40px; border: 0; border-radius: 10px; background: #18261B; color: #E8F0DA; font-weight: 600; font-size: 15px">Group pantry</button>
+    <button role="tab" aria-selected="false" style="height: 40px; border: 0; border-radius: 10px; background: transparent; color: #9DB09F; font-weight: 500; font-size: 15px">Requests</button>
   </div>
 
   <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
@@ -62,9 +62,9 @@ const F = 'M12 8c-1-2-4-3-6-1-3 3-1 10 2 12 1 1 3 1 4 0 1 1 3 1 4 0 3-2 5-9 2-12
 return {
 items: [
 { name: 'Leftover chili', meta: 'Added by Marcus · Leftovers', when: 'Today', badgeStyle: urgent, icon: L, stroke: '#7FD8D3', tile: tile('#14302F') },
-{ name: 'Basil', meta: 'Added by Dana · Veggies', when: '1 day', badgeStyle: urgent, icon: V, stroke: '#8FD69A', tile: tile('#1C3320') },
-{ name: 'Oat milk', meta: 'Added by you · Dairy', when: '5 days', badgeStyle: soon, icon: D, stroke: '#9DB7F0', tile: tile('#1C2540') },
-{ name: 'Apples, 4', meta: 'Added by Priya · Fruit', when: '12 days', badgeStyle: soon, icon: F, stroke: '#F59AC6', tile: tile('#3A1C2B') }
+{ name: 'Basil', meta: 'Added by Dana · Veggies', when: 'Tomorrow', badgeStyle: urgent, icon: V, stroke: '#8FD69A', tile: tile('#1C3320') },
+{ name: 'Oat milk', meta: 'Added by you · Dairy', when: '4–5 days', badgeStyle: soon, icon: D, stroke: '#9DB7F0', tile: tile('#1C2540') },
+{ name: 'Apples, 4', meta: 'Added by Jordan · Fruit', when: '1–2 weeks', badgeStyle: soon, icon: F, stroke: '#F59AC6', tile: tile('#3A1C2B') }
 ]
 };
 }

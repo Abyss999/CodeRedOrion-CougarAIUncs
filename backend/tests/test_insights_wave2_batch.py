@@ -152,7 +152,8 @@ def test_single_restore_after_batch_remove(client, user, three):
     {"item_ids": ["__ID__"], "outcome": "eaten"},
     {"item_ids": ["__ID__"]},
     {"item_ids": ["__ID__"], "outcome": "used", "waste_reason": "forgot"},
-    {"item_ids": ["__ID__"], "outcome": "donated", "recipient_id": "__ID__"},
+    {"item_ids": ["__ID__"], "outcome": "used", "recipient_id": "__ID__"},
+    {"item_ids": ["__ID__"], "outcome": "donated", "recipient_id": "not-a-uuid"},
 ])
 def test_remove_batch_validation(client, user, make_item, sql, body):
     it = make_item(user)

@@ -66,6 +66,15 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
   `502`) → account resolution (`409`). So a bad body is `400` even when Google sign-in is not
   configured. Concurrent first sign-ins with the same account resolve to one user.
 - `user` = `{id, email, display_name, created_at}`.
+- ✅ `GET /auth/me` (Bearer) → `200 {user, has_password, providers}`; `user` as above. `has_password` is
+  true when the account has a password (email login works), false for a Google-only account.
+  `providers` lists the linked sign-in providers, sorted, `[]` when none (e.g. `["google"]`). Password
+  hashes and provider subjects are never returned. `401 unauthorized` for a missing, invalid or expired
+  token, or a deleted user.
+  ```json
+  {"user": {"id": "…", "email": "a@b.co", "display_name": "Ana", "created_at": "2026-10-10T12:00:00Z"},
+   "has_password": false, "providers": ["google"]}
+  ```
 - ✅ `DELETE /auth/me` (Bearer) → `204` (App Store account deletion). One transaction. **Deleted:** the
   user, their items (including ones in group pantries), every listing on those items and their own
   listings, friendships (both directions), group memberships, requests they wrote, their linked sign-in identities (`user_identities`). **Detached:** listings
@@ -103,9 +112,18 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   unknown keys are dropped, and an explicit `null` means "none". On every item response; `null` when unknown.
   Not editable (`PATCH` → `400`).
 - `share` is present on the **owner's own** items (`GET /items`, also with `group_by`; create, `PATCH`,
-  `remove`, `restore` responses) and is `{id, status (open|fulfilled), claimed_by: {id, name} | null}` for
-  the item's most recent **non-cancelled** listing, else `null`. Loaded with a single query for the whole
-  list (no N+1). The group pantry (`GET /groups/:id/pantry`) and other users' views do **not** include it.
+  `remove`, `restore` responses) and is `{id, status (open|fulfilled), claimed_by: {id, name} | null, audience}` for
+  the item's most recent **non-cancelled** listing, else `null`. Loaded with two queries for the whole
+  list (listings, then the names of the listing groups; no N+1). The group pantry
+  (`GET /groups/:id/pantry`) and other users' views do **not** include it (nor `audience`).
+  `share.audience` = `{friends: bool, groups: [{id, name}]}` says who the listing is visible to: a
+  friends-listing (`group_id` null) is `{"friends": true, "groups": []}`, a group listing is
+  `{"friends": false, "groups": [{"id": "…", "name": "Flat 4B"}]}`. Present wherever the owner gets `share`: `GET /items` (also
+  `group_by`), `PATCH`, `remove`, `restore` and the batch variants.
+  ```json
+  "share": {"id": "…", "status": "open", "claimed_by": null,
+            "audience": {"friends": false, "groups": [{"id": "…", "name": "Flat 4B"}]}}
+  ```
 
 - ✅ `GET /items?storage=fridge|pantry|freezer&include_removed=false` → `200 {items}` sorted by
   `predicted_expiry`, then `added_at`. Only the caller's **personal** items (`group_id` null; group-pantry items are listed by `GET /groups/:id/pantry`). Invalid `storage` → 400.
@@ -132,14 +150,26 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   ```json
   {"outcome": "used" | "donated" | "thrown_out",
    "waste_reason": "expired" | "didnt_like" | "forgot" | "other",   // required iff thrown_out
-   "recipient_id": "uuid"}                                          // optional, donated only
+   "recipient_id": "uuid" | null}                                   // optional, donated only (see below)
   ```
   → `200 {item}`. Order of checks: body validation (400) → item lookup (404) → ownership (403) →
   already removed (409 `already_removed`). One transaction (row-locked): sets `removed_at`,
   `outcome`, `waste_reason`, `removed_after_expiry` (removed date > `predicted_expiry`); writes
   exactly one `remove` event (`co2e_kg`, weight, price, outcome, reason); on `donated`, marks the
-  item's open share listing `fulfilled` (+`recipient_id`, `fulfilled_at`). `recipient_id` must be
-  an existing user (else 400). A 4xx writes no event. **Group-pantry items (`group_id` set) can be
+  item's open share listing `fulfilled` (+`recipient_id`, `fulfilled_at`). A 4xx writes no event.
+  **`recipient_id` has three cases** (donated only; the key present with `used`/`thrown_out`, even
+  as null, is `400 validation_error`; a malformed id is `400`):
+  1. *Key omitted*: an open listing that was claimed is fulfilled with `recipient_id` = the claimer;
+     an unclaimed one, or no listing, gets none.
+  2. *Explicit `"recipient_id": null`* ("someone not on BiteDown"): any open listing is fulfilled with
+     `recipient_id` null, **even if it was claimed**; the claim does not redirect the gift.
+  3. *A user id*: must be an accepted friend of the caller or a current member of a group the caller
+     is in, with or without a listing; anyone else or an unknown id is `404 not_found` (nothing
+     written). An open listing is fulfilled with that recipient. The caller's own id is
+     `400 validation_error` ("You can't give food to yourself.").
+  The recipient check runs after the item lookup/`409 already_removed`, before any write.
+  `donated` is always saved and counts the same in `/impact` whatever the recipient; the `remove`
+  event does not store the recipient (it lives only on the listing). **Group-pantry items (`group_id` set) can be
   removed by any member of that group**; the `remove` event's `user_id` is the *remover* and carries
   the item's `group_id`, so impact is credited to whoever removed it. Personal items of other users
   stay `403`; non-members of the group get `403`. `PATCH` stays owner-only. If the item's open
@@ -154,16 +184,20 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   (`fulfilled_at == removed_at`) the listing goes back to `open` with `fulfilled_at` and `recipient_id`
   cleared (`claimed_by` kept). The `share` event from listing creation is untouched.
 
-- ✅ `POST /items/remove-batch` `{"item_ids": ["uuid", …] (1-100, unique), "outcome": "used" | "donated"}`
+- ✅ `POST /items/remove-batch` `{"item_ids": ["uuid", …] (1-100, unique), "outcome": "used" | "donated", "recipient_id": "uuid" | null}`
   → `200 {items: [item…]}` (request order; `share` on the caller's own items). **All or nothing.**
   `thrown_out` is not allowed here (it needs a per-item `waste_reason`; use the single endpoint), and so
-  are `waste_reason` / `recipient_id` / any other field (`400`). Order of checks: body validation (400:
+  are `waste_reason` / any other field (`400`). `recipient_id` is optional and only for `donated`
+  (present with `used` is `400`); same three cases as `POST /items/:id/remove`, applied to every item:
+  omitted = each item's open listing goes to its own claimer; `null` = every open listing fulfilled
+  with no recipient, claimed or not; a user id = friend / shared-group member else `404` for the whole
+  batch (checked once, no per-item queries); own id = `400` "You can't give food to yourself.". Order of checks: body validation (400:
   empty/oversized/duplicate/malformed ids, bad outcome, unknown field) → lookup + visibility (**`404
   not_found` for the whole batch** if any id is unknown or not removable by the caller: another user's
   personal item, or a group-pantry item of a group you are not in) → `409 already_removed` if any item is
   already removed. Otherwise one transaction with all rows locked (`FOR UPDATE`, id order): same per-item
   effects as `POST /items/:id/remove` (one `remove` event each, `user_id` = caller, same `removed_at` for
-  the batch); `donated` fulfils each item's open listing with `recipient_id` = its `claimed_by`. A 4xx
+  the batch); `donated` fulfils each item's open listing (recipient per the rules above). A 4xx
   writes nothing. Constant query count regardless of batch size.
 - ✅ `POST /items/restore-batch` `{"item_ids": [...]}` (same id rules) → `200 {items}`. All or nothing:
   `404` as above, `409 not_removed` if any item is active, `409 restore_window_expired` if any removal is
@@ -291,8 +325,9 @@ claimed_by, created_at, fulfilled_at}`.
   can see it, `404` if invisible/unknown, `409 listing_closed` if not open.
 - ✅ `POST /share/:id/claim` → `200 {listing}` (`claimed_by` = you). `404` if you cannot see the
   listing, `400` your own, `409 already_claimed`, `409 listing_closed` (not open / item removed).
-  The owner then removes the item with `outcome=donated` (optionally `recipient_id`; defaults to the
-  claimer), which sets the listing `fulfilled`.
+  The owner then removes the item with `outcome=donated` (optionally `recipient_id`; omitted defaults to the
+  claimer, `null` means someone off BiteDown, a friend/group-mate id gives it to them), which sets
+  the listing `fulfilled`. Restore reopens it with the claim intact (`recipient_id` cleared).
 
 ## Friends
 Friendship is one row, requester → target; once accepted it is symmetric. Entry shape:
@@ -359,11 +394,43 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
   your **accepted** friend; requests with an audience group you are currently in. A fixed number of
   queries whatever the board size (your groups, your friends, the rows with authors, all their
   audiences in one query).
+  - **`?mine=1`** (or `mine=true`): your own requests only, in **all** statuses (open, fulfilled,
+    cancelled), newest first, same `{requests: [...]}` shape. Each carries `fulfilled_by` (the
+    fulfiller's user id, or null) and `fulfilled_by_name` (their display name, or null), plus the
+    `audiences` block (`hidden_count` is 0 unless you have since left one of its audience groups). Any other `mine` value (`0`,
+    `false`, empty, junk) → `400 validation_error`. Without `mine` nothing changes (open only, union
+    visibility). Fixed query count (groups, rows with authors, fulfillers, audiences).
+    ```json
+    {"requests": [{"id": "…", "author_id": "…", "author_name": "Me", "text": "Anyone have an onion?",
+      "status": "fulfilled", "fulfilled_by": "<user id>", "fulfilled_by_name": "Ana",
+      "audiences": {"friends": true, "groups": [], "hidden_count": 0}, "source": {"type": "me", "name": "Me"},
+      "group_id": null, "group_name": null, "created_at": "2026-10-10T12:00:00Z"}]}
+    ```
 - ✅ `POST /requests/:id/fulfil` → `200 {request}` (`status=fulfilled`, `fulfilled_by` = you). `404`
   if you cannot see it (same visibility union), `403` your own, `409 request_closed` if not open.
   One fulfilment per request, whichever audience the fulfiller saw it through.
 - ✅ `DELETE /requests/:id` → `200 {request}` (`status=cancelled`). Author only: `403` for a viewer
   who can see it, `404` invisible/unknown, `409 request_closed` if not open.
+
+## People
+- ✅ `GET /people/reachable[?item_id=]` → `200 {people: [{id, display_name, kind, groups, is_claimer}]}`:
+  everyone the caller can hand food to (the same set `recipient_id` accepts on remove): accepted friends
+  plus current members of the caller's groups, one entry per person, the caller excluded. `kind` is
+  `"friend"` for an accepted friend (even if also a group-mate), else `"group_member"`. `groups` =
+  `[{id, name}]` of the caller's groups that person is in (sorted by name; `[]` for a friend sharing
+  none). Sorted by `display_name` (case-insensitive, then id). A fixed number of queries whatever the
+  number of friends or groups.
+  - `item_id`: when the caller owns the item (or can see it: group-pantry member, or the item's open
+    listing is visible to them), the person who claimed its open listing gets `is_claimer: true` and
+    sorts first. Only the owner is ever told the claimer; for a non-owner every `is_claimer` is
+    false. No `item_id`, no claim, or a claimer who is no longer reachable → all false. Unknown or
+    invisible item → `404`; malformed id → `400`.
+  ```json
+  {"people": [{"id": "…", "display_name": "Ana", "kind": "friend",
+               "groups": [{"id": "…", "name": "Flat 4B"}], "is_claimer": true},
+              {"id": "…", "display_name": "Ben", "kind": "group_member",
+               "groups": [{"id": "…", "name": "Flat 4B"}], "is_claimer": false}]}
+  ```
 
 ## Visibility rules (security core)
 - Friend-scoped things (friends-listings, requests with a friends audience) are visible only to
