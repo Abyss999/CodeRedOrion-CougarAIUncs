@@ -22,7 +22,7 @@ approval, and the iOS screens (Wave 2) haven't started.**
 | ML: pipeline (port of LemurTech22's #21) | merged #26, #29, #31 | #21 closed with credit |
 | ML: Colab training | **ready to run** (#33, #31) | DRY_RUN, Drive checkpoint + resume, data gates enforced in the notebook |
 | ML: YOLO metrics | **not yet**, because no model has been trained | gate runs on the owner's `export.zip` |
-| Design: 10 screens + design system (light + dark) | merged | canvas https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx, **awaiting final approval** |
+| Design: 10 screens + design system (light + dark) | **approved 2026-10-10** (#37) | canvas https://claude.ai/artifact/ALmB8FYKGrayhDQXqvoncx |
 | iOS | tab shell + adaptive `Theme.swift` (dark mode, #12) | builds and tests pass on Xcode 26.6 / iOS 26.5 simulator |
 
 ## Decisions since checkpoint 1 (detail in `docs/DECISIONS.md` and `docs/QA.md`)
@@ -37,14 +37,13 @@ approval, and the iOS screens (Wave 2) haven't started.**
 ## Next steps
 1. **Owner: Colab run.** Open `ml/yolo/train_colab.ipynb` in Colab (T4). Add the Secrets `ROBOFLOW_API_KEY` (private key) and `KAGGLE_API_TOKEN`. Do the **DRY_RUN** first and note the RUN_ID, then do the real run with the same RUN_ID. If it disconnects, Run all again and it resumes. Hand `export.zip` to the Mac session.
 2. **Mac: the YOLO gate** on `export.zip`: `detection_metrics --manifest`, `check_thresholds`, per-source CIs, and real vs synthetic lighting. Then load the weights in `ml/serve` from `mldata/`, never git, and check from-photo end to end (`source: "yolo"`).
-3. **Owner: approve the design.** Then **Wave 2: iOS** builder + iOS QA: SwiftUI from `docs/design/screens/` + `DESIGN_SYSTEM.md`, with Simulator screenshots against the artboards, Dynamic Type and dark mode. IOS-3 (system label colours) gets fixed there.
+3. **Wave 2: iOS (in progress).** iOS foundation PR, then builder + iOS QA: SwiftUI from `docs/design/screens/` + `DESIGN_SYSTEM.md`, with Simulator screenshots against the artboards, Dynamic Type and dark mode. IOS-3 (system label colours) gets fixed there.
 4. **Wave 4, integration QA:** the demo path on the full stack: photo add → expiry → remove → dashboard.
 5. **Wave 5, UI review** (Impeccable critique/polish, web-design-guidelines), only once the UI is feature-complete.
 
 ## Open questions / blockers
-- **Design approval** (blocks iOS).
-- **Who uploads to TestFlight**, and with which Apple Developer team and bundle id.
-- **How the phone reaches the API** during the demo.
+- ~~TestFlight~~: **not used** (no paid account). The demo runs on the owner's iPhone with a free Personal Team.
+- ~~Phone to API~~: **Cloudflare quick tunnel** from the Mac (`scripts/demo_tunnel.sh`).
 - Jose's answers on #21 (specimens across stages) would refine the AgriFreshNET split. Nothing is blocked on them.
 
 ## QA status
