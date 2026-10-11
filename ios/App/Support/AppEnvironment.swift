@@ -10,10 +10,13 @@ final class AppEnvironment {
     let auth: AuthStore
     let baseURL: BaseURLProvider
     let launch: LaunchConfiguration
+    /// Set with `-UITestRecordHaptics` (DEBUG, mock): every haptic is recorded for the `debug.haptics` probe.
+    let hapticsRecorder: ObservableRecordingHaptics?
 
     init(api: APIClient, auth: AuthStore, baseURL: BaseURLProvider = BaseURLProvider(),
-         launch: LaunchConfiguration = LaunchConfiguration()) {
+         launch: LaunchConfiguration = LaunchConfiguration(), hapticsRecorder: ObservableRecordingHaptics? = nil) {
         self.api = api
+        self.hapticsRecorder = hapticsRecorder
         self.auth = auth
         self.baseURL = baseURL
         self.launch = launch
@@ -22,13 +25,14 @@ final class AppEnvironment {
     static func make(launch: LaunchConfiguration = .current) -> AppEnvironment {
         let baseURL = BaseURLProvider()
         if launch.useMockAPI {
-            Haptics.provider = NoOpHaptics()
+            let recorder = launch.recordHaptics ? ObservableRecordingHaptics() : nil
+            Haptics.provider = recorder ?? NoOpHaptics()
             let auth = AuthStore(storage: InMemorySessionStorage(
                 launch.signedIn ? AuthSession(token: "mock-token", user: MockData.priya) : nil))
-            let behavior = MockAPIClient.Behavior(delay: launch.mockDelay, failNetwork: launch.failNetwork)
+            let behavior = launch.mockBehavior
             let api = MockAPIClient(fixture: MockFixture(name: launch.seed), behavior: behavior,
                                     auth: auth, signedIn: launch.signedIn)
-            return AppEnvironment(api: api, auth: auth, baseURL: baseURL, launch: launch)
+            return AppEnvironment(api: api, auth: auth, baseURL: baseURL, launch: launch, hapticsRecorder: recorder)
         }
         let auth = AuthStore()
         return AppEnvironment(api: LiveAPIClient(baseURL: baseURL, auth: auth), auth: auth, baseURL: baseURL, launch: launch)

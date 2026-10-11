@@ -12,6 +12,8 @@ actor MockAPIClient: APIClient {
         var failures: [String: APIError] = [:]
         /// Calls whose first N attempts fail (key = method name), then succeed. Tests the retry button.
         var failFirst: [String: Int] = [:]
+        /// Per-method delay overriding `delay` (key = method name), e.g. a slow remove.
+        var delays: [String: Duration] = [:]
     }
 
     private(set) var behavior: Behavior
@@ -38,7 +40,8 @@ actor MockAPIClient: APIClient {
 
     private func gate(_ method: String, authenticated: Bool = true) async throws {
         callCounts[method, default: 0] += 1
-        if behavior.delay > .zero { try await Task.sleep(for: behavior.delay) }
+        let delay = behavior.delays[method] ?? behavior.delay
+        if delay > .zero { try await Task.sleep(for: delay) }
         if behavior.failNetwork { throw APIError.network("The Internet connection appears to be offline.") }
         if let remaining = behavior.failFirst[method], remaining > 0 {
             behavior.failFirst[method] = remaining - 1
@@ -156,6 +159,7 @@ actor MockAPIClient: APIClient {
         try await gate("removeItem")
         if outcome == .thrownOut && wasteReason == nil { throw validation("waste_reason is required when thrown_out.") }
         if outcome != .thrownOut && wasteReason != nil { throw validation("waste_reason is only allowed when thrown_out.") }
+        if outcome != .donated && recipientId != nil { throw validation("recipient_id is only allowed when donated.") }
         guard let i = items.firstIndex(where: { $0.id == id }) else { throw notFound() }
         if items[i].isRemoved { throw APIError.server(status: 409, code: "already_removed", message: "Already removed.") }
         let now = Date()
@@ -163,6 +167,10 @@ actor MockAPIClient: APIClient {
         items[i].outcome = outcome
         items[i].wasteReason = wasteReason
         items[i].removedAfterExpiry = items[i].predictedExpiry.map { Calendar.current.startOfDay(for: now) > $0 }
+        // A donated removal fulfils the item's open listing (docs/API.md).
+        if outcome == .donated, let share = items[i].share, share.status == .open {
+            items[i].share = ItemShare(id: share.id, status: .fulfilled, claimedBy: share.claimedBy)
+        }
         return items[i]
     }
 
@@ -171,6 +179,10 @@ actor MockAPIClient: APIClient {
         guard let i = items.firstIndex(where: { $0.id == id }) else { throw notFound() }
         guard let removedAt = items[i].removedAt else { throw APIError.notRemoved }
         if Date().timeIntervalSince(removedAt) > 600 { throw APIError.restoreWindowExpired }
+        // Undo reopens a listing that the removal fulfilled (claimed_by kept).
+        if items[i].outcome == .donated, let share = items[i].share, share.status == .fulfilled {
+            items[i].share = ItemShare(id: share.id, status: .open, claimedBy: share.claimedBy)
+        }
         items[i].removedAt = nil; items[i].outcome = nil; items[i].wasteReason = nil; items[i].removedAfterExpiry = nil
         return items[i]
     }

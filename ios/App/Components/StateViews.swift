@@ -17,7 +17,9 @@ struct EmptyStateView: View {
             Text(message)
         } actions: {
             if let actionTitle, let action {
-                Button(actionTitle, action: action).buttonStyle(.borderedProminent)
+                Button(action: action) { StateActionLabel(title: actionTitle) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
             }
         }
         .foregroundStyle(Theme.Colors.ink)
@@ -42,12 +44,22 @@ struct ErrorStateView: View {
         } description: {
             Text(error.localizedDescription)
         } actions: {
-            Button(retryTitle, action: retry)
+            Button(action: retry) { StateActionLabel(title: retryTitle) }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .accessibilityIdentifier(AccessibilityID.State.retry(screen))
         }
         .foregroundStyle(Theme.Colors.ink)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.State.error(screen))
+    }
+}
+
+/// Label for the empty/error action buttons. The 44 pt minimum sits on the label, inside the
+/// button, so the button itself (its tap area and accessibility frame) is at least 44 pt (IOS-12).
+private struct StateActionLabel: View {
+    let title: String
+    var body: some View {
+        Text(title).frame(minHeight: Theme.Size.minTouch)
     }
 }
