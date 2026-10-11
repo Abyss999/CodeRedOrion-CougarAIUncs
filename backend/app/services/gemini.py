@@ -214,6 +214,9 @@ def suggest_recipes(items: list[dict], max_results: int, dietary: list[str]) -> 
             "{title:str, minutes:int, servings:int, uses_items:[str] (names exactly as given in the input), "
             "missing_items:[str], steps:[str], "
             "macros:{kcal:int, protein_g:number, carbs_g:number, fat_g:number} (estimated per serving)}.")
+    if any(i.get("must_use") for i in items):
+        hint += (" Items marked must_use are the ones the person wants to cook now: every recipe must use at "
+                 "least one of them.")
     prompt = json.dumps({"items_soonest_expiring_first": items, "max_results": max_results,
                          "dietary": dietary})
     return _unwrap(_generate(prompt, hint, _RECIPE_SCHEMA, purpose="recipes", list_key="recipes"),

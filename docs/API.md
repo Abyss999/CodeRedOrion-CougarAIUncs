@@ -377,9 +377,15 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
 - Acting on a visible resource you lack the right for (cancel someone else's listing/request) is `403`.
 
 ## Recipes, impact, tips
-- ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str]}` → `200 {recipes: [{title,
+- ✅ `POST /recipes/suggest` `{max_results?: 3 (1-10), dietary?: [str], item_ids?: [uuid] (1-10)}` → `200 {recipes: [{title,
   minutes, servings, uses_items, missing_items, steps, macros, macros_estimated}]}` built from the caller's
   20 soonest-expiring active items.
+  - `item_ids` (optional): the items to cook now, 1-10 distinct uuids (`null` = not given). Any id that is not an
+    active item of the caller (unknown, removed, someone else's) → `404 not_found` for the whole request, even with
+    an empty fridge; a malformed list or id, more than 10, or duplicates → `400`. Those items are always sent to
+    Gemini, even when they are not among the 20 soonest-expiring, flagged `must_use`, and every recipe must use at
+    least one of them. The order stays soonest-expiring first. The cache key includes the ids (in any order) only when
+    given, so keys without them are unchanged. Works with `max_results` and `dietary`.
   - `servings`: int 1-20 from Gemini, else `null`.
   - `uses_items`: `[{item_id, name, predicted_expiry (date)}]` — Gemini's names mapped back to the
     caller's items (case/space-insensitive exact match, then containment; soonest-expiring wins; each
