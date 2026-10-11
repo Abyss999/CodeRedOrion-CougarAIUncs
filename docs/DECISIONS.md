@@ -2,6 +2,15 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Design feedback round 2 (teammate wedwqc, 13 comments; QA-checked; owner calls)
+- **Owner: the recipient is chosen in a "Given to" menu** after "Shared it". It defaults to the claimer, otherwise to "Someone not on BiteDown". The options are the claimer, friends, fellow group members and **Someone not on BiteDown**. Food given to a non-app person logs as donated (saved), never as waste or to the wrong friend. This replaces the 2026-10-10/11 "always the claimer" rulings. API: `recipient_id` explicit `null` = someone not on BiteDown; a user id must be an accepted friend or fellow group member (else 404); yourself → 400. Queued as `feat/donation-recipient`.
+- **Owner: the Home tip card sits at the top**, above "Use these first". It stays one line and dismissible. This reverses the earlier keep-below ruling.
+- **Recipes open on "Only what I have"** (no missing items), switchable off.
+- **Impact leads with food saved in lb**, and CO₂e becomes a secondary line with a driving equivalent. Month means "previous 30 days".
+- **"I have it" becomes "Offer" plus a confirmation sheet.** Fulfilling closes the request for everyone and can't be undone. No in-app messaging is promised.
+- **Kept against the comments, with reasons:** the Fridge swipe action stays forest, not red, with a take-out icon instead of the checkmark, because removal records an outcome and isn't a delete. The Add-sheet hero stays full width but shorter, to keep the shared 20 pt margins.
+- Also: the reason picker becomes a list ("Why was it thrown out?"); the Pantry widget shows food tiles with no counts; Photo review loses its captions and gets a taller photo; the barcode hint is "Boxes, cans, jars"; the Remove sheet meta is capitalised, with a badge.
+
 ## 2026-10-11 — gunicorn gthread (#63)
 - **The API container runs one `gthread` worker with 4 threads** (`GUNICORN_THREADS`, default 4; `--timeout 120`, `--graceful-timeout 30`). A slow Gemini call no longer blocks other requests, and the in-process recipe cache stays shared (lock-guarded). *Why not several processes:* the cache is per process and there is no Redis. This closes the follow-up noted under "Backend wave 2 rulings".
 
