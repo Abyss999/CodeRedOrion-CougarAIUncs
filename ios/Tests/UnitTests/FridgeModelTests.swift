@@ -130,7 +130,12 @@ final class FridgeModelTests: XCTestCase {
         m.remove(item(m, "item-chicken"), choice: .init(outcome: .used), reduceMotion: false)
         // Synchronous: the row is gone before any await.
         XCTAssertFalse(ids(m).contains("item-chicken"))
+        // #64: the toast (and its countdown) waits for the sheet to dismiss.
+        XCTAssertNil(m.toast, "the countdown must not start under the sheet")
+        m.showPendingToast()   // the sheet's onDismiss
         XCTAssertEqual(m.toast?.message, "Chicken thighs removed")
+        m.showPendingToast()
+        XCTAssertEqual(m.toast?.message, "Chicken thighs removed", "showing twice is harmless")
         await until { await spy.removes.count == 1 }
         let call = await spy.removes.first
         XCTAssertEqual(call, .init(id: "item-chicken", outcome: .used, reason: nil, recipient: nil))
@@ -143,7 +148,9 @@ final class FridgeModelTests: XCTestCase {
         let (m, spy, mock) = make()
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-strawberries"), choice: .init(outcome: .thrownOut, wasteReason: .forgot), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         m.remove(item(m, "item-spinach"), choice: .init(outcome: .donated, recipientId: "user-marcus"), reduceMotion: true)
+        m.showPendingToast()   // the second sheet's onDismiss
         await until { await spy.removes.count == 2 }
         let calls = await spy.removes
         XCTAssertEqual(calls[0], .init(id: "item-strawberries", outcome: .thrownOut, reason: .forgot, recipient: nil))
@@ -156,6 +163,7 @@ final class FridgeModelTests: XCTestCase {
         let (m, _, _) = make()
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-chicken"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         m.remove(item(m, "item-eggs"), choice: .init(outcome: .used), reduceMotion: false)
         XCTAssertEqual(groups(m), [.veggies, .fruit, .dairy])
     }
@@ -166,6 +174,7 @@ final class FridgeModelTests: XCTestCase {
         await m.loadIfNeeded(.fridge)
         let before = ids(m)
         m.remove(item(m, "item-spinach"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         await until { self.ids(m) == before }
         XCTAssertEqual(ids(m), before, "row returns to its original position")
         XCTAssertNil(m.toast, "no Undo toast for a failed remove")
@@ -186,6 +195,7 @@ final class FridgeModelTests: XCTestCase {
         let (m, _, _) = make(.fridge, b)
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-eggs"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         await m.refresh()   // server still has eggs active
         XCTAssertFalse(ids(m).contains("item-eggs"))
     }
@@ -197,6 +207,7 @@ final class FridgeModelTests: XCTestCase {
         await m.loadIfNeeded(.fridge)
         let before = ids(m)
         m.remove(item(m, "item-carrots"), choice: .init(outcome: .donated), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         await until { await self.serverItem(mock, "item-carrots").isRemoved }
         let hapticsBefore = haptics.events
         m.toast?.onUndo()
@@ -214,11 +225,24 @@ final class FridgeModelTests: XCTestCase {
         let (m, spy, mock) = make(.fridge, b)
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-eggs"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         m.toast?.onUndo()
         XCTAssertTrue(ids(m).contains("item-eggs"))
         await until { await spy.restores.count == 1 }
         let server = await serverItem(mock, "item-eggs")
         XCTAssertFalse(server.isRemoved, "server ends active after remove-then-restore")
+    }
+
+    /// A removal that fails before the sheet dismisses shows only the banner, never a toast.
+    func testRemoveFailingBeforeDismissShowsNoToast() async {
+        var b = MockAPIClient.Behavior(delay: .zero); b.failures["removeItem"] = .network("offline")
+        let (m, _, _) = make(.fridge, b)
+        await m.loadIfNeeded(.fridge)
+        m.remove(item(m, "item-eggs"), choice: .init(outcome: .used), reduceMotion: false)
+        await until { m.banner != nil }
+        m.showPendingToast()   // sheet dismisses after the failure
+        XCTAssertNil(m.toast)
+        XCTAssertTrue(ids(m).contains("item-eggs"))
     }
 
     func testUndoAfterFailedRemoveDoesNotCallRestoreOrBanner() async {
@@ -227,6 +251,7 @@ final class FridgeModelTests: XCTestCase {
         let (m, spy, _) = make(.fridge, b)
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-eggs"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         m.toast?.onUndo()
         try? await Task.sleep(for: .milliseconds(600))
         let restores = await spy.restores
@@ -240,6 +265,7 @@ final class FridgeModelTests: XCTestCase {
         let (m, _, mock) = make(.fridge, b)
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-yogurt"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         await until { await self.serverItem(mock, "item-yogurt").isRemoved }
         m.toast?.onUndo()
         await until { !self.ids(m).contains("item-yogurt") && m.banner != nil }
@@ -252,6 +278,7 @@ final class FridgeModelTests: XCTestCase {
         let (m, _, mock) = make(.fridge, b)
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-yogurt"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         await until { await self.serverItem(mock, "item-yogurt").isRemoved }
         m.toast?.onUndo()
         await until { m.banner != nil }
@@ -259,10 +286,29 @@ final class FridgeModelTests: XCTestCase {
         XCTAssertTrue(m.banner?.message.contains("too late") ?? false, m.banner?.message ?? "")
     }
 
+    /// Orchestrator ruling (#64): a restore answered with 409 `not_removed` means the item is already
+    /// active on the server, so Undo succeeded in effect: keep the row, no banner, no error haptic.
+    func testRestoreNotRemovedKeepsRowWithoutBanner() async {
+        var b = MockAPIClient.Behavior(delay: .zero); b.failures["restoreItem"] = .notRemoved
+        let (m, spy, mock) = make(.fridge, b)
+        await m.loadIfNeeded(.fridge)
+        let before = ids(m)
+        m.remove(item(m, "item-yogurt"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
+        await until { await self.serverItem(mock, "item-yogurt").isRemoved }
+        m.toast?.onUndo()
+        await until { await spy.restores.count == 1 }
+        try? await Task.sleep(for: .milliseconds(200))   // let any rollback land
+        XCTAssertEqual(ids(m), before, "row stays in place")
+        XCTAssertNil(m.banner, "not_removed is not an error to the person")
+        XCTAssertFalse(haptics.events.contains(.error), "\(haptics.events)")
+    }
+
     func testToastTimeoutKeepsRemoval() async {
         let (m, spy, mock) = make()
         await m.loadIfNeeded(.fridge)
         m.remove(item(m, "item-oatmilk"), choice: .init(outcome: .used), reduceMotion: false)
+        m.showPendingToast()   // the sheet's onDismiss
         m.toast?.onTimeout()
         m.toast = nil
         await m.refresh()

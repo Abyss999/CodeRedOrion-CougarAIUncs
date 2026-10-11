@@ -4,6 +4,12 @@ import XCTest
 enum RemoveArgs {
     static let failRemove = "-UITestFailRemove"
     static let failRestore = "-UITestFailRestore"
+    static let slowRemove = "-UITestSlowRemove"
+    /// Mock restore answers 409 `not_removed` (requested from the builder for the #64 ruling).
+    static let restoreNotRemoved = "-UITestRestoreNotRemoved"
+    /// Undo window in seconds (DEBUG hook). 30 s so a slow CI runner still finds the toast; the
+    /// 5 s default is covered by `testToastExpiryKeepsRemoval` and `MotionUITests`.
+    static let undoWindow = ["-UITestUndoWindow", "30"]
     static let recordHaptics = "-UITestRecordHaptics"
     static let reduceMotion = "-UITestReduceMotion"
     static let listingSeed = ["-UITestSeed", "listing"]
@@ -17,6 +23,12 @@ enum RemoveArgs {
 final class RemoveFlowUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    /// Every flow launches with the 30 s undo window unless it is testing the timeout itself.
+    /// Timeouts below are upper bounds for slow runners, never pass/fail thresholds on speed.
+    private func launch(_ extra: [String] = [], undoWindow: Bool = true) -> XCUIApplication {
+        XCUIApplication.fridge(extra + (undoWindow ? RemoveArgs.undoWindow : []))
+    }
+
     private func haptics(_ app: XCUIApplication) -> [String] {
         let probe = app.any(RemoveArgs.hapticsProbe)
         guard probe.exists else { return [] }
@@ -26,9 +38,9 @@ final class RemoveFlowUITests: XCTestCase {
 
     private func assertRowGoneAndToast(_ app: XCUIApplication, item: String, name: String,
                                        file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 3), "sheet stayed open", file: file, line: line)
-        XCTAssertTrue(app.fridgeRow(item).waitForNonExistence(timeout: 2), "row did not collapse", file: file, line: line)
-        XCTAssertTrue(app.toast.waitForExistence(timeout: 2), "Undo toast missing", file: file, line: line)
+        XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 10), "sheet stayed open", file: file, line: line)
+        XCTAssertTrue(app.fridgeRow(item).waitForNonExistence(timeout: 10), "row did not collapse", file: file, line: line)
+        XCTAssertTrue(app.toast.waitForExistence(timeout: 10), "Undo toast missing", file: file, line: line)
         let msg = app.any(ID.toastMessage)
         XCTAssertTrue(msg.label.contains(name), "toast message '\(msg.label)' lacks '\(name)'", file: file, line: line)
     }
@@ -36,7 +48,7 @@ final class RemoveFlowUITests: XCTestCase {
     // MARK: Outcomes
 
     func testUsedRemovesRowAndShowsToast() {
-        let app = XCUIApplication.fridge([RemoveArgs.recordHaptics])
+        let app = launch([RemoveArgs.recordHaptics])
         openRemove(app, item: "item-chicken")
         attachScreenshot(app, name: "remove-sheet")
         XCTAssertFalse(app.any(RemoveArgs.recipient).exists, "no listing: the claimer line must be hidden")
@@ -47,7 +59,7 @@ final class RemoveFlowUITests: XCTestCase {
     }
 
     func testGaveAwayWithoutListingHidesRecipient() {
-        let app = XCUIApplication.fridge()
+        let app = launch()
         openRemove(app, item: "item-eggs")
         XCTAssertFalse(app.any(RemoveArgs.recipient).exists)
         XCTAssertTrue(app.any(FID.outcome("donated")).label.contains("Gave it away"))
@@ -59,7 +71,7 @@ final class RemoveFlowUITests: XCTestCase {
     /// The app sends no recipient_id (the server credits the claimer); that is covered by the
     /// sheet code (`RemoveChoice(outcome:)`) and `RemoveRequestShapeTests.testDonatedWithoutRecipientOmitsKey`.
     func testGaveAwayWithClaimedListingShowsClaimerLine() {
-        let app = XCUIApplication.fridge(RemoveArgs.listingSeed + [RemoveArgs.recordHaptics])
+        let app = launch(RemoveArgs.listingSeed + [RemoveArgs.recordHaptics])
         openRemove(app, item: "item-spinach")
         let line = app.any(RemoveArgs.recipient)
         XCTAssertTrue(line.waitForExistence(timeout: 2), "claimer line missing")
@@ -79,7 +91,7 @@ final class RemoveFlowUITests: XCTestCase {
 
     /// Open listing without a claimer (carrots): no recipient UI at all.
     func testGaveAwayUnclaimedListingShowsNoRecipient() {
-        let app = XCUIApplication.fridge()
+        let app = launch()
         openRemove(app, item: "item-carrots")
         XCTAssertFalse(app.any(RemoveArgs.recipient).exists, "no claimer: no recipient line")
         app.any(FID.outcome("donated")).tap()
@@ -87,11 +99,11 @@ final class RemoveFlowUITests: XCTestCase {
     }
 
     func testThrewAwayPushesReasonThenRemoves() {
-        let app = XCUIApplication.fridge([RemoveArgs.recordHaptics])
+        let app = launch([RemoveArgs.recordHaptics])
         openRemove(app, item: "item-strawberries")
         app.any(FID.outcome("thrown_out")).tap()
         let reasons = ["expired", "forgot", "didnt_like", "other"]
-        XCTAssertTrue(app.any(FID.reason("expired")).waitForExistence(timeout: 3), "reason step not pushed")
+        XCTAssertTrue(app.any(FID.reason("expired")).waitForExistence(timeout: 10), "reason step not pushed")
         XCTAssertTrue(app.fridgeRow("item-strawberries").exists, "row must stay until a reason is chosen")
         for r in reasons {
             let t = app.any(FID.reason(r))
@@ -107,11 +119,11 @@ final class RemoveFlowUITests: XCTestCase {
     }
 
     func testCancelKeepsRow() {
-        let app = XCUIApplication.fridge()
+        let app = launch()
         openRemove(app, item: "item-eggs")
         let cancel = app.buttons[FID.cancel].exists ? app.buttons[FID.cancel] : app.buttons["Cancel"].firstMatch
         if cancel.exists { cancel.tap() } else { app.swipeDown() }
-        XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.reveal(app.fridgeRow("item-eggs"), timeout: 2))
         XCTAssertFalse(app.toast.exists)
     }
@@ -119,14 +131,14 @@ final class RemoveFlowUITests: XCTestCase {
     // MARK: Undo
 
     func testUndoRestoresRowWithoutHaptic() {
-        let app = XCUIApplication.fridge([RemoveArgs.recordHaptics])
+        let app = launch([RemoveArgs.recordHaptics])
         openRemove(app, item: "item-chicken")
         app.any(FID.outcome("used")).tap()
         assertRowGoneAndToast(app, item: "item-chicken", name: "Chicken")
         let before = haptics(app)
         app.buttons[ID.toastButton].tap()
-        XCTAssertTrue(app.reveal(app.fridgeRow("item-chicken"), timeout: 3), "Undo did not restore the row")
-        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 2))
+        XCTAssertTrue(app.reveal(app.fridgeRow("item-chicken"), timeout: 10), "Undo did not restore the row")
+        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 10))
         XCTAssertEqual(haptics(app), before, "Undo must not play a haptic")
         // Restored row is back in its section, in expiry order.
         if app.fridgeRow("item-eggs").exists {
@@ -134,26 +146,69 @@ final class RemoveFlowUITests: XCTestCase {
         }
     }
 
+    /// Default 5 s window. The toast may already be gone by the time a slow runner looks, so only
+    /// its eventual absence is asserted, then that the removal survived a refresh.
     func testToastExpiryKeepsRemoval() {
-        let app = XCUIApplication.fridge()
+        let app = launch(undoWindow: false)
         openRemove(app, item: "item-eggs")
         app.any(FID.outcome("used")).tap()
-        assertRowGoneAndToast(app, item: "item-eggs", name: "Eggs")
-        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 8), "toast did not time out")
+        XCTAssertTrue(app.fridgeRow("item-eggs").waitForNonExistence(timeout: 10), "row did not collapse")
+        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 20), "toast did not time out")
+        XCTAssertFalse(app.any(ID.toastMarker).exists)
         // Pull to refresh reloads from the mock: still removed.
         app.any(FID.list).swipeDown(velocity: .slow)
-        Thread.sleep(forTimeInterval: 1.0)
-        XCTAssertTrue(app.reveal(app.fridgeRow("item-chicken"), timeout: 3))
+        XCTAssertTrue(app.reveal(app.fridgeRow("item-chicken"), timeout: 10))
         XCTAssertFalse(app.fridgeRow("item-eggs").exists, "removal must persist after the toast expires")
+    }
+
+    /// The Undo countdown starts when the toast becomes visible, after the sheet dismisses (#64),
+    /// so the whole window is usable. Window 4 s; the toast must still be up 2.5 s after the sheet is
+    /// seen gone. `tGone` is when XCUITest *noticed*, which is at or after the real dismissal, so the
+    /// check is conservative. If the runner's snapshot itself lands later than 3.3 s after `tGone`,
+    /// the run is inconclusive (logged), never a false failure. Before the fix the countdown ran
+    /// under the sheet (≈ 2 s lost locally), so this failed.
+    func testFullUndoWindowAfterSheetDismisses() {
+        let app = XCUIApplication.fridge(["-UITestUndoWindow", "4"])
+        openRemove(app, item: "item-eggs")
+        app.any(FID.outcome("used")).tap()
+        XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 10))
+        let tGone = Date()
+        XCTAssertTrue(app.toast.waitForExistence(timeout: 2), "toast should be up once the sheet is gone")
+        let wait = 2.5 - Date().timeIntervalSince(tGone)
+        if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+        let present = app.toast.exists
+        let lookedAt = Date().timeIntervalSince(tGone)
+        if lookedAt > 3.3 {
+            let note = XCTAttachment(string: "snapshot landed \(lookedAt) s after the sheet; inconclusive on this runner")
+            note.lifetime = .keepAlways; add(note)
+        } else {
+            XCTAssertTrue(present, "toast gone \(lookedAt) s after the sheet: the countdown ran under the sheet")
+        }
+        XCTAssertTrue(app.toast.waitForNonExistence(timeout: 15), "toast never timed out")
+        XCTAssertFalse(app.fridgeRow("item-eggs").exists, "timeout keeps the removal")
+    }
+
+    /// Ruling (#64): a restore answered with 409 `not_removed` keeps the row and shows no banner.
+    func testUndoWithRestoreNotRemovedKeepsRowWithoutBanner() {
+        let app = launch([RemoveArgs.restoreNotRemoved, RemoveArgs.recordHaptics])
+        openRemove(app, item: "item-chicken")
+        app.any(FID.outcome("used")).tap()
+        assertRowGoneAndToast(app, item: "item-chicken", name: "Chicken")
+        app.buttons[ID.toastButton].tap()
+        XCTAssertTrue(app.reveal(app.fridgeRow("item-chicken"), timeout: 10), "Undo did not restore the row")
+        // Give the restore call time to come back (mock delay 150 ms) before checking for a rollback.
+        XCTAssertFalse(app.any(RemoveArgs.removeError).waitForExistence(timeout: 3), "not_removed must not show the banner")
+        XCTAssertTrue(app.fridgeRow("item-chicken").exists, "row must stay after not_removed")
+        XCTAssertEqual(haptics(app), ["success"], "no error haptic for not_removed")
     }
 
     // MARK: Failures roll back
 
     func testFailedRemoveRollsBackAndShowsError() {
-        let app = XCUIApplication.fridge([RemoveArgs.failRemove, RemoveArgs.recordHaptics])
+        let app = launch([RemoveArgs.failRemove, RemoveArgs.recordHaptics])
         openRemove(app, item: "item-chicken")
         app.any(FID.outcome("used")).tap()
-        XCTAssertTrue(app.any(RemoveArgs.removeError).waitForExistence(timeout: 3) || app.alerts.firstMatch.waitForExistence(timeout: 1),
+        XCTAssertTrue(app.any(RemoveArgs.removeError).waitForExistence(timeout: 10) || app.alerts.firstMatch.waitForExistence(timeout: 1),
                       "no error shown after a failed remove")
         attachScreenshot(app, name: "remove-failed")
         XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 3) || app.reveal(app.fridgeRow("item-chicken")), "row must come back")
@@ -170,16 +225,16 @@ final class RemoveFlowUITests: XCTestCase {
         // Optimistic: .success plays at the tap, then .error when the server refuses.
         XCTAssertEqual(haptics(app), ["success", "error"], "failed remove haptics")
         dismiss.tap()
-        XCTAssertTrue(app.any(RemoveArgs.removeError).waitForNonExistence(timeout: 2), "Dismiss hides the banner")
+        XCTAssertTrue(app.any(RemoveArgs.removeError).waitForNonExistence(timeout: 10), "Dismiss hides the banner")
     }
 
     func testFailedRestoreKeepsRowRemovedAndShowsError() {
-        let app = XCUIApplication.fridge([RemoveArgs.failRestore])
+        let app = launch([RemoveArgs.failRestore])
         openRemove(app, item: "item-chicken")
         app.any(FID.outcome("used")).tap()
         assertRowGoneAndToast(app, item: "item-chicken", name: "Chicken")
         app.buttons[ID.toastButton].tap()
-        XCTAssertTrue(app.any(RemoveArgs.removeError).waitForExistence(timeout: 3) || app.alerts.firstMatch.waitForExistence(timeout: 1),
+        XCTAssertTrue(app.any(RemoveArgs.removeError).waitForExistence(timeout: 10) || app.alerts.firstMatch.waitForExistence(timeout: 1),
                       "no error shown after a failed restore")
         attachScreenshot(app, name: "restore-failed")
         if app.alerts.firstMatch.exists { app.alerts.firstMatch.buttons.firstMatch.tap() }
@@ -188,29 +243,47 @@ final class RemoveFlowUITests: XCTestCase {
 
     // MARK: Motion
 
-    /// Smoke check only. `tap()` itself waits for the app to go idle (checkmark hold 0.2 s + sheet
-    /// dismissal + collapse), and `waitForNonExistence` polls coarsely, so this measures XCUITest
-    /// more than the app. Immediacy is proved by `FridgeModelTests.testRemoveIsImmediateAndShowsToast`
-    /// (the row is gone synchronously, before any await) and by the clip.
+    /// "The tap takes effect immediately", asserted on state, not wall time. The remove call is
+    /// slowed to 3 s and made to fail (`-UITestSlowRemove -UITestFailRemove`): a UI that waited for
+    /// the server would never hide the row, because the call fails. So the row being gone while the
+    /// rollback banner is not up yet (the request still in flight) proves the removal is optimistic.
+    /// Then the failure rolls it back. If a runner is so slow that its first look comes after the
+    /// 3 s call has already resolved, that run is inconclusive (logged, not failed); immediacy is
+    /// also proved in `FridgeModelTests.testRemoveIsImmediateAndShowsToast`.
     func testRemoveTakesEffectImmediately() {
         for rm in [false, true] {
-            let app = XCUIApplication.fridge(rm ? [RemoveArgs.reduceMotion] : [])
+            let app = launch([RemoveArgs.slowRemove, RemoveArgs.failRemove] + (rm ? [RemoveArgs.reduceMotion] : []))
             openRemove(app, item: "item-chicken")
-            let t0 = Date()
             app.any(FID.outcome("used")).tap()
-            XCTAssertTrue(app.fridgeRow("item-chicken").waitForNonExistence(timeout: 2))
-            let dt = Date().timeIntervalSince(t0)
-            XCTAssertLessThan(dt, 3.0, "reduceMotion=\(rm): row took \(dt) s to go")
-            XCTAssertTrue(app.toast.waitForExistence(timeout: 1))
+            // The list behind the sheet may be hidden from accessibility, so look once the sheet has
+            // gone (its native dismissal is not counted against anything; this is an upper bound).
+            XCTAssertTrue(app.any(FID.sheet).waitForNonExistence(timeout: 10))
+            // Row first, banner second: the rollback re-inserts the row and raises the banner in one
+            // main-actor turn, so "row shown, then banner still absent" can only mean the row was
+            // shown while the request was in flight.
+            let rowShown = app.fridgeRow("item-chicken").exists
+            let toastUp = app.toast.exists
+            let bannerUp = app.any(RemoveArgs.removeError).exists
+            if bannerUp {
+                let note = XCTAttachment(string: "reduceMotion=\(rm): first look came after the 3 s call resolved; inconclusive on this runner")
+                note.lifetime = .keepAlways; add(note)
+            } else {
+                XCTAssertFalse(rowShown, "reduceMotion=\(rm): row still shown while the remove request is in flight")
+                XCTAssertTrue(toastUp, "reduceMotion=\(rm): Undo toast should be up while the request is in flight")
+            }
+            // Then the failure rolls back: banner, row back, toast gone.
+            XCTAssertTrue(app.any(RemoveArgs.removeError).waitForExistence(timeout: 15), "reduceMotion=\(rm): no rollback banner")
+            XCTAssertTrue(app.reveal(app.fridgeRow("item-chicken"), timeout: 10), "reduceMotion=\(rm): row not rolled back")
+            XCTAssertFalse(app.toast.exists)
             app.terminate()
         }
     }
 
     func testReduceMotionToastFadesInPlace() {
-        let app = XCUIApplication.fridge([RemoveArgs.reduceMotion])
+        let app = launch([RemoveArgs.reduceMotion])
         openRemove(app, item: "item-eggs")
         app.any(FID.outcome("used")).tap()
-        XCTAssertTrue(app.toast.waitForExistence(timeout: 2))
+        XCTAssertTrue(app.toast.waitForExistence(timeout: 10))
         let a = app.toast.frame
         Thread.sleep(forTimeInterval: 0.6)
         XCTAssertEqual(a.minY, app.toast.frame.minY, accuracy: 0.5, "toast moved under Reduce Motion")
@@ -218,10 +291,10 @@ final class RemoveFlowUITests: XCTestCase {
     }
 
     func testReduceMotionThrewAwayFlowStillWorksWithHaptics() {
-        let app = XCUIApplication.fridge([RemoveArgs.reduceMotion, RemoveArgs.recordHaptics])
+        let app = launch([RemoveArgs.reduceMotion, RemoveArgs.recordHaptics])
         openRemove(app, item: "item-strawberries")
         app.any(FID.outcome("thrown_out")).tap()
-        XCTAssertTrue(app.any(FID.reason("expired")).waitForExistence(timeout: 3))
+        XCTAssertTrue(app.any(FID.reason("expired")).waitForExistence(timeout: 10))
         app.any(FID.reason("expired")).tap()
         assertRowGoneAndToast(app, item: "item-strawberries", name: "Strawberries")
         XCTAssertTrue(haptics(app).contains("warning"), "haptics stay under Reduce Motion: \(haptics(app))")

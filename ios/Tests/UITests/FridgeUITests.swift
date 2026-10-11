@@ -64,10 +64,10 @@ final class FridgeUITests: XCTestCase {
         XCTAssertTrue(pantry.exists)
         XCTAssertGreaterThanOrEqual(pantry.frame.height, 44, "segment target \(pantry.frame)")
         pantry.tap()
-        XCTAssertTrue(app.fridgeRow("item-chicken").waitForNonExistence(timeout: 3), "pantry must not show fridge items")
-        XCTAssertTrue(app.any(FID.empty).waitForExistence(timeout: 3), "empty pantry shows fridge.empty")
+        XCTAssertTrue(app.fridgeRow("item-chicken").waitForNonExistence(timeout: 10), "pantry must not show fridge items")
+        XCTAssertTrue(app.any(FID.empty).waitForExistence(timeout: 10), "empty pantry shows fridge.empty")
         app.any(FID.storage("fridge")).tap()
-        XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 3))
+        XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 10))
         XCTAssertFalse(app.any(FID.empty).exists)
     }
 
@@ -174,7 +174,7 @@ final class FridgeUITests: XCTestCase {
         XCTAssertEqual(probe.label, "1")
         app.any(FID.storage("pantry")).tap()     // empty pantry: no rows, no stagger
         app.any(FID.storage("fridge")).tap()
-        XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 3))
+        XCTAssertTrue(app.fridgeRow("item-chicken").waitForExistence(timeout: 10))
         app.any(FID.list).swipeDown(velocity: .slow)   // pull to refresh, if present
         Thread.sleep(forTimeInterval: 1.0)
         XCTAssertEqual(app.any(FID.staggerProbe).label, "1", "stagger restarted on refresh/segment return")

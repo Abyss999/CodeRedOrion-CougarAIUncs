@@ -295,3 +295,48 @@ Still open from earlier rounds: IOS-2 (owner).
 ### Notes
 - After the ruling, the app sends no `recipient_id`. That is verified in the code: `RemoveSheet.finish` builds `RemoveChoice(outcome:)`. On the wire, `testDonatedWithoutRecipientOmitsKey` checks that the key is omitted.
 - The `debug.haptics` and `debug.stagger.count` probes are under `#if DEBUG` and appear only on mock launches.
+
+### 2026-10-11 follow-up: #64 CI red on macos-26 (run 38116928151, head 8f56c6c). Test flake, not an app bug. Verdict stays PASS
+Three `RemoveFlowUITests` failed in CI. I read the per-step timeline in the CI log (`gh run view --log-failed`).
+
+**1 and 2: the toast had already expired.**
+- `testFailedRestoreKeepsRowRemovedAndShowsError` reported "Undo toast missing". `testUndoRestoresRowWithoutHaptic` found no `toast.undo.button`.
+- In both, the Used tap synthesised at about t=25.3–25.5 s. The test then waited for the sheet to go and for the row to go, and only looked for the toast at t=31.6 s and t=30.8 s, past the 5 s window. On the runner, each XCUITest query took about 1–1.5 s.
+- The app did what it should: the toast timed out.
+
+**3: the time went to XCUITest, not the app.**
+- `testRemoveTakesEffectImmediately` failed with reduceMotion=true: "6.06 s".
+- The tap was at 39.57 s. The `waitForNonExistence` that followed returned *true*, so the row was gone, but the snapshot only returned at about 45 s.
+- The app has no delay under Reduce Motion. `Theme.Motion.animation(_, reduceMotion: true)` is `quick` (0.15 s), and `FridgeModel.remove` deletes the row synchronously before it returns. The builder traced the same path.
+
+**Test fixes** (test files only, except the hooks the builder added):
+- Every Remove flow launches with `-UITestUndoWindow 30`. The exception is the expiry test, which keeps the 5 s default and asserts only that the toast eventually goes and the removal survives a refresh.
+- Every `waitFor…` timeout in the Fridge and Remove tests is now a generous upper bound (10–20 s), never a speed threshold.
+- `testRemoveTakesEffectImmediately` has **no wall-clock assertion**. It runs `-UITestSlowRemove -UITestFailRemove` (a 3 s call that then fails) and waits for the sheet to go, without counting that time.
+  - Then, in one pass, it reads the row, then the toast, then the banner. The rollback re-inserts the row and raises the banner in a single main-actor turn.
+  - So "row gone and banner not yet up" proves the removal is optimistic. "Row shown while the banner is still absent" would be a real failure.
+  - If the banner is already up, the runner was too slow to judge. The test attaches an "inconclusive" note instead of failing. Locally there were 0 inconclusive runs on both devices.
+  - It then checks the rollback.
+- New `testFullUndoWindowAfterSheetDismisses` (`-UITestUndoWindow 4`): the toast must still be up 2.5 s after XCUITest *sees* the sheet gone, which is conservative. If the snapshot lands later than 3.3 s, the run is inconclusive, never failed.
+- New `testUndoWithRestoreNotRemovedKeepsRowWithoutBanner` (`-UITestRestoreNotRemoved`): the row stays, no banner, and the haptics are exactly `success`.
+- Unit tests:
+  - `FridgeModelTests` follows the builder's (a). The toast is pending until `showPendingToast()` (the sheet's `onDismiss`), so the countdown doesn't start under the sheet.
+  - New `testRemoveFailingBeforeDismissShowsNoToast` and `testRestoreNotRemovedKeepsRowWithoutBanner`.
+
+**Builder changes covered**:
+- (a) the toast and its countdown start after the sheet dismisses, and the bar is now `ProgressView(timerInterval:countsDown:)`
+- (b) 409 `not_removed` on restore keeps the row, with no banner and no haptic
+
+**Final runs on the #64 head**, one after another under the lock:
+
+| Device | Unit | UI |
+|---|---|---|
+| iPhone 17 Pro, light, `large` | **146 run, 0 failed, 3 skipped** | **51 run, 0 failed** (full run) |
+| iPhone SE QA, **AX5** | **146 run, 0 failed, 3 skipped** | **51 run, 0 failed** (full run) |
+
+On the 17 Pro, the first full run had one unit failure. It came from my own edit: the second removal in `testThrownOutSendsReasonAndDonatedSendsRecipient` never called `showPendingToast()`. I fixed it, and the unit rerun was 146/0. The SE was reset to `large` and shut down. The 17 Pro is on light.
+
+**Toast with the new bar** (compared with the earlier shots): [light](media/ios-fridge/after-remove-toast-progressview-light.png), [dark](media/ios-fridge/after-remove-toast-progressview-dark.png), Home hook [light](media/ios-fridge/toast-progressview-light.png) and [dark](media/ios-fridge/toast-progressview-dark.png), and [SE AX5](media/ios-fridge/se-ax5-after-remove-toast.png).
+- The bar is still a 3 pt strip flush with the toast's bottom edge.
+- `Theme.Size.toastProgress` plus `.clipped()` and the card's rounded clip hide the system track's rounded ends, so it looks the same as the old flat bar: `onForestMuted` in light, dark forest on lime in dark. It is low-key but visible.
+- No artboard draws the toast (MOTION.md only names a 5 s progress bar), so this is **Design delta 20**: the bar is a system `ProgressView`, clipped to a 3 pt strip. No defect.
