@@ -121,7 +121,7 @@ def create_app(detector=None, ocr=None, structure_with_gemini: bool | None = Non
         if use_gemini:
             g = gemini_structure(raw)
             if g and g.get("lines"):
-                parsed = {"lines": g["lines"], "total": g.get("total", parsed["total"])}
+                parsed = {"lines": g["lines"], "total": g["total"] if g.get("total") is not None else parsed["total"]}
         lines = [{"name": str(l.get("name", "")), "quantity": l.get("quantity"), "price": l.get("price")}
                  for l in parsed["lines"]]
         return jsonify(lines=lines, total=parsed["total"], raw_text=raw)
