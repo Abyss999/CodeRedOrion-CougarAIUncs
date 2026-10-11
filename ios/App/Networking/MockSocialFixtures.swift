@@ -86,17 +86,17 @@ extension MockData {
         let requests = [
             HelpRequest(id: "req-onion", authorId: marcusFull.id, authorName: "Marcus Ojeda",
                         text: "Anyone have an onion I can borrow? Making chili tonight.", status: .open, fulfilledBy: nil,
-                        fulfilledByName: nil, createdAt: ago(2), audiences: RequestAudiences(friends: true), source: .friend,
+                        fulfilledByName: nil, createdAt: ago(2), audiences: RequestAudiences(friends: true), source: .init(type: .friend, name: "Marcus Ojeda"),
                         groupId: nil, groupName: nil),
             HelpRequest(id: "req-tortillas", authorId: ana.id, authorName: "Ana Reyes",
                         text: "Does anyone on 4F have tortillas? Taco night.", status: .open, fulfilledBy: nil, fulfilledByName: nil,
                         createdAt: ago(7), audiences: RequestAudiences(groups: [GroupRef(id: moody.id, name: moody.name)], hiddenCount: 1),
-                        source: .group, groupId: moody.id, groupName: moody.name),
+                        source: .init(type: .group, name: moody.name), groupId: moody.id, groupName: moody.name),
             HelpRequest(id: "req-lemon", authorId: priya.id, authorName: "Priya",
                         text: "Need one lemon for a salmon recipe.", status: .open, fulfilledBy: nil, fulfilledByName: nil,
                         createdAt: ago(1),
                         audiences: RequestAudiences(friends: true, groups: [GroupRef(id: ccs.id, name: ccs.name)]),
-                        source: .me, groupId: ccs.id, groupName: ccs.name),
+                        source: .init(type: .me, name: "Priya"), groupId: ccs.id, groupName: ccs.name),
         ]
 
         let people = [

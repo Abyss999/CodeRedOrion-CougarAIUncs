@@ -29,7 +29,7 @@ struct RequestNoteCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(request.source == .me ? "Your request" : "Request from \(firstName)") in \(request.sourceLabel): \(request.text)")
+            .accessibilityLabel("\(request.source.type == .me ? "Your request" : "Request from \(firstName)") in \(request.sourceLabel): \(request.text)")
             if long {
                 Button { withAnimation(Theme.Motion.quick) { expanded.toggle() } } label: {
                     Text(expanded ? "less" : "more")
@@ -45,7 +45,7 @@ struct RequestNoteCard: View {
             HStack {
                 Text(request.whoLine).font(Theme.Fonts.meta).foregroundStyle(Theme.Colors.muted)
                 Spacer(minLength: Theme.Spacing.xs)
-                if request.source != .me {
+                if request.source.type != .me {
                     Button(action: onOffer) {
                         Text("Offer")
                             .font(Theme.Fonts.badge)

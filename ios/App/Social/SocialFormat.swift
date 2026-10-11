@@ -50,7 +50,7 @@ enum SocialText {
 extension HelpRequest {
     /// Small label above the text: group name, the author, or "You".
     var sourceLabel: String {
-        switch source {
+        switch source.type {
         case .me: "You"
         case .group: groupName ?? audiences.groups.first?.name ?? "Group"
         case .friend: authorName
@@ -59,7 +59,7 @@ extension HelpRequest {
 
     /// "Marcus, 20m".
     var whoLine: String {
-        let who = source == .me ? "You" : SocialText.firstName(authorName)
+        let who = source.type == .me ? "You" : SocialText.firstName(authorName)
         let t = SocialText.ago(createdAt)
         return t.isEmpty ? who : "\(who), \(t)"
     }

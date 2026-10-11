@@ -20,6 +20,8 @@ struct EmptyStateView: View {
             if let actionTitle, let action {
                 Button(action: action) { StateActionLabel(title: actionTitle) }
                     .buttonStyle(.borderedProminent)
+                    .tint(Theme.Colors.forest)
+                    .foregroundStyle(Theme.Colors.onForest)
                     .controlSize(.large)
                     .accessibilityIdentifier(actionIdentifier ?? "\(screen).empty.action")
             }
@@ -48,6 +50,8 @@ struct ErrorStateView: View {
         } actions: {
             Button(action: retry) { StateActionLabel(title: retryTitle) }
                 .buttonStyle(.borderedProminent)
+                .tint(Theme.Colors.forest)
+                .foregroundStyle(Theme.Colors.onForest)
                 .controlSize(.large)
                 .accessibilityIdentifier(AccessibilityID.State.retry(screen))
         }

@@ -219,6 +219,27 @@ enum RequestSource: String, Codable, Sendable, Hashable {
     }
 }
 
+/// `source` on a request: `{type, name}` (name is the author, or the group). Also decodes the legacy bare string.
+struct RequestSourceInfo: Codable, Hashable, Sendable {
+    var type: RequestSource
+    var name: String?
+
+    init(type: RequestSource, name: String? = nil) { self.type = type; self.name = name }
+
+    private enum CodingKeys: String, CodingKey { case type, name }
+
+    init(from decoder: Decoder) throws {
+        if let raw = try? decoder.singleValueContainer().decode(String.self) {
+            type = RequestSource(rawValue: raw) ?? .friend
+            name = nil
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decodeIfPresent(RequestSource.self, forKey: .type) ?? .friend
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+    }
+}
+
 /// `audiences` on a request, filtered to the caller. `hiddenCount` counts audiences you can't see.
 struct RequestAudiences: Codable, Hashable, Sendable {
     var friends: Bool
@@ -249,7 +270,7 @@ struct HelpRequest: Codable, Hashable, Sendable, Identifiable {
     var fulfilledByName: String?
     var createdAt: Date?
     var audiences: RequestAudiences
-    var source: RequestSource
+    var source: RequestSourceInfo
     /// Deprecated by the API (first group in `audiences.groups`).
     var groupId: String?
     var groupName: String?
