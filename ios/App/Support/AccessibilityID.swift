@@ -37,7 +37,29 @@ enum AccessibilityID {
     enum Home { static let screen = "home" }
     enum PhotoReview { static let screen = "photoreview" }
     enum ItemDetail { static let screen = "itemdetail" }
-    enum Impact { static let screen = "impact" }
+    enum Impact {
+        static let screen = "impact"
+        static let title = "impact.title"
+        static let back = "impact.back"
+        static let scroll = "impact.scroll"
+        /// Native segmented Picker (Week / Month / All).
+        static let range = "impact.range"
+        static let hero = "impact.hero"
+        static let heroValue = "impact.hero.value"
+        /// "Up 6.2 lb vs previous 30 days" chip (absent for All).
+        static let heroChip = "impact.hero.chip"
+        static let emissions = "impact.emissions"
+        /// `kind`: items | money | thrown | wasterate.
+        static func tile(_ kind: String) -> String { "impact.tile.\(kind)" }
+        static let split = "impact.split"
+        static let splitUsed = "impact.split.used"
+        static let splitDonated = "impact.split.donated"
+        static let weekly = "impact.weekly"
+        static let reasons = "impact.reasons"
+        static func reason(_ rawValue: String) -> String { "impact.reason.\(rawValue)" }
+        static let compare = "impact.compare"
+        static let compareChip = "impact.compare.chip"
+    }
     enum Recipes { static let screen = "recipes" }
     enum Social { static let screen = "social" }
     enum Auth { static let screen = "auth" }
