@@ -6,7 +6,8 @@ Status: **implemented** in migration `0001_initial` (users, items, share_listing
 Migration `0004_items_wave2` adds `items.freshness`, `freshness_checked_at`, `confidence` and makes
 `groups.created_by` nullable. Migration `0005_user_identities` adds `user_identities` and makes
 `users.password_hash` nullable (OAuth-only accounts). Migration `0006_request_audiences` adds `request_audiences` and drops
-`requests.group_id`. Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
+`requests.group_id`. Migration `0007_items_nutrition` adds `items.nutrition` (JSONB, per-100 g nutrition). Social tables
+(`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
 and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in migration `0002_social`.
 
 ## Relational tables
@@ -54,6 +55,7 @@ Downgrade to 0004 drops the table and sets null `password_hash` to the unusable 
 | freshness | text, null | `fresh` \| `semi_fresh` \| `spoiled` (photo assessment; migration 0004) |
 | freshness_checked_at | timestamptz, null | when `freshness` was assessed; null iff `freshness` is null |
 | confidence | float, null | detector confidence 0..1 (candidate round trip); null for manual items |
+| nutrition | jsonb, null | per-100 g nutrition estimate `{basis: "per_100g", kcal, protein_g, carbs_g, fat_g, fiber_g?, sugar_g?, sodium_mg?, estimated: true}` (migration 0007). Written once at create (candidate round trip), never edited; null when unknown. Shape validated in `app/services/nutrition.py`; the DB only guarantees a JSON object |
 
 Constraints:
 ```sql
@@ -69,6 +71,9 @@ contains a known fruit word (`\m(apple|banana|...)\M`, list in `app/services/foo
 (`(freshness IS NULL) = (freshness_checked_at IS NULL)`), `ck_items_confidence` (`0..1`). Downgrade 0004
 drops the columns/constraints; it also restores `groups.created_by NOT NULL` (orphan groups with a null
 creator are handed to their oldest member, or detached and deleted if they have no members: lossy).
+`ck_items_nutrition_object` (`nutrition IS NULL OR jsonb_typeof(nutrition) = 'object'`): the column maps
+Python `None` to SQL NULL (`none_as_null`), never JSON `null`, which the CHECK would reject. Downgrade 0007
+drops the constraint and the column (nutrition data is lost; nothing else depends on it).
 Also CHECKs on `storage`, `outcome` and `waste_reason` value sets (`ck_items_*`).
 Index: `(owner_id, removed_at, predicted_expiry)`.
 `quantity` defaults 1, `unit` defaults `piece`; `predicted_expiry` is NOT NULL (always predicted).

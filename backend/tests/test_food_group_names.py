@@ -5,6 +5,16 @@ import pytest
 
 from app.services import food_group, ml
 
+
+def _tiny_jpeg():  # a real 8x8 JPEG: uploads are now validated as images before any backend runs
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 60, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+TINY_JPEG = _tiny_jpeg()
+
 GROUPS = ["protein", "veggies", "fruit", "dairy", "grains", "pantry", "leftovers", "frozen", "other"]
 
 # (receipt-style name, expected group). Names marked (fx) come from ml/eval/fixtures/receipts.
@@ -110,7 +120,7 @@ def test_return_always_valid_group_for_fixture_names():
 
 
 def _img():
-    return {"image": (io.BytesIO(b"\xff\xd8\xff\xe0fake"), "r.jpg", "image/jpeg")}
+    return {"image": (io.BytesIO(TINY_JPEG), "r.jpg", "image/jpeg")}
 
 
 def test_receipt_end_to_end_milk_eggs_not_other(app, client, user, monkeypatch):

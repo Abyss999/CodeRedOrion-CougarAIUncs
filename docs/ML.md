@@ -16,7 +16,7 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
    `ml/yolo/sources.json`, so adding or editing a source always triggers a fresh download + prepare instead of reusing an older cached dataset. (Ultralytics' own `fraction=0.05` exists in 8.4.175 but takes the *first*
    5% of the sorted file list, i.e. one source or one class folder, which would not test the 3-class head.)
 4. **Real run:** untick `DRY_RUN`, keep the **same `RUN_ID`**, **Runtime -> Run all**. The prepared dataset is restored from Drive (no downloads), the gates re-run, then
-   detector 80 ep + classifier 30 ep. Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>/`.
+   training. **`FAST` (cell 1, default on): ~30 min on a T4** (section 5d); untick it for the full run (detector 80 ep + classifier 30 ep, ~4-5 h). Allow Drive access: **Drive is required** (cell 1 stops with a message if it is not mounted). Everything lives in `MyDrive/fwr_runs/<RUN_ID>/data_<DATA_VER>/`.
    **If you got disconnected: reconnect, keep the same `RUN_ID` and `DRY_RUN` setting, Runtime -> Run all; it resumes from the last epoch on Drive.**
    Write the `RUN_ID` down: left at the default it is today's date, so resuming after midnight needs it typed in.
 5. Download `export.zip` from the last cell and hand it to the team. Cell 5 also has a `SEMI_FRESH_THRESHOLD` field (default 0.5), passed through
@@ -24,10 +24,10 @@ Colab or a GPU box; everything is importable and unit-testable on the VPS with P
 The notebook downloads VegQual (figshare), every non-pending Roboflow set with a pinned version (API), raghavrpotdar (if Kaggle creds exist), **MeatScan** (cell 3e: `python -m pipeline fetch-meatscan` range-reads 450 originals per class from the 25.4 GB Zenodo RAR, then `ingest-dataset --adapter meatscan --max-per-cell 300`; needs `unrar-cffi`, installed in cell 1), **DaFiF fish** (cell 3f: `fetch-dafif` then `ingest-dataset --adapter dafif --max-per-cell 300`; see `docs/PIPELINE.md` for both) and **AgriFreshNET from the public Mendeley release**
 (file selected by name from `data.mendeley.com/public-api/datasets/42m5tb7yv9`; both requests send a browser-like `User-Agent` because Mendeley returns 403 to urllib's default; the zip is always verified against the hardcoded SHA-256 `6607a48b...3f11`; a `RUN_ID` ending in `_dry` is rejected), ingests it with `python -m pipeline --data-root /content/pipeline_data
 ingest-dataset --adapter agrifreshnet --specimen-groups --exclude-source-augs --max-per-cell 300` (4,754 images, same as the local a2b run), derives a
-`sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (yolo26s 80 ep +
-classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
+`sources.colab.json` from the repo's `sources.json` with `/content/...` roots, runs `prepare_dataset.py`, the gates, `train.py --device auto --resume` (FAST: yolo26n 512 px 30 ep on
+the capped detector train set + classifier 10 ep; full: yolo26s 80 ep + classifier 30 ep) and the export. Gates: split_grouping session, `leakage_check.py` (identity pHash <= 1% per source, 0 held-out within 300 s, agrifreshnet included),
 `stratification_check.py` (3-class mapping) and a check that `cls/{train,val}` has `fresh`, `semi_fresh` and `spoiled`. The gate is identity pHash <= 6 and <= 1% per source; the
-dihedral-variant near-duplicate check is **reported only** (same-class, masked padding, ML-40), not a gate in the notebook (ML-35 ruling). Expect 3-4.5 h on a free T4 for the real run.
+dihedral-variant near-duplicate check is **reported only** (same-class, masked padding, ML-40), not a gate in the notebook (ML-35 ruling). Expect ~30 min on a free T4 for the real run with `FAST` (estimate, section 5d), ~4-5 h without.
 
 ## 1. YOLO version decision (verified 2026-10-10)
 - PyPI `ultralytics` latest = **8.4.175** (`pip index versions ultralytics`). Pinned in `ml/yolo/requirements.txt`.
@@ -313,18 +313,80 @@ heldout_manifest.csv, class_names.json, dataset_report.json). These predictions 
 model saw many of these images, and has never seen the fridge/Kaggle classes. Use them to test the metric plumbing only; do not
 quote any number from them.
 
+## 5d. FAST profile (data-owner ruling, 2026-10-11)
+The full run (yolo26s, 640 px, 80 epochs on 11,777 train images) takes ~4-5 h on a free T4, longer when Colab's 2 vCPUs can't keep up with
+decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (default **on**) runs:
+
+| | FAST | full |
+|---|---|---|
+| detector | `yolo26n.pt`, 512 px, batch 32, **30 epochs** | `yolo26s.pt`, 640 px, batch 16, 80 epochs |
+| detector train set | **capped**: <= `DET_CAP` (400) boxes per food, `ml/yolo/cap_detector.py` (~4.9k of 11.8k images) | all |
+| classifier | `yolo26n-cls`, 224 px, batch 128, **10 epochs**, all crops | same model, batch 64, 30 epochs |
+| cache / val | `--cache ram` (detector only), `--no-epoch-val` (Ultralytics still validates the last epoch) | no cache, val every epoch |
+| checkpoints | `data_<DATA_VER>_fast[_dry]/` | `data_<DATA_VER>[_dry]/` |
+
+- **Why the cap is safe for freshness:** the detector only learns food names; fresh / semi_fresh / spoiled comes from the crop classifier,
+  which still trains on every crop. The cap is a symlink view of the train split only: val, held-out (incl. synthetic lighting copies),
+  `heldout_gt.jsonl` / manifest and `cls/` are the full set, so the leakage / stratification gates and every held-out metric are unchanged
+  and comparable with a full run. Foods with <= 400 boxes (butter, bacon, cheese, lemon, cucumber, papaya, ...) keep all of them.
+  Selection is round-robin over (food, freshness, source) cells, multi-object images first, then a stable hash order (no RNG); on the local
+  rebuild it kept 4,881 of 11,777 images with boxes 69% fresh / 25% spoiled / 6% semi_fresh (full set 66 / 29 / 5). `cap_report.json`
+  in the view lists kept/total boxes per food.
+- **Cost:** a nano detector at 512 px is less accurate than yolo26s at 640, mostly on small objects in fridge-shelf photos. If the
+  held-out detector gates in `docs/QA.md` come up short, untick `FAST` (or raise `DET_CAP` / pass `--det-model yolo26s.pt`) for the next run.
+- **Time is an estimate, not measured on a T4**: ~4.9k images/epoch, CPU-bound at roughly 120-150 img/s with RAM cache -> ~35-40 s per
+  epoch -> ~20 min detector, ~5 min classifier, ~3 min export. The Ultralytics progress bar shows the real s/epoch; record it here after the
+  first run.
+- **The classifier is never RAM-cached (ML-69).** Ultralytics caches classification crops at their original size: the 14,377 train crops
+  are 9.4 GB decoded, which OOM-killed (SIGKILL) the first FAST run on a free Colab (~12.7 GB) at the start of the classifier stage. The
+  detector cache resizes to 512 px first (~3 GB for 4.9k images). A resumed stage passes `cache` / `val` too (Ultralytics allows those
+  overrides), so a checkpoint saved with `cache=ram` can't bring it back. Measured on that run: detector 30 epochs ~26 min on a T4.
+- **Drive sync can truncate the export (seen 2026-10-11).** `train.py` writes `export/` straight into the Drive mount. On the first
+  FAST run Drive uploaded `predictions.jsonl` while it was still being written: the Drive copy had 582 KB of NUL bytes and 3,184 of
+  5,205 rows (the `.pt` files were intact, zip CRC OK). Score from `export.zip` (cell 6 reads the complete local copy) or run
+  `from google.colab import drive; drive.flush_and_unmount()` before reading the export from Drive.
+- Don't train on `pipeline augment-lighting` output in FAST mode: it multiplies the train images (and see `docs/PIPELINE.md` for the lighting sign-off rule).
+
+### 5e. Run log
+**`fwr_20261011` (first real FAST run, Colab T4, 2026-10-11).** Data version `a4729025` (`sources.json` hash); Drive folder
+`MyDrive/fwr_runs/fwr_20261011/data_a4729025_fast/`.
+
+| Step | Result |
+|---|---|
+| Detector train set (`DET_CAP` 400) | 4,848 of 11,517 train images; boxes 6,052 fresh / 569 semi_fresh / 2,190 spoiled |
+| Detector | `yolo26n`, 512 px, 30 epochs, ~26 min (10:54-11:20 UTC) |
+| Classifier | first attempt OOM-killed at the start (ML-69, fixed in #88); rerun without the RAM cache: 10 epochs at ~100 s/epoch (~17 min), train loss 0.61 (epoch 1) -> 0.12 (epoch 8) |
+| Export (11:58-12:01 UTC) | all 7 files. `detector.pt` 5.45 MB and `freshness.pt` 3.19 MB pass their zip CRC and load (23-class detector, 3-class fresh / semi_fresh / spoiled classifier); local copy `../mldata/models/fwr_fast_20261011` |
+| Held-out predictions | **not scored.** `predictions.jsonl` on Drive (and the copy downloaded from it) is truncated by Drive sync: 582,423 NUL bytes, ~3.1k of 5,205 rows parse. **No metrics from this run may be quoted.** |
+| Serving | weights served by `ml/serve` and checked end to end (photo -> `/items/from-photo` `source: "yolo"` -> Gemini enrichment -> `POST /items`). One fridge photo: names right, 2 of 3 fresh items called spoiled (an anecdote, not a metric; the photo may be in this build's train split) |
+
+**Next:** re-export and score. Open the notebook from `main`, keep `RUN_ID=fwr_20261011`, `FAST` on, `DRY_RUN` off, Runtime ->
+Run all: both stages are already finished on Drive, so they are skipped and only the export is rewritten (a few minutes). Take the
+predictions from the `export.zip` that cell 6 downloads (or run `drive.flush_and_unmount()` before reading Drive), check that
+`predictions.jsonl` has as many rows as `heldout_gt.jsonl`, then ML QA runs `ml/eval/detection_metrics.py` and `check_thresholds.py`.
+
 ## 6. Running the service on a GPU box
+**On the same machine as the API (compose, CPU is fine for the yolo26n FAST model):** put `detector.pt` and
+`freshness.pt` in `../mldata/models/current/` (or set `ML_MODELS_DIR`), set `ML_SERVICE_URL=http://ml:8000` in `.env`, then
+`docker compose --profile ml up -d --build` (outside the main checkout set an absolute `ML_MODELS_DIR`; a missing folder stops
+`up`). The `ml` service publishes no host port (only the api container reaches it),
+runs with `OCR_BACKEND=off` and `YOLO_DEVICE=${YOLO_DEVICE:-cpu}`. Verified 2026-10-11 with the first FAST export
+(`fwr_20261011`): photo -> `/items/from-photo` (`source: "yolo"`) -> Gemini enrichment of the crops -> `POST /items`.
+
+**On a separate GPU box:**
 ```
 cd ml
 pip install -r serve/requirements.txt        # torch CUDA build first
 YOLO_WEIGHTS=/models/detector.pt FRESHNESS_WEIGHTS=/models/freshness.pt \
 OCR_BACKEND=glm GEMINI_API_KEY=... \
 gunicorn -w 1 --threads 4 -t 120 -b 127.0.0.1:8000 serve.wsgi:app
-# or: docker build -f serve/Dockerfile -t fwr-ml ml/ && docker run --gpus all -p 127.0.0.1:8000:8000 -v /models:/models --env-file .env fwr-ml
+# or: docker build -f serve/Dockerfile --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128 -t fwr-ml ml/ \
+#       && docker run --gpus all -p 127.0.0.1:8000:8000 -v /models:/models --env-file .env fwr-ml   (CPU torch without the build arg)
 ```
 Backend env: `ML_SERVICE_URL=http://<gpu-host>:8000` (tunnel/VPN; the service has **no auth** - never expose publicly).
-Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm`
-(default fake), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
+Env knobs: `DETECTOR_BACKEND=fake|yolo` (default yolo if `YOLO_WEIGHTS` set else fake), `OCR_BACKEND=fake|glm|off`
+(default fake; `off` = `/ocr` answers 503 `ocr_not_configured`, so no canned receipt is ever served as real; any other value
+fails at startup), `YOLO_CONFIG_DIR` (Ultralytics settings dir; compose sets `/tmp/ultralytics`), `YOLO_CONF` (0.25), `SPOILED_THRESHOLD` (0.5), `SEMI_FRESH_THRESHOLD` (0.5), `YOLO_DEVICE`, `GLM_OCR_MODEL`, `GEMINI_API_KEY`
 (optional; enables Gemini structuring of OCR text, else the deterministic parser alone), `GEMINI_MODEL` (the same
 value as the backend's, see `docs/DECISIONS.md`; unset falls back to Google's `gemini-flash-latest` alias, never a
 pinned old id), `MAX_UPLOAD_MB` (12). Gemini's structured answer is validated by `clean_structured()` before it is
@@ -337,7 +399,8 @@ should treat as "fall back to Gemini vision" (docs/ARCHITECTURE.md).
 Contract: `POST /detect` (multipart `image`, form `mode`=fridge|single; default fridge) ->
 `{"candidates":[{name,category,food_group,confidence,freshness: fresh|semi_fresh|spoiled,bbox|null}],"model"}` (single = top-1 only; an empty list means
 nothing detected); `POST /ocr` -> `{"lines":[{name,quantity,price}],"total","raw_text"}`; `GET /health`.
-Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 500 `inference_failed`.
+Errors `{"error":{"code","message"}}`: 400 `missing_image|invalid_image|invalid_mode`, 413 oversize, 500 `inference_failed`,
+503 `ocr_not_configured` (`OCR_BACKEND=off`).
 
 ## 7. Receipt OCR
 GLM-OCR (`zai-org/GLM-OCR`, MIT; pipeline also uses Apache-2.0 PP-DocLayoutV3 in the official SDK, not used here)

@@ -36,8 +36,9 @@ def cell5():
 
 @pytest.mark.skipif(importlib.util.find_spec("ultralytics") is not None,
                     reason="needs an interpreter WITHOUT ultralytics so the real train.py crashes before training")
+@pytest.mark.parametrize("fast", [True, False])            # FAST profile (feat/fast-train): its flags must parse too
 @pytest.mark.parametrize("dry", [True, False])
-def test_cell5_stops_when_the_real_train_py_crashes(tmp_path, monkeypatch, dry):
+def test_cell5_stops_when_the_real_train_py_crashes(tmp_path, monkeypatch, dry, fast):
     run_dir = tmp_path / "run"
     (run_dir / "export").mkdir(parents=True)
     (run_dir / "export" / "detector.pt").write_text("stale")
@@ -45,7 +46,10 @@ def test_cell5_stops_when_the_real_train_py_crashes(tmp_path, monkeypatch, dry):
     (run_dir / "det" / "weights" / "last.pt").write_text("ckpt")
     monkeypatch.chdir(REPO / "ml" / "yolo")                     # cell 1: %cd /content/repo/ml/yolo -> the real train.py
     monkeypatch.setitem(sys.modules, "make_subset", types.SimpleNamespace(make_subset=lambda *a, **k: "subset"))
-    ns = {"os": os, "shutil": shutil, "subprocess": subprocess, "sys": sys, "RUN_DIR": str(run_dir), "DRY_RUN": dry}
+    monkeypatch.setitem(sys.modules, "cap_detector", types.SimpleNamespace(cap_detector=lambda *a, **k: {
+        "train_images": 1, "train_images_full": 2, "boxes_by_freshness": {}}))
+    ns = {"os": os, "shutil": shutil, "subprocess": subprocess, "sys": sys, "RUN_DIR": str(run_dir), "DRY_RUN": dry,
+          "FAST": fast}
     with pytest.raises(subprocess.CalledProcessError) as e:
         exec(compile(cell5(), "cell5", "exec"), ns)
     assert e.value.returncode == 1          # ImportError in train.py (argparse errors exit 2)

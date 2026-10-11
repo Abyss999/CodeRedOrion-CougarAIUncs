@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Friend added</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#13261A}
+a{color:#1F4D2B}a:hover{color:#13261A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #1B2A1F; display: flex; flex-direction: column">
+  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #C9D8BE; font-size: 14px">
+    <svg width="200" height="200" viewBox="0 0 240 240" fill="none" stroke="#D9EC8F" stroke-width="5" stroke-linecap="round" aria-hidden="true"><path d="M4 52V22A18 18 0 0 1 22 4h30M188 4h30a18 18 0 0 1 18 18v30M236 188v30a18 18 0 0 1-18 18h-30M52 236H22A18 18 0 0 1 4 218v-30"></path></svg>
+    [Live camera: QR scanner, paused]
+  </div>
+  <section role="dialog" aria-modal="true" aria-labelledby="fa-title" style="background: #F4F8E8; border-radius: 28px 28px 0 0; padding: 10px 20px 34px; display: flex; flex-direction: column; align-items: center; gap: 18px">
+    <div style="width: 40px; height: 5px; border-radius: 3px; background: #C3D1B3"></div>
+    <span aria-hidden="true" style="position: relative; margin-top: 8px; width: 80px; height: 80px; border-radius: 40px; background: #EEF5D6; color: #1F4D2B; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-size: 28px; font-weight: 600">DW<span style="position: absolute; right: -2px; bottom: -2px; width: 28px; height: 28px; border-radius: 14px; background: #1F4D2B; color: #F4F8E8; box-shadow: 0 0 0 3px #F4F8E8; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></span></span>
+    <h2 id="fa-title" role="status" style="margin: 0; max-width: 300px; text-align: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 24px; line-height: 1.25; color: #13261A">You're now friends with Dana Whitfield</h2>
+    <div style="align-self: stretch; display: flex; flex-direction: column; gap: 6px">
+      <a href="Connect.dc.html" style="text-decoration: none; height: 56px; border-radius: 16px; background: #1F4D2B; color: #F4F8E8; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">Done</a>
+      <a href="FriendScan.dc.html" style="text-decoration: none; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #1F4D2B; font-size: 16px; font-weight: 600">Scan another code</a>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

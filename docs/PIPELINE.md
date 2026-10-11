@@ -177,6 +177,13 @@ Roboflow `food-monitoring/food-spoilage-status-ds1sc` v1, **CC BY 4.0**, 276 ima
 - **Re-runs:** a file whose content was already processed goes to `processed/duplicates/`. A quarantined file is retried if it is dropped into the inbox again.
 - `HEIC` and `PDF` are quarantined as `unsupported_format`. Convert them to JPEG first.
 
+## Detector train cap (FAST Colab profile, data-owner ruling 2026-10-11)
+To fit training into ~30 min, the Colab `FAST` profile trains the **detector** on a capped view of the train split:
+`ml/yolo/cap_detector.py --cap 400` keeps at most 400 boxes per food name (foods with fewer keep all), picked round-robin over
+(food, freshness, source) cells so every source and freshness keeps a share. It runs after `prepare_dataset.py` and the gates and changes
+nothing they check: val, held-out, `heldout_gt.jsonl`, the manifest and the classifier crops (`cls/`) are the full set. Details and the
+timing estimate: `docs/ML.md` section 5d.
+
 ## Lighting augmentation (separate step, opt-in)
 Public produce photos are mostly evenly lit. A fridge photo is often dim, lit by a warm bulb or an LED, or half in shadow.
 `augment-lighting` adds photometric variants to **train and val only**. It is never part of default training: you run it, and train on `augmented/` on purpose.
