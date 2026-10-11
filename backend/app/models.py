@@ -36,8 +36,24 @@ class User(db.Model):
     __tablename__ = "users"
     id = _uuid_pk()
     email = db.Column(CITEXT, nullable=False, unique=True)
-    password_hash = db.Column(db.Text, nullable=False)
+    # Null for accounts created through an OAuth provider (no password; email login is refused).
+    password_hash = db.Column(db.Text, nullable=True)
     display_name = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class UserIdentity(db.Model):
+    """An external sign-in (e.g. provider='google', subject=Google `sub`) linked to a user."""
+    __tablename__ = "user_identities"
+    __table_args__ = (
+        db.UniqueConstraint("provider", "subject", name="uq_user_identities_provider_subject"),
+        Index("ix_user_identities_user_id", "user_id"),
+    )
+    id = _uuid_pk()
+    provider = db.Column(db.Text, nullable=False)
+    subject = db.Column(db.Text, nullable=False)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    email = db.Column(CITEXT, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

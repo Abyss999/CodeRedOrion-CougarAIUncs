@@ -9,14 +9,15 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 | Status | `code` values | Meaning |
 |---|---|---|
 | 400 | `validation_error` | Bad/missing fields, e.g. `waste_reason` on a non-`thrown_out` removal |
-| 401 | `unauthorized`, `invalid_credentials` | Missing/invalid/expired token; bad login |
-| 403 | `forbidden` | Authenticated but not your item / not a member of that group / not the owner or author |
+| 401 | `unauthorized`, `invalid_credentials`, `invalid_token` | Missing/invalid/expired token; bad login; rejected Google ID token |
+| 403 | `forbidden`, `email_not_verified` | Authenticated but not your item / not a member of that group / not the owner or author; Google account email not verified |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
 | 405 | `method_not_allowed` | |
-| 409 | `not_removed`, `restore_window_expired`, `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed` | Conflict |
+| 409 | `not_removed`, `restore_window_expired`, `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed`, `account_exists_use_password`, `identity_conflict` | Conflict |
 | 413 | `payload_too_large` | Upload over 10 MB |
 | 500 | `internal_error` | Unhandled error |
-| 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts unavailable or not configured |
+| 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts / Google JWKS unavailable or not configured |
+| 503 | `oauth_not_configured` | `POST /auth/oauth/google` while `GOOGLE_IOS_CLIENT_IDS` is unset |
 
 ## Health
 - ✅ `GET /health` → `200 {"status": "ok"}`
@@ -24,17 +25,56 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 ## Auth
 - ✅ `POST /auth/signup` `{email, password (>=8 chars), display_name}` → `201 {token, user}`;
   `409 email_taken`. Emails are case-insensitive.
-- ✅ `POST /auth/login` `{email, password}` → `200 {token, user}`; `401 invalid_credentials`.
+- ✅ `POST /auth/login` `{email, password}` → `200 {token, user}`; `401 invalid_credentials`. An
+  account created through Google has no password, so email login for it is also
+  `401 invalid_credentials` (same message as a wrong password).
+- ✅ `POST /auth/oauth/google` `{id_token}` (the Google Sign-In iOS SDK's `idToken`) →
+  `{token, user, created}` (`token`/`user` as for login). **`201` with `"created": true` when this call
+  created a new BiteDown account, `200` with `"created": false` when it signed in an existing one.**
+  The token is verified on the server against Google's JWKS
+  (`https://www.googleapis.com/oauth2/v3/certs`, keys cached per `Cache-Control: max-age`; an unknown
+  `kid` forces an early refetch **at most once per 30 s**, otherwise it is `401 invalid_token`; a
+  malformed JWKS document counts as unavailable): RS256 signature, `aud` ∈ `GOOGLE_IOS_CLIENT_IDS` (comma-separated env),
+  `iss` ∈ {`accounts.google.com`, `https://accounts.google.com`}, `exp`/`iat` with 60 s leeway,
+  `sub` and `email` present, `email_verified` true (JSON `true`, or the string `"true"` in any case; the
+  same rule is used for linking below). Account resolution, in order:
+  1. an identity `(provider=google, subject=sub)` exists → sign in its user (`200`), whatever the
+     email domain (the same Google account signing in again always works);
+  2. else, if a user with the same email (case-insensitive) exists:
+     a. that user already has a google identity with a different `sub` → `409 identity_conflict`
+        (one Google identity per user), nothing written;
+     b. else, auto-link only when `email_verified` is true **and** (the email domain is `gmail.com` or
+        `googlemail.com`, case-insensitive, **or** the token has a non-empty `hd` claim, i.e. a Google
+        Workspace account) → a new google identity is linked and the user signed in (`200`); a password
+        account keeps its password;
+     c. otherwise → `409 account_exists_use_password` ("log in with your email and password"),
+        nothing written;
+  3. else (no user with that email) create a user (`password_hash` null, `display_name` = token
+     `name`, else `given_name`, else the email's local part; max 80 chars) plus the identity (`201`),
+     for any domain.
+  The matched user row is locked (`FOR UPDATE`) while linking, and a lost first-sign-in race
+  (unique violation) is rolled back and re-resolved once with the same rules, so concurrent requests
+  can neither create two users nor attach two google identities to one user.
+  Errors: `400 validation_error` (missing/non-string/empty `id_token`, non-object body);
+  `409 identity_conflict` / `409 account_exists_use_password` (rules 2a / 2c);
+  `401 invalid_token` (malformed, bad signature, unknown key, wrong `aud`/`iss`, expired, issued in the
+  future, or missing any of `iat`, `exp`, `iss`, `aud`, `sub`, `email`); `403 email_not_verified`;
+  `502 upstream_unavailable` (JWKS fetch failed or returned no usable keys, and no keys are cached; with
+  a stale cache the cached keys are used); `503 oauth_not_configured` (`GOOGLE_IOS_CLIENT_IDS` unset).
+  **Check order:** body validation (`400`) → not configured (`503`) → token verification (`401`/`403`/
+  `502`) → account resolution (`409`). So a bad body is `400` even when Google sign-in is not
+  configured. Concurrent first sign-ins with the same account resolve to one user.
 - `user` = `{id, email, display_name, created_at}`.
 - ✅ `DELETE /auth/me` (Bearer) → `204` (App Store account deletion). One transaction. **Deleted:** the
   user, their items (including ones in group pantries), every listing on those items and their own
-  listings, friendships (both directions), group memberships, requests they wrote. **Detached:** listings
+  listings, friendships (both directions), group memberships, requests they wrote, their linked sign-in identities (`user_identities`). **Detached:** listings
   they claimed/received elsewhere get `claimed_by`/`recipient_id` null (open again); requests they
   fulfilled are reopened; ownership of groups they owned passes to the longest-standing remaining
   member and `groups.created_by` becomes null (`created_by: null` in group responses). **Anonymised:**
   their `food_events` keep every number but `user_id` becomes the nil UUID
   `00000000-0000-0000-0000-000000000000`, so aggregates survive with no personal link. The same JWT
-  then fails with `401 unauthorized`; login fails with `401 invalid_credentials`.
+  then fails with `401 unauthorized`; login fails with `401 invalid_credentials`. A later Google
+  sign-in with the same Google account creates a fresh user (`201`).
 
 ## Items
 An **item** is `{id, owner_id, group_id, name, category, storage, quantity, unit, est_weight_kg,
@@ -279,8 +319,8 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
     `macros_estimated` is always `true`.
   - **Cache:** per user, keyed by a SHA-256 of all the caller's active items (id, name, category,
     quantity, unit, expiry) plus `max_results` and `dietary`; TTL 6 h (`RECIPE_CACHE_TTL_SECONDS`, `0`
-    disables). Any add/edit/remove/restore changes the key, so the next call goes to Gemini. In-process
-    per gunicorn worker (not shared, lost on restart). Each lookup logs one INFO line on
+    disables). Any add/edit/remove/restore changes the key, so the next call goes to Gemini. In-process,
+    shared by the single gunicorn worker's threads (lock-guarded; lost on restart). Each lookup logs one INFO line on
     `app.recipes.cache`: `recipes_cache status=hit age_s=<n>` or `status=miss reason=empty|items_changed|expired`
     (no user data). Errors (`502`) are not cached.
   - With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.

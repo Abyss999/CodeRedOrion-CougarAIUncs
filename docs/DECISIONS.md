@@ -2,6 +2,14 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — Google Sign-In and removal rulings (#60, Fridge screen)
+- **`POST /auth/oauth/google` returns `created: true|false` in the body** as well as 201/200, so the app doesn't depend on status codes.
+- **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim is present. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
+- **One Google identity per user.** A different Google subject for the same user → 409 `identity_conflict`, checked before the domain rule.
+- **JWKS:** cached per `max-age`, an unknown `kid` is refetched at most every 30 s, 60 s leeway on `exp` / `iat`. Migration 0005's downgrade sets null password hashes to `'!'`, which can never match a password.
+- **Gave it away on a claimed item always goes to the claimer** (no "Someone else" for v1, no API change). When the listing is open with no claimer, the recipient chooser is hidden and nothing is recorded as recipient.
+- **Removal motion:** the row collapses at the tap, behind the sheet, and the sheet holds 200 ms so the checkmark is seen. The request fires at the tap, so the action is never delayed.
+
 ## 2026-10-10 — Backend wave 2 rulings (#57, #54)
 - **Number caps (BE-9):** `est_price` ≤ 99,999,999.99 (numeric(10,2)), `quantity` ≤ 1e6, `est_weight_kg` ≤ 1e5. Anything above → 400 `validation_error`. The last two columns are unbounded, but huge floats overflowed the CO₂e and weight maths into invalid JSON.
 - **`uses_items` is `[{item_id, name, predicted_expiry}]`**, matched back to the user's items. The iOS `Recipe` model changes in the first screen PR that decodes recipes (Home).

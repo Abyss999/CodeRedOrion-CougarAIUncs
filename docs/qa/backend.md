@@ -445,3 +445,166 @@ Targeted runs, from `backend/` on `fwr_test`:
 | BE-14 | low/medium | #54 (ported fix): coupon/discount lines and negative prices dropped, posting the Add batch back gives 201 | fixed, verified |
 
 **No open bugs.** This independent verdict supersedes the author's self-signed PASS in the "receipt candidates + Gemini category guide + retry" section above for the merge gate; that section is kept as the author's record. The known-behaviour notes above (tail rule; a bare card-network line such as "MC" or "DISCOVER" is dropped as payment) still apply and are for the orchestrator's record, not open bugs.
+
+## PR 3 oauth (feat/oauth)
+Backend QA for `POST /auth/oauth/google {id_token}`, `user_identities`, migration `0005_user_identities`, and the `DELETE /auth/me` change. Tested against `docs/API.md` "Auth" as updated with the orchestrator's rulings: `created` flag, linking only for gmail/googlemail or `hd`, and one Google identity per user. Google is never called. Tokens are signed with local RSA keys (`cryptography`), and JWKS is stubbed with `google_auth.set_fetcher`. The real fetcher is exercised only with `requests.get` monkeypatched.
+
+**Tests added (QA-owned):**
+- `backend/tests/test_oauth_google.py` (179 tests):
+  - **Happy paths:** a new user gets 201, `created: true`, a null `password_hash` and one identity row. An existing identity gets 200 with `created: false`. The response is login's `{token, user}` plus `created`.
+  - **Display name:** the name → given_name → email local-part fallbacks and the 80-char cap. The email is lowercased.
+  - **Linking:** every link branch:
+    - gmail, googlemail, case variants and `hd` all link.
+    - These get `account_exists_use_password` with nothing written: a non-gmail email with no `hd`; an `hd` that is empty, whitespace or a non-string; and lookalike domains.
+    - A second sub gets `identity_conflict` with nothing written, and that check runs before the domain rule.
+    - A new email creates the user (201) on any domain.
+    - The same sub with a changed email or without `hd` still gets 200.
+    - A linked password account keeps its password.
+  - **Every rejection:** each is checked for status, `{"error":{code,message}}`, no 500, and no rows written:
+    - bad signature, or a payload swapped under a valid signature
+    - a wrong, missing, empty or non-string `kid`
+    - `alg: none` and `None`
+    - HS256 confusion, with both the PEM and the JWK as the HMAC secret
+    - RS512 and PS256
+    - wrong `aud` (6 variants); the second allowed id passes
+    - wrong `iss` (6 variants); both valid forms pass
+    - exp and iat inside and outside the 60 s leeway
+    - each required claim missing, and bad claim types
+    - `email_verified` false, `"false"`, 0, None, missing and so on → 403
+    - malformed tokens and a header that isn't an object
+    - a token over 16 KB
+    - 15 bad bodies → 400, without touching JWKS
+    - GET → 405
+  - **Config:** blank, whitespace, comma-only or None `GOOGLE_IOS_CLIENT_IDS` gives 503 `oauth_not_configured` before any fetch. A single-id config is respected.
+  - **JWKS:**
+    - Keys are fetched once and cached, and expire per max-age (fake monotonic clock).
+    - An unknown kid refetches once the 30 s floor has passed.
+    - Inside the 30 s floor there is no refetch, even for 20 junk kids.
+    - A key rotated out is rejected.
+    - A fetch failure with an empty cache gives 502 for ConnectionError, Timeout, HTTPError and bad JSON, and for 10 unusable payloads.
+    - When stale, the cached keys are used while Google is down, and the cache recovers after the outage.
+    - The real `_http_fetch` parses Cache-Control (max-age, none, no-store, no-cache) and maps HTTP 500, 404, bad JSON, a list body and a timeout to 502.
+  - **Uniqueness:** the DB unique constraint on `(provider, subject)` (a different provider is allowed), and the FK cascade.
+  - **Races** (threads held at a barrier on the DB statement):
+    - 2- and 4-thread first sign-ins give exactly one 201 and one user/identity.
+    - Four different subs racing to link one gmail password account give one 200, three `identity_conflict` and one identity.
+    - Two subs racing on the same new email give one 201 and one `identity_conflict`.
+    - Each was run 5 times, and all were stable.
+  - **Email login and signup:** email login for a password-less user gives 401 `invalid_credentials` with the same message as a wrong password. Signup on an OAuth email gives 409 `email_taken`.
+  - **`DELETE /auth/me`:**
+    - It removes the user's identity and leaves other users' identities alone.
+    - The old JWT then gets 401, and Google sign-in again gives 201 with a new id.
+    - A linked password account can no longer log in.
+    - A forced failure at `DELETE FROM users` or at `DELETE FROM user_identities` gives a 500 and a full rollback (user, identity, items and events intact, and Google sign-in still gives 200).
+  - **N+1:** the existing-identity sign-in costs the same number of queries (≤ 4) with 1 user as with 30 more users and 10 rejected identities. Create and link are constant (≤ 6).
+- `backend/tests/test_oauth_migration_0005.py` (5 tests):
+  - 0005 is the single head on top of 0004.
+  - The head schema has a citext nullable email, NOT NULL columns, unique `(provider, subject)`, an FK to users with ON DELETE CASCADE, and an index on user_id.
+  - Downgrade to 0004 with data drops the table, makes `password_hash` NOT NULL again, sets OAuth-only users to `'!'` (`check_password_hash('!', x)` is False) and leaves password hashes untouched. Upgrading again is clean.
+  - The round trip works twice.
+  - The DB unique constraint and the cascade both hold.
+- `backend/tests/conftest.py`: `GOOGLE_IOS_CLIENT_IDS` is removed from the test env. An autouse guard installs a JWKS fetcher that raises, so no test anywhere can reach Google.
+
+**Targeted runs**, from `backend/` on `fwr_test`:
+
+| File | Result |
+|---|---|
+| `test_oauth_google.py` | 176 passed, 3 xfailed (BE-15 ×2, BE-16, all strict) |
+| `test_oauth_migration_0005.py` | 5 passed |
+| `test_auth.py` | 6 passed |
+| `test_wave2_account_delete.py` | 13 passed |
+| `test_migrations.py` | 2 passed |
+| `test_wave2_migration_0004.py` | 18 passed |
+
+**Bugs:**
+
+| ID | Severity | Finding | Test |
+|---|---|---|---|
+| BE-15 | low | `google_auth._parse_jwks` iterates `jwks["keys"]` without checking that it is a list. A JWKS body with `"keys": null` or `"keys": 5` raises `TypeError`, which `_refresh_locked` does not catch, so the result is **500 `internal_error`** instead of 502 `upstream_unavailable`. Google doesn't send this, but the contract promises a clean 502 when the fetch fails. Fix: treat a non-list `keys` as no keys. | `test_jwks_keys_not_a_list_is_clean_502` (strict xfail) |
+| BE-16 | low | `verify_id_token` accepts `email_verified` as `True` or any-case `"true"` (e.g. `"TRUE"`), but `routes/auth._email_linkable` accepts only `True`, `"true"` or `"True"`. A verified gmail token with `"TRUE"` therefore passes verification but gets 409 `account_exists_use_password` instead of linking. Fix: put one normaliser in `google_auth` (return a boolean `email_verified`) and use it in both places. | `test_email_verified_upper_true_links_consistently` (strict xfail) |
+
+**Where code and contract disagree, or the contract is silent** (for the orchestrator):
+- **N1 (doc):** API.md says an unknown `kid` "forces one refetch". The code refetches at most once per 30 s (`MIN_REFETCH_INTERVAL_S`), so a token signed with a key Google rotated in under 30 s after our last fetch gets 401 until the floor passes. This is sensible behaviour and is tested as such, but API.md should state the 30 s floor.
+- **N2 (doc):** with `GOOGLE_IOS_CLIENT_IDS` unset, a missing or non-string `id_token` gives 400 before the 503. API.md says 503 is "checked before the token is looked at", which is true. The body shape is validated first.
+- **N3 (doc):** a missing `email_verified` gives 403 `email_not_verified` (tested). A missing `iat`, `exp`, `iss` or `aud` gives 401 `invalid_token`, but API.md lists only "missing `sub`/`email`" under 401.
+- **N4 (orchestrator-owned):** `.env.example` has no `GOOGLE_IOS_CLIENT_IDS` placeholder. Compose passes it through `env_file: .env`, so it works, but setup won't show it.
+
+**Interim verdict for PR 3 (superseded below): FAIL until BE-15 and BE-16 are fixed.**
+
+### BE-15 and BE-16 fixed in PR 3; N1 to N4 resolved
+- **BE-15 fixed:**
+  - `_parse_jwks` returns no keys for a non-dict document or a non-list `keys`.
+  - It also skips a JWK whose `kid` is not a string.
+  - No usable keys counts as unavailable: 502 when nothing is cached, otherwise the stale cache is used.
+  - The strict xfails are now plain tests. New: `test_jwks_key_with_non_string_kid_is_unusable` (kid 5, None, list, dict, 1.5 or True → 502), `test_jwks_non_string_kid_skipped_but_good_key_used` (201), and `test_jwks_no_usable_keys_with_stale_cache_keeps_cached` (200).
+  - A non-string `kid` in the token header is still 401 (`test_wrong_or_missing_kid`).
+- **BE-16 fixed:**
+  - One shared `google_auth.email_verified(claims)`: bool True, or "true" in any case after trimming.
+  - Both verification and `_email_linkable` use it.
+  - The strict xfail is now a plain test, parametrised over `"TRUE"`, `" TRUE "` and `"tRuE"` (a gmail account links, 200).
+  - `test_email_verified_true_forms` adds `" TRUE "` and `"\ttrue\n"` (accepted, 201).
+- **N1 to N3 resolved in the contract:** `docs/API.md` now covers:
+  - the refetch-at-most-once-per-30 s rule
+  - the check order 400 → 503 → 401/403/502 → 409
+  - any of `iat`/`exp`/`iss`/`aud`/`sub`/`email` missing → 401
+- **N4 resolved on main:** `GOOGLE_IOS_CLIENT_IDS` is in `.env.example`. The orchestrator merges main into this branch before the full suite.
+- **Note (not a bug):** a JWK with `kid: ""` is kept as a key named `""`. It can only verify a token whose header `kid` is `""` and that was signed by that key from Google's own JWKS, so it is harmless.
+
+Targeted runs, from `backend/` on `fwr_test`:
+
+| File | Result |
+|---|---|
+| `test_oauth_google.py` | 191 passed |
+| `test_oauth_migration_0005.py` | 5 passed |
+| `test_auth.py` | 6 passed |
+| `test_wave2_account_delete.py` | 13 passed |
+| `test_migrations.py` | 2 passed |
+| `test_wave2_migration_0004.py` | 18 passed |
+| **Total** | **235 passed, 0 xfail/xpass** |
+
+**Interim verdict for PR 3 (backend): PASS pending the full suite, no open bugs** (BE-15 and BE-16 fixed in PR 3).
+
+### Final verdict for PR 3 (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `feat/oauth` at HEAD baaeaa6 (main merged into b6d3b43, clean tree), from `backend/` on `fwr_test`: `pytest -q --cov=app` = **1411 passed, 1 skipped in 145 s, total coverage 98%**. No xfails or xpasses remain.
+
+| ID | Severity | Fixed in | Status |
+|---|---|---|---|
+| BE-15 | low | PR 3: `_parse_jwks` returns no keys for a non-dict document, a non-list `keys` or a non-string `kid`, so the result is a clean 502, or the stale cache is used | fixed, verified |
+| BE-16 | low | PR 3: one shared `google_auth.email_verified` (bool True, or "true" in any case after trimming) is used by verification and by linking | fixed, verified |
+
+**No open bugs.** N1 to N3 are resolved in `docs/API.md` and N4 is resolved on main (now merged). This final verdict supersedes the interim verdicts above.
+
+## chore/gunicorn-gthread (backend QA)
+Change under test: `backend/entrypoint.sh` now runs
+`exec gunicorn -b 0.0.0.0:5055 --workers 1 --worker-class gthread --threads "${GUNICORN_THREADS:-4}" --timeout 120 --graceful-timeout 30 wsgi:app`.
+No Python changes. The builder's audit says the module-level caches are already lock-protected. These tests check that claim.
+
+### New tests (QA-owned)
+- `tests/test_gunicorn_gthread.py` (3 tests, about 9 s, skipped if gunicorn is not importable)
+  - `test_entrypoint_runs_one_gthread_process`: parses the `exec gunicorn` line from `entrypoint.sh`, joining continuations and expanding `${VAR:-default}`. It asserts gthread, `--workers 1`, `--threads` of `${GUNICORN_THREADS:-4}` (4 by default, and it follows the env var), `--timeout 120`, `--graceful-timeout 30`, bind `0.0.0.0:5055`, no `--preload`, `wsgi:app`, and that `db upgrade` runs before `exec gunicorn`.
+  - Real-gunicorn fixture: starts `python -m gunicorn` with the flags parsed from the entrypoint. Only the bind (a free `127.0.0.1` port) and the app spec (`tests.gthread_wsgi:app`) are swapped. `tests/gthread_wsgi.py` builds the real app on `TEST_DATABASE_URL` with test config and replaces `gemini._generate` with a 3 s sleep. It never creates, drops or migrates anything, and it refuses to start without `FWR_GTHREAD_QA=1`. The DB is safe because the fixture depends on the session `app` fixture, so the schema is already built under the advisory lock. Users, tokens and items come from the normal `signup`/`make_item` fixtures. gunicorn is stopped by its own PID (SIGTERM, then SIGKILL after 15 s) before the test returns.
+  - `test_fast_requests_not_blocked_by_slow_gemini_call`: sends one `POST /items/parse-text` (3 s, authed). While it is in flight, it sends 3x `GET /health` and 3x authed `GET /items`. Each fast request must be 200 in under 1 s, and all of them must finish before the slow call does. `/items` returns the user's item through the DB. The slow call returns 200 with the stubbed candidate in about 3 s.
+  - `test_four_concurrent_slow_calls_run_in_parallel`: 4 users send `parse-text` at the same time. Wall time must be under 1.8x one call (measured about 3.1 s; serial would be 12 s).
+- `tests/test_thread_safety.py` (7 tests, about 2.5 s; the switch interval is set to 10 us to force interleaving)
+  - recipe_cache, 16 threads x 300 ops on disjoint users (put, then get, invalidate by changing the key, get): no exceptions or cross-user data, put-then-get always hits, an old key is never served, and exactly one well-formed hit/miss log line per get, with hits and misses matching what `get` returned.
+  - recipe_cache with `MAX_USERS=8`: 16 workers x 4 users, plus a thread calling `clear()` in a loop and an observer that samples the size under `_lock`. Size stays at or below 8 at every sample and at the end, any non-None result is exactly that user's current entry, and log lines equal gets.
+  - JWKS, using a stubbed slow fetcher and a frozen clock: 8 concurrent cold lookups do exactly 1 fetch. 8 concurrent lookups on stale keys do exactly 1 refetch. Stale keys while Google is down: all 8 verify with the stale key after 1 attempt. Unknown kids: 8 concurrent tokens with a newly rotated `k2` do exactly 1 refetch and all verify, 8 junk kids in the same window do 0 refetches, and 8 junk kids in the next window do exactly 1.
+  - `gemini._generate` with a stubbed `genai.Client`: 16 threads x 6 calls (a third of them non-transient errors). Exactly 96 usage lines, each a complete line matching the full `gemini_usage ...` format (ok lines carry token counts, error lines carry `null`), and the per-thread ok/error counts match the calls.
+
+### Negative controls (scratch plugins, not committed)
+- Old entrypoint (`exec gunicorn -b 0.0.0.0:5055 wsgi:app`, sync worker): all 3 gunicorn tests fail. The flag test fails, the fast requests are blocked behind the slow call, and the 4 slow calls take 12.08 s.
+- `google_auth._lock` replaced by a no-op: the 3 JWKS single-flight tests fail (more than 1 fetch).
+- `recipe_cache._lock` replaced by a no-op: the recipe-cache tests still pass. Under the GIL, the individual OrderedDict operations don't interleave visibly in this harness. So these tests guard behaviour (no leaks, the bound, log agreement) but would not catch the lock being removed. The lock is still needed for correctness on paper (eviction loop and get-then-pop).
+
+### Targeted runs
+- `test_thread_safety.py` x3: 7 passed each time.
+- `test_gunicorn_gthread.py` + `test_oauth_google.py` + `test_gemini_usage.py` + `test_insights_wave2_recipes.py`: 259 passed.
+- Every gunicorn PID started was confirmed gone afterwards.
+
+### Bugs
+None found. The latest ID is still BE-16.
+
+**Interim verdict: PASS pending the full suite** (the orchestrator runs it).
+
+### Final verdict for chore/gunicorn-gthread (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `chore/gunicorn-gthread` at HEAD a9b6a11 (clean tree): `pytest -q --cov=app` = **1421 passed, 1 skipped in 154 s, total coverage 98%**. No gunicorn processes were left afterwards. **No open bugs** (the latest ID is still BE-16). This supersedes the interim verdict above.

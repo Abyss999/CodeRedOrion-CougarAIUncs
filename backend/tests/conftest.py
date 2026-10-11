@@ -21,6 +21,7 @@ if TEST_DB == os.environ.get("DATABASE_URL"):  # pragma: no cover
 os.environ["DATABASE_URL"] = TEST_DB
 os.environ.pop("GEMINI_API_KEY", None)
 os.environ["ML_SERVICE_URL"] = ""
+os.environ.pop("GOOGLE_IOS_CLIENT_IDS", None)  # tests opt in per test via app.config
 
 from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
@@ -76,7 +77,21 @@ def _clean(app):
             recipe_cache.clear()
         except ImportError:  # pragma: no cover
             pass
+    _google_guard = None
+    try:  # never let any test reach Google: JWKS fetches fail unless a test installs its own fetcher
+        from app.services import google_auth
+
+        def _no_google():
+            import requests
+            raise requests.ConnectionError("tests must not call Google")
+
+        _google_guard = google_auth
+        google_auth.set_fetcher(_no_google)
+    except ImportError:  # pragma: no cover
+        pass
     yield
+    if _google_guard is not None:
+        _google_guard.set_fetcher(_no_google)
     with app.app_context():
         db.session.remove()
 
