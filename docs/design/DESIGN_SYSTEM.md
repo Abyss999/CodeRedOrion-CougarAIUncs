@@ -139,15 +139,15 @@ Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped
 | `SpoilageFlag` | Fridge | Meta line in `urgentInk`: "Photo check: looks spoiled" |
 | `StorageSegmented` | Fridge | Fridge / Pantry / Freezer |
 | `RemoveSheet` | Remove | 3 outcome tiles. *Used it* is filled forest; the others are outlined |
-| `WasteReasonGrid` | Remove | 2×2 one-tap tiles: Expired, Forgot about it, Didn't like it, Other |
+| `WasteReasonList` | Remove | A grouped list of four 56 pt one-tap rows (icon + title): Expired, Forgot about it, Didn't like it, Other |
 | `AddSheet` | Add | Hero tile (fridge photo) + 2×2 tiles (one item, type/say, barcode, receipt) |
-| `PantryWidget` | Social | `lime` card, collapsed chips preview, expands in place |
-| `RequestNote` | Social | Sticky note: source header, text, who/when, "I have it" |
+| `PantryWidget` | Social | `lime` card: 3 food tiles (group icon + name, no quantities) plus a "+N more" tile, expands in place |
+| `RequestNote` | Social | Sticky note: source header, text, who/when, an **Offer** button that opens the Offer confirmation |
 | `DetectedItemRow` | Photo review | Checkbox (44 pt row) + name + category/storage or a warning meta line + `ExpiryBadge` |
 | `FilterChip` | Recipes | 36 pt pill. Selected uses `forest`/`onForest`; unselected is outlined |
 | `RecipeHero`, `RecipeRow` | Recipes, Home | Hero on `forest` with expiring-item chips (`forestChip`); rows with a "Uses N" badge |
 | `UseSoonBadge` | Fridge, Photo review | Shown when `freshness == semi_fresh` (ripe or starting to turn). Pill with `useSoonBg`/`useSoonInk`: 6.7:1 light, 9.5:1 dark. Text is "Use soon". It's distinct from the expiry badges and from the urgent "Check" (spoiled). In photo review the meta line reads "ripe, use soon" in `useSoonInk` |
-| `StatTile`, `ImpactHero` | Impact | Hero on forest; tiles on surface |
+| `StatTile`, `ImpactHero` | Impact | Hero on forest showing **food saved (lb/oz)**, with CO₂e as a secondary line; tiles on surface |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |
 

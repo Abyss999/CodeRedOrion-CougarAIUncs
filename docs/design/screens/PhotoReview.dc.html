@@ -15,18 +15,15 @@ body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color
 a{color:#1F4D2B}a:hover{color:#13261A}
 </style>
 </helmet>
-<div style="width: 390px; height: 940px; box-sizing: border-box; background: #F4F8E8; display: flex; flex-direction: column">
+<div style="width: 390px; height: 960px; box-sizing: border-box; background: #F4F8E8; display: flex; flex-direction: column">
   <main style="flex: 1; overflow: hidden; padding: 56px 20px 0; display: flex; flex-direction: column; gap: 14px">
     <header style="display: flex; align-items: center; gap: 10px">
       <a href="AddSheet.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF; flex-shrink: 0">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
-      <div>
-        <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 24px">We found 7 items</h1>
-        <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Untick anything we got wrong. Tap a row to edit.</p>
-      </div>
+      <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 24px">We found 7 items</h1>
     </header>
 
-    <div style="height: 120px; border-radius: 16px; background: #E3EDCB; display: flex; align-items: center; justify-content: center; gap: 8px; color: #45584A; font-size: 14px; font-weight: 500">
+    <div role="img" aria-label="Your fridge photo, with a box on each item found" style="height: 200px; flex-shrink: 0; border-radius: 16px; background: #E3EDCB; display: flex; align-items: center; justify-content: center; gap: 8px; color: #45584A; font-size: 14px; font-weight: 500">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
       [Your fridge photo, with boxes on each item]
     </div>
@@ -71,13 +68,12 @@ a{color:#1F4D2B}a:hover{color:#13261A}
   </main>
 
   <footer style="padding: 12px 20px 34px; background: #F4F8E8; border-top: 1px solid #E6EDD6; display: flex; flex-direction: column; gap: 8px">
-    <p style="margin: 0; font-size: 13px; color: #45584A; text-align: center">Expiry dates are estimates from typical shelf life. You can change any of them.</p>
     <p style="margin: 0; font-size: 13px; color: #45584A; text-align: center">Decide on spoiled items to continue</p>
     <a href="Fridge.dc.html" aria-disabled="true" style="opacity: .45; text-decoration: none; height: 56px; border-radius: 16px; background: #1F4D2B; color: #F4F8E8; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">Add 6 items</a>
   </footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":940}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":960}}'>
 class Component extends DCLogic {
 renderVals() {
 const meta = 'font-size: 13px; color: #45584A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis';
@@ -89,12 +85,12 @@ spoiled: [
 sp('Strawberries', 'M12 8c-1-2-4-3-6-1-3 3-1 10 2 12 1 1 3 1 4 0 1 1 3 1 4 0 3-2 5-9 2-12-2-2-5-1-6 1zM12 8c0-2 1-3.5 3-4.5', '#A8366E', '#F8E1EC')
 ],
 found: [
-f('Baby spinach', 'Veggies · use in 5 days', '1 bag'),
-f('Greek yogurt', 'Dairy · use in 10 days', '1 tub'),
-f('Chicken thighs', 'Protein · use in 3 days', '1.4 lb'),
-f('Bananas', 'Fruit · ripe, use soon', '5', { metaStyle: 'font-size: 13px; color: #6B5000; font-weight: 500' }),
-f('Cheddar', 'Dairy · not sure, tap to fix', '8 oz'),
-f('Eggs', 'Protein · use in 28 days', '12')
+f('Baby spinach', 'Veggies · 4–5 days', '1 bag'),
+f('Greek yogurt', 'Dairy · 1–2 weeks', '1 tub'),
+f('Chicken thighs', 'Protein · 2–3 days', '1.4 lb'),
+f('Bananas', 'Fruit · Use soon', '5', { metaStyle: 'font-size: 13px; color: #6B5000; font-weight: 500' }),
+f('Cheddar', 'Dairy · Not sure', '8 oz'),
+f('Eggs', 'Protein · 3+ weeks', '12')
 ]
 };
 }
