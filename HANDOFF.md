@@ -11,7 +11,7 @@ the Mac" table below and reports to `food-main`. Nothing is built or tested on t
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
-all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). #47 (iOS foundation) and #54 (receipt candidates) merged. In flight: backend PR 3 (Google OAuth) on the Mac. iOS Wave 2 is underway on the Mac (foundation
+all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). #47 (iOS foundation) and #54 (receipt candidates) merged. Backend PR 3 (Google OAuth) merged (#60). In flight: the Fridge + removal screen on the Mac. iOS Wave 2 is underway on the Mac (foundation
 first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Photo add runs on the Gemini fallback until their model lands.**
 
 | Area | State | Evidence |
@@ -19,7 +19,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Backend on `main`: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | 965 passed / 98% after #57 |
 | Backend PR 1 `feat/items-wave2`: stored freshness and confidence, share on items, `POST /items/:id/restore`, `DELETE /auth/me` | **merged (#50)** | 680 passed / 97%; BE-8 fixed |
 | Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **merged (#57)** | 965 passed / 98%; BE-9, BE-10, BE-13 fixed |
-| Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **in progress on the Mac** | the owner creates the Google OAuth client (the Mac sends the steps) |
+| Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **merged (#60)**; 1411 passed / 98% | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **merged (#47)** | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
 | ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **paused: a teammate owns the models** (owner, 2026-10-10). Don't schedule agents for it unless the owner asks | the notebook is ready (DRY_RUN, then the real run with the same RUN_ID) |
@@ -45,7 +45,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    7. Social (pantry, composer, connect, group)
    8. Auth (email + Google)
    9. Settings
-3. **Mac:** backend PR 3 (Google OAuth; owner steps in `docs/SETUP.md`), then the gthread one-liner (one process, threads, lock-guarded recipe cache) before integration QA. **Owner:** the Google OAuth client.
+3. **Owner:** the Google OAuth client (steps in `docs/SETUP.md`). **Mac:** the gthread one-liner (one process, threads, lock-guarded recipe cache) before integration QA. **Owner:** the Google OAuth client.
 4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
@@ -53,7 +53,6 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Backend PR 3 `feat/oauth` | in progress | `wt/oauth` | Branched from 3f5abf5. **Google only**. `POST /auth/oauth/google {id_token}` (JWKS, aud from `GOOGLE_IOS_CLIENT_IDS`, iss, exp, `email_verified`); generic `user_identities(provider, subject, user_id, email)`; nullable `password_hash`; link by verified email; `DELETE /auth/me` removes identities; tests stub JWKS with local RSA keys. Give the owner the Google OAuth iOS-client steps (bundle id from `Local.xcconfig`, reversed-client-id URL scheme) |
 | Fridge + removal screen | not started | - | Unblocked (#47 merged): the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
 
 **Mac notes:**
