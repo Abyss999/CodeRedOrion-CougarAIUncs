@@ -21,6 +21,8 @@ import re
 from .generic import parse_dir as _parse_generic, safe_base, _AUG
 
 LICENCE = "CC BY 4.0"
+VERSION = "v1"
+SPECIMEN_GROUPING = True  # see specimens.py: cross-stage, dihedral-variant-aware pHash components
 URL = "https://data.mendeley.com/datasets/42m5tb7yv9"
 DOI = "10.17632/42m5tb7yv9.1"
 CITATION = ("Risdin, Salauddin, Tufa, Hossain. AgriFreshNET Freshness and Shelf-Life Image Dataset. "

@@ -70,7 +70,15 @@ Data lives under `pipeline/data/`, which is gitignored. Override it with `--data
   - For AgriFreshNET, a group is the original photo plus the authors' `aug_<n>_<original>` copies and their `_HDR` / `_AE` variants.
   - **The full original capture timestamp stays in the group** (`IMG_YYYYMMDD_HHMMSS`, `IMG2025...`, a 13-digit epoch in ms, or a bare `YYYYMMDD_HHMMSS`), e.g. `banana__fresh__IMG_20250101_123456.rf.<sha>.jpg`. Long names are cut to 80 characters, but the timestamp is always kept whole. This is what the session grouping on `feat/ml-full-data` (`parse_capture_time`, ML-21) reads, with a `re.search` so a non-leading token is fine, to put shots taken seconds apart into one split.
   - **Until that branch is merged**, a burst of phone shots taken within the same minute but at different seconds is no longer one group (the old adapter truncated the stamp to the minute, which hid it from the time grouping). `prepare_dataset` on `main` only has stem grouping, so bursts can straddle splits until the session grouping lands. The authors' own `aug_` copies, HDR/AE variants and exact duplicates are still one group.
-  - **Not caught:** the same physical fruit photographed on different days in different freshness classes. The dataset gives no way to link them.
+  - **Specimen grouping (opt-in, `PIPELINE_SPECIMEN_GROUPS=1` or `ingest(..., specimen_groups=True)`; AgriFreshNET).** The default owner assumption is conservative: the same physical specimens appear in Fresh, Semi fresh and Rotten, and the authors' augmentations may be flipped or rotated. `ingestion/specimens.py` therefore clusters each produce class **across all three stages**:
+    1. pHash-64 (`ml/yolo/dedup.py` method) of the 8 dihedral variants of every image (identity, 3 rotations, and the same four after a flip).
+    2. Variant-aware distance = minimum Hamming distance between one image's plain hash and the other's 8 variant hashes, so a flipped or rotated copy lands at about 0.
+    3. Connected components at distance <= 10 are the split units. **Giant-component guard:** if the largest component holds more than 30% of the class, the threshold is tightened for that class (10, 8, 6, 4) until it does not. Plain backgrounds make the loose threshold chain: at 10 the largest component was 63-91% of the class for 7 of 8 classes, so only pineapple kept 10.
+    4. **Capture sessions.** `prepare_dataset.parse_capture_time` does not read AgriFreshNET's `IMG_YYYYMMDD_HHMMSSmmm` names (9-digit time, milliseconds), so its session grouping sees none of them, while ML QA's leakage check (ML-21: 0 held-out images within 300 s of a train/val image of the same source) does. `specimens.py` therefore builds the sessions itself: shots <= 300 s apart, across all classes, no span cap. Its first choice is the union of specimen components and sessions, but cross-day specimen links chain sessions into one unit (44% of the dataset, 86-100% of six classes), so the fallback is used: timestamped files take their session as the unit, untimestamped files their specimen component. Cross-stage grouping therefore holds only for untimestamped files; for timestamped ones a specimen's Fresh and Rotten photos (days apart) can land in different splits. Splitting by session was judged preferable to a single giant unit that would make the class unmeasurable.
+    5. The unit is encoded in the staged name: `<class>__spec_<id>.rf.<sha16>_<original stem>.jpg` or `sess_<id>.rf.<sha16>_<original stem>.jpg`. `prepare_dataset.group_key()` keeps everything before `.rf.` together, so `prepare_dataset` needed no change.
+    6. Off by default because it changes staged file names (the existing tests pin the `<cls>__<stem>` form). The ingest report gets a `specimen_grouping` block with the stats below.
+
+  - **Not caught by name/time alone:** the same physical fruit photographed on different days in different freshness classes. The dataset gives no specimen id, so the specimen grouping above (pHash) is the only link, and it can miss a specimen whose appearance changed enough with age.
 - **Manifest columns:** `image, source_dir, source_file, item, canonical, freshness, category, age_days_min, age_days_max, group, is_source_aug, sha1, width, height, licence`.
   The age range (days since purchase/harvest, read from the folder name) is kept for later expiry modelling and isn't used yet.
 
@@ -82,7 +90,23 @@ Data lives under `pipeline/data/`, which is gitignored. Override it with `--data
 | Content | 8 produce types (banana, bitter melon, cucumber, eggplant, orange, papaya, pineapple, tomato) × fresh / semi_fresh / rotten, 512×512 single-item photos on cloth |
 | Result (3-class taxonomy, run on the original `feat/data-pipeline` before the take-over) | 14,103 staged (fresh 4,693 · semi_fresh 4,693 · spoiled 4,717), 34 conflict files dropped, 23 duplicates collapsed, 0 bad images, 1,718 groups; 8,929 are the authors' own augmentations. prepare: train 11,060 · val 1,569 · heldout 1,474 (+ synthetic low/warm copies). These numbers are **not reproduced** on `main`'s 2-class taxonomy, see below. |
 | On a 2-class taxonomy | `semi_fresh` images are staged as `fresh` and reported; papaya, pineapple and bitter melon (3 of the 8 produce types) are listed as `unmapped_dirs` and skipped. Re-ingest after the `semi_fresh` PR for the full set (delete `staged/<name>` and the ledger entry first, or use a new `--name`). |
+| Re-ingest 2026-10-10 (`feat/semi-fresh-data`, A2, specimen grouping on) | 14,160 files (24 x 590, not 591), 14,103 staged (same counts as above), 893 split units (specimen+session fallback; 4,096 pure specimen components). 63% of staged files are `aug_` copies and 92% have a flip/rotation-aware pHash <= 6 near-duplicate elsewhere in their class: **the set is heavily augmented**, so its effective sample size is the group count, not 14k. Cucumber is a taxonomy class (no mapping needed). |
 | Caveat | Clean backgrounds, one item per photo, whole-frame boxes. It teaches **freshness**; it doesn't teach detection in fridge scenes. The same source supplies every `semi_fresh` image, so a model could learn the source's look. |
+
+**AgriFreshNET specimen grouping, per class** (variant-aware pHash components across Fresh / Semi fresh / Rotten):
+
+| class | images | threshold used | components | singletons | largest (share) | near-dup <= 6 in class | specimen+session union, largest share |
+|---|---|---|---|---|---|---|---|
+| banana | 1762 | 6 (tightened) | 510 | 101 | 208 (11.8%) | 93.9% | 95% |
+| bitter_melon | 1767 | 4 (tightened) | 490 | 76 | 42 (2.4%) | 97.4% | 100% |
+| cucumber | 1769 | 6 (tightened) | 274 | 39 | 369 (20.9%) | 97.8% | 99% |
+| eggplant | 1770 | 6 (tightened) | 463 | 93 | 386 (21.8%) | 94.6% | 96% |
+| orange | 1732 | 6 (tightened) | 563 | 203 | 172 (9.9%) | 88.1% | 40% |
+| papaya | 1766 | 4 (tightened) | 451 | 149 | 89 (5.0%) | 94.0% | 100% |
+| pineapple | 1769 | 10 | 446 | 60 | 246 (13.9%) | 95.6% | 35% |
+| tomato | 1768 | 4 (tightened) | 899 | 539 | 223 (12.6%) | 77.6% | 86% |
+
+Dataset-wide capture sessions (<= 300 s, milliseconds read): 11471 timestamped files in 73 sessions, largest 569. Union of specimen components and sessions: largest unit 6227 files (44% of the dataset; 86-100% of six classes), so the fallback applies: **timestamped files are grouped by session (`sess_<id>`), untimestamped files (WhatsApp `IMG-YYYYMMDD-WA`, `Banana (3).jpeg`, 11471 of 14,103 are timestamped) by specimen component**. Final: 893 units, largest 569 files (4.0%).
 
 ## Receipt inbox
 - **Engines:**

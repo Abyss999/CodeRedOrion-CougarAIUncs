@@ -110,6 +110,42 @@
       },
       "version_note": "Kaggle dataset; no version number exposed (record download date 2026-10-10).",
       "series_grouping": true
+    },
+    {
+      "name": "agrifreshnet",
+      "kind": "folders",
+      "root": "/Users/nosaj/Documents/Coding/Projects/Hackathons/CodeRed-Orion/mldata/pipeline_data/staged/agrifreshnet",
+      "license": "CC BY 4.0",
+      "url": "https://data.mendeley.com/datasets/42m5tb7yv9",
+      "class_map": {
+        "banana__fresh": "banana:fresh",
+        "banana__semi_fresh": "banana:semi_fresh",
+        "banana__spoiled": "banana:spoiled",
+        "bitter_melon__fresh": "bitter_melon:fresh",
+        "bitter_melon__semi_fresh": "bitter_melon:semi_fresh",
+        "bitter_melon__spoiled": "bitter_melon:spoiled",
+        "cucumber__fresh": "cucumber:fresh",
+        "cucumber__semi_fresh": "cucumber:semi_fresh",
+        "cucumber__spoiled": "cucumber:spoiled",
+        "eggplant__fresh": "eggplant:fresh",
+        "eggplant__semi_fresh": "eggplant:semi_fresh",
+        "eggplant__spoiled": "eggplant:spoiled",
+        "orange__fresh": "orange:fresh",
+        "orange__semi_fresh": "orange:semi_fresh",
+        "orange__spoiled": "orange:spoiled",
+        "papaya__fresh": "papaya:fresh",
+        "papaya__semi_fresh": "papaya:semi_fresh",
+        "papaya__spoiled": "papaya:spoiled",
+        "pineapple__fresh": "pineapple:fresh",
+        "pineapple__semi_fresh": "pineapple:semi_fresh",
+        "pineapple__spoiled": "pineapple:spoiled",
+        "tomato__fresh": "tomato:fresh",
+        "tomato__semi_fresh": "tomato:semi_fresh",
+        "tomato__spoiled": "tomato:spoiled"
+      },
+      "_note": "AgriFreshNET (Mendeley Data v1, doi 10.17632/42m5tb7yv9.1, CC BY 4.0): 8 produce x Fresh/Semi fresh/Rotten, 590 images per folder, HEAVILY AUGMENTED (about 92% of images have a flip/rotation-aware pHash<=6 near-duplicate in their own class). Staged by `python -m pipeline ingest-dataset` with PIPELINE_SPECIMEN_GROUPS=1: the staged name is `<class>__spec_<id>.rf.<sha>_<orig stem>.jpg`, where <id> is a cross-stage component of 8-variant pHash distance (<=10, tightened to 6/4 per class when one component exceeded 30%), so prepare_dataset keeps every specimen and its augmentations in one split. semi_fresh is kept as its own label. Classification crops only (no boxes): whole image = one object.",
+      "source_version": "v1",
+      "version": "v1"
     }
   ]
 }
