@@ -1,4 +1,5 @@
-"""Two-stage inference: item detector (food NAME) -> per-crop fresh/spoiled classifier.
+"""Two-stage inference: item detector (food NAME) -> per-crop fresh/semi_fresh/spoiled classifier.
+2-class (fresh/spoiled) classifier weights still work: they simply never output semi_fresh.
 
 GPU-side. `ultralytics` is imported lazily inside TwoStage.load(), so importing this module is cheap
 and safe on the VPS. Used by ml/serve (YoloDetector) and by export_predictions.py.
@@ -15,10 +16,12 @@ except ImportError:  # run as a script from ml/yolo
 
 class TwoStage:
     def __init__(self, det_weights: str, cls_weights: str | None = None, conf: float = 0.25,
-                 imgsz: int = 640, spoiled_threshold: float = 0.5, device: str | None = None):
+                 imgsz: int = 640, spoiled_threshold: float = 0.5, device: str | None = None,
+                 semi_fresh_threshold: float = 0.5):
         self.det_weights, self.cls_weights = det_weights, cls_weights
         self.conf, self.imgsz, self.spoiled_threshold = conf, imgsz, spoiled_threshold
         self.device = device
+        self.semi_fresh_threshold = semi_fresh_threshold
         self._det = self._cls = None
 
     @property
@@ -34,11 +37,17 @@ class TwoStage:
                 self._cls = YOLO(self.cls_weights)
         return self
 
-    def _spoiled_prob(self, crop) -> float:
+    def _probs(self, crop) -> dict[str, float]:
         r = self._cls.predict(crop, imgsz=224, verbose=False, device=self.device)[0]
-        names = {int(k): v for k, v in r.names.items()}
-        idx = next((k for k, v in names.items() if v == "spoiled"), None)
-        return float(r.probs.data[idx]) if idx is not None else 0.0
+        return {str(v): float(r.probs.data[int(k)]) for k, v in r.names.items()}
+
+    def label(self, probs: dict[str, float]) -> str:
+        """spoiled wins first (missed spoilage is the costly error), then semi_fresh, else fresh."""
+        if probs.get("spoiled", 0.0) >= self.spoiled_threshold:
+            return "spoiled"
+        if probs.get("semi_fresh", 0.0) >= self.semi_fresh_threshold:
+            return "semi_fresh"
+        return "fresh"
 
     def predict(self, image) -> list[dict]:
         """image: PIL.Image. Returns [{name, category, freshness, confidence, bbox:[x1,y1,x2,y2]}]."""
@@ -53,7 +62,7 @@ class TwoStage:
             if self._cls is not None:
                 x1, y1, x2, y2 = [int(v) for v in xyxy]
                 crop = image.crop((x1, y1, max(x2, x1 + 2), max(y2, y1 + 2)))
-                fresh = "spoiled" if self._spoiled_prob(crop) >= self.spoiled_threshold else "fresh"
+                fresh = self.label(self._probs(crop))
             out.append({"name": name, "category": T.category_for(name), "freshness": fresh,
                         "confidence": round(float(c), 4), "bbox": [round(v, 1) for v in xyxy]})
         out.sort(key=lambda d: -d["confidence"])
@@ -67,4 +76,5 @@ class TwoStage:
         return cls(w, os.environ.get("FRESHNESS_WEIGHTS") or None,
                    conf=float(os.environ.get("YOLO_CONF", "0.25")),
                    spoiled_threshold=float(os.environ.get("SPOILED_THRESHOLD", "0.5")),
+                   semi_fresh_threshold=float(os.environ.get("SEMI_FRESH_THRESHOLD", "0.5")),
                    device=os.environ.get("YOLO_DEVICE") or None)

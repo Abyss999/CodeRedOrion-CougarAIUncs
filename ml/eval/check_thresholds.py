@@ -2,6 +2,7 @@
 """Check metrics JSON (from detection_metrics.py and/or ocr_metrics.py) against docs/QA.md thresholds.
 
 Usage: python ml/eval/check_thresholds.py det.json [ocr.json ...]
+Gates are binary (spoiled vs not-spoiled); semi_fresh is never gated (see ml/eval/README.md).
 Prints PASS/FAIL per metric; exit 1 if any FAIL. A metric that is missing or not computable
 (None) is a FAIL ("not evaluable"), never a silent pass. Sections absent from the inputs are
 reported as SKIP only with --allow-missing-section det|ocr.
@@ -55,8 +56,13 @@ def run_checks(m: dict, skip=()):
     else:
         d = m.get("detection")
         ge("YOLO mAP@0.5", _get(d, "map50"), T["map50"])
-        for c in ("fresh", "spoiled"):
-            ge(f"YOLO precision [{c}]", _get(d, "freshness", c, "precision"), T["precision"])
+        # Gates are binary (semi_fresh folded into not-spoiled). "fresh precision" = NOT-SPOILED precision.
+        # "not_spoiled" is preferred; the legacy "fresh" key (an alias) is accepted for old metric files.
+        # semi_fresh / freshness_3way are information only and are never read here.
+        fr = _get(d, "freshness") or {}
+        ns = fr.get("not_spoiled") if "not_spoiled" in fr else fr.get("fresh")
+        ge("YOLO precision [not-spoiled]", _get(ns, "precision"), T["precision"])
+        ge("YOLO precision [spoiled]", _get(fr, "spoiled", "precision"), T["precision"])
         ge("YOLO recall [spoiled]", _get(d, "freshness", "spoiled", "recall"), T["spoiled_recall"])
         drops = _get(d, "recall_drop_points") or {}
         for lt in ("low", "warm"):

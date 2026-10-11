@@ -145,3 +145,25 @@ The real warm images (29) are 154 boxes dominated by bell_pepper (149 of 154 box
 - PASS: licences recorded, every label mapped or dropped with a reason, freshness mapping verified on all 3,207 kept images (0 errors), taxonomy ids unchanged, no `.rf.`-group leakage, deterministic splits, report and manifest consistent with disk.
 - FAIL (cannot sign off any YOLO threshold from this dataset): ML-15, ML-16, ML-17, ML-21 (all high). Held-out is only 5 produce classes on plain backgrounds, real low light has no samples, and near-duplicates leak across splits. Smoke training for the MPS pipeline is fine; do not treat its metrics as QA numbers.
 - Needed before a real YOLO sign-off: the fridge sets (and fresh/stale Kaggle) merged, a timestamp/session-grouped split, a hand-tagged real low/warm held-out set (at least ~50 spoiled boxes each, outside VegQual), and a few real fridge photos with spoiled items as a final out-of-domain test.
+
+## 2026-10-10 - semi_fresh contract (PR A1, branch feat/semi-fresh-contract)
+
+**Result: PASS (harness, serve, taxonomy and infer contract), 3 low findings.** Venv `.venv-ml`. Suites: `ml/eval/tests` **119 passed, 3 xfailed** (was 74; +45), `ml/serve/tests` 14, `ml/ocr/tests` 89, `ml/yolo/tests` 24, all passing. Nothing needs a model: infer is tested with fake detector and classifier objects.
+
+Eval harness changes (ml/eval is QA's; LemurTech22's 7843e06 ported where it fits):
+- **Gates stay binary.** `semi_fresh` folds into `not_spoiled` in ground truth and predictions before spoiled recall, per-class precision and the lighting drop. Result keys are `freshness.not_spoiled` and `freshness.spoiled`; `freshness.fresh` is kept as an alias of `not_spoiled` for old consumers.
+- **Decision: the "fresh precision" gate reads as NOT-SPOILED precision.** Jose's version treated semi_fresh as a third matched class, which would have charged fresh precision for every fresh/semi confusion. `check_thresholds.py` now prints `YOLO precision [not-spoiled]` and reads `not_spoiled` (legacy `fresh` accepted for old JSON). It never reads `semi_fresh` or `freshness_3way`.
+- **Information only:** `freshness_3way` has the 3x3 confusion matrix (rows GT, cols prediction, plus `missed` column and `false_positive` row; localisation-only matching), per-class 3-way P/R including `semi_fresh`, and `recall_drop_points.<light>.semi_fresh`. `print_report` prints it under "NOT gated".
+- Unknown freshness labels (`rotten`, `Semi_Fresh`, `None`) now raise ValueError instead of being dropped silently. 2-class files give identical numbers; all 74 old tests pass.
+- Not ported: Jose's 3-class per-class P/R tests (they assert the semi_fresh class is matched on its own, which is the behaviour we decided against). His builder tests are covered by `test_ml_contract_freshness.py`.
+
+New tests: `test_semi_fresh_eval.py` (folding, fresh/semi swap costs nothing, spoiled-called-semi is a gated miss, hand-computed 3x3, missed/conf/name, lighting drops, check_thresholds not gating semi, end-to-end fresh/semi swaps pass every gate through JSON); `test_ml_contract_freshness.py` (new classes have food group/category and are appended with old ids unchanged; `Semi fresh Pineapple (15-25)` -> pineapple / semi_fresh; `label()` table; simulated 2-class and 3-class classifier outputs in either index order; serve passes the three values and turns junk into fresh).
+
+### Bugs (continue after ML-26)
+| ID | Severity | Summary |
+|---|---|---|
+| ML-27 | low | `ml/serve` freshness check is exact-match. `"SPOILED"`, `"Semi Fresh"`, `"semi-fresh"` become `fresh` with a log warning, and "spoiled shown as fresh" is the costly direction. The real detector only emits canonical values, so no live impact. Pinned by 3 strict xfails in `test_ml_contract_freshness.py`. Suggest folding case, hyphens and spaces before the check. |
+| ML-28 | low | Vocabulary mismatch: `taxonomy.FRESH_WORDS` has `ripe` -> **fresh** (and `unripe`, `good`, `healthy`), while the backend normaliser maps `ripe` -> **semi_fresh** (see BE-6). Different layers, different answer for the same word. Matters only for free text (Gemini). Pick one table. |
+| ML-29 | info | Stale two-class wording left in files outside the PR's edits: `docs/ARCHITECTURE.md:24`, `docs/DECISIONS.md:16`, `docs/IDEA.md:33`, `ml/yolo/train.py:12` and `ml/yolo/prepare_dataset.py:3` comments, and `ml/yolo/tests/test_prepare.py:61` asserts freshness `in ("fresh","spoiled")` (passes only because its fixture has no semi folder). |
+
+Not tested: real 3-class weights, and any real `semi_fresh` metric. All `semi_fresh` data is AgriFreshNET (ML-16).

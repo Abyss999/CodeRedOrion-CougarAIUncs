@@ -309,7 +309,7 @@ def from_photo():
             raws, source = gemini.detect_from_image(data, mime, mode), "gemini"
         except gemini.UpstreamError as e:
             raise upstream_unavailable(f"No vision backend available: {e}")
-    return jsonify(candidates=candidates.normalize_all(raws), source=source)
+    return jsonify(candidates=candidates.normalize_all(raws, source), source=source)
 
 
 @bp.post("/from-receipt")

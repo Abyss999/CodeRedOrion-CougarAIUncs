@@ -89,7 +89,7 @@ def test_detect_shape(client):
         assert set(c) >= {"name", "category", "confidence", "freshness", "bbox"}
         assert isinstance(c["name"], str) and c["name"]
         assert c["category"] in CATEGORIES
-        assert c["freshness"] in {"fresh", "spoiled"}
+        assert c["freshness"] in {"fresh", "semi_fresh", "spoiled"}
         assert isinstance(c["confidence"], (int, float)) and 0 <= c["confidence"] <= 1
         assert isinstance(c["bbox"], list) and len(c["bbox"]) == 4 and all(isinstance(v, (int, float)) for v in c["bbox"])
         x1, y1, x2, y2 = c["bbox"]

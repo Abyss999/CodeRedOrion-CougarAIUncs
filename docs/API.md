@@ -96,9 +96,15 @@ post it straight back.
 - ✅ `POST /items/parse-text` `{text (<=4000 chars)}` → `200 {candidates: [item…]}` (Gemini);
   `502 upstream_unavailable` when Gemini is not configured/failing.
 - ✅ `POST /items/from-photo` multipart `image` (required), `mode=fridge|single` (default `fridge`) →
-  `200 {candidates: [{name, category, confidence, freshness: "fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
+  `200 {candidates: [{name, category, confidence, freshness: "fresh"|"semi_fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
   …}], source: "yolo"|"gemini"}`. Uses `ML_SERVICE_URL`/detect when set; if unset **or the ML
   service errors**, falls back to Gemini vision; neither → `502`.
+  `freshness` is normalised server-side for both sources (`candidates.normalize_freshness`): the
+  three values pass through; variants map `semi-fresh`/`semi fresh`/`use soon`/… → `semi_fresh`
+  and `rotten`/`stale`/`moldy`/`overripe`/`decayed`/… → `spoiled` (case/hyphen/space-insensitive; the word
+  lists mirror `SEMI_WORDS`/`SPOILED_WORDS` in `ml/yolo/taxonomy.py`, and `ripe` is fresh in both); anything unknown or
+  missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). It is
+  informational only: not stored, and it does not change `predicted_expiry`.
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [{name, quantity, price}], total}`
   via `ML_SERVICE_URL`/ocr; `502` when unset or failing. `quantity` defaults to 1.
 - ✅ `GET /items/barcode/:code` (6-14 digits, else 400) → `200 {candidate}` (Open Food Facts, adds
