@@ -61,7 +61,7 @@ outcome is how waste is measured. Product: [`docs/IDEA.md`](docs/IDEA.md). Statu
   ported commit.
 - Never delete a branch that an open PR targets.
 - Never quote a PR number before `gh pr create` returns it, because other sessions open PRs in the gap.
-- Merge with merge commits. Before merging, rebase onto `main` and confirm CI actually ran and passed. A workflow skipped by its path filters is acceptable only for docs- or script-only PRs.
+- Merge with merge commits. Before merging, rebase onto `main` (on a teammate's branch, merge `main` in instead: never rewrite or force-push someone else's branch) and confirm CI actually ran and passed. A workflow skipped by its path filters is acceptable only for docs- or script-only PRs.
 - The orchestrator records every ruling (contract, data or design) in `docs/QA.md` or `docs/DECISIONS.md` in the PR that applies it.
 - QA bug IDs are global per area (`BE-n`, `ML-n`, `IOS-n`, `PL-n`): before numbering, check the highest ID in
   `docs/QA.md` **and** in open PRs' `docs/qa/*.md`, because parallel branches have collided.

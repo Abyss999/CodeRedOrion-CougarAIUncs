@@ -78,6 +78,7 @@ Detail lives in [`qa/backend.md`](qa/backend.md) and [`qa/ml.md`](qa/ml.md). The
 | 2026-10-10 | #46 | Design: motion demos | Independent motion QA: canvas demos rebuilt as test pages and stepped frame by frame in headless Chrome 152, with Reduce Motion on and off. Round 1 **FAIL**: floating stacked-bar segments, 680–770 ms sequences, a loud pulse, no reduce state. Fixed. Round 2: end states exact, every sequence ≤ 0.5 s, reduce = 0.15 s fades with a static listening ring, no clipping | **PASS**, all three kept | none |
 | 2026-10-10 | #5 | Backend social | Backend QA: 158/158 (100 Wave 1 + 57 social + 1 migration), coverage 94%. Visibility tested for friend, pending, stranger, group member and non-member on every list and mutating endpoint | **PASS** | none |
 | 2026-10-10 | #50 | Backend items wave 2 (stored freshness and confidence, share on items, restore, delete account) | Backend QA: 680 passed, 1 skipped, 3 xfailed, coverage 97%. Migration 0004 round trip; restore leaves `/impact` exactly as before for every outcome, 10-minute window, atomic; `DELETE /auth/me` removes or anonymises every row (events tombstoned); N+1 checks on `share`. BE-8 fixed in the PR | **PASS** | BE-9 (low): ruled non-blocking, fix in backend PR 2 |
+| 2026-10-10 | #57 | Backend insights wave 2: impact split / reasons / previous / last 6 weeks; recipe servings, `uses_items` objects, per-user cache; `remove-batch` / `restore-batch`; number caps | Backend QA: full suite 965 passed, 1 skipped, coverage 98%, no xfails. Impact exact before and after every batch pair; all-or-nothing batches with row locks; DST matrix (4 session zones × 4 frozen nows); scalar Gemini responses on every caller | **PASS** | none (BE-9, BE-10, BE-13 fixed in the PR) |
 
 **Not yet tested anywhere:** the iOS build (no Xcode yet), live Gemini (no key), the live ML service and YOLO accuracy (no GPU), GLM-OCR image-to-text, `docker compose up` of the full stack, and the integration demo path.
 
@@ -88,7 +89,12 @@ Severity: **blocker** (breaks demo path) · high · medium · low. Full repros a
 |---|---|---|---|---|
 | BE-1 | high | Backend | `GET /impact` returned 500 for a user with no removals once other users' events spanned more than one Timescale chunk | fixed (#4) |
 | BE-8 | low | Backend | `NaN` / `Infinity` numbers passed validation and hit a DB CHECK (500 instead of 400) | fixed (#50) |
-| BE-9 | low | Backend | A finite `est_price` beyond numeric(10,2) (e.g. `1e8`) overflows and returns 500 instead of 400. Strict xfail `test_huge_est_price_is_400_not_500` | open: ruled non-blocking for #50, fix in backend PR 2 |
+| BE-9 | low | Backend | A finite `est_price` beyond numeric(10,2) (e.g. `1e8`) overflows and returns 500 instead of 400. Strict xfail `test_huge_est_price_is_400_not_500` | fixed (#57) |
+| BE-10 | low | Backend | `/impact` week buckets, zero-fill and week/month windows depended on the DB session time zone and DST | fixed (#57) |
+| BE-11 | low | Backend | Receipt TOTAL / TAX / SUBTOTAL lines came back as item candidates | fixed on #54, pending merge |
+| BE-12 | low | Backend | `categorized_by` said `gemini` when Gemini categorized nothing | fixed on #54, pending merge |
+| BE-13 | low | Backend | A scalar Gemini JSON reply caused a 500 instead of 502 / fallback | fixed at the root in #57 (`_generate` shape check); #54 picks it up on merge |
+| BE-14 | low | Backend | A receipt coupon line (negative price) made the candidate batch fail on `POST /items` | fixed on #54, pending merge |
 | ML-1 – ML-6 | medium/low | ML | Receipt parser: qty-first lines, trailing UPCs, Costco item numbers, "Merchandise Total", EUR totals, OCR-spaced decimals | fixed (#3) |
 | ML-7 – ML-9 | medium/low | ML | Mixed-case total phrases, voided items, and multi-buy lines | fixed (#8) |
 | ML-10 | medium | ML | Products containing a skip word were dropped (`INSTANT OATMEAL`) | fixed (#8) |
