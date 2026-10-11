@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark: Review photo results</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
+a{color:#B9D871}a:hover{color:#E8F0DA}
+
+body{background:#0F1A12}</style>
+</helmet>
+<div style="width: 390px; height: 940px; box-sizing: border-box; background: #0F1A12; display: flex; flex-direction: column">
+  <main style="flex: 1; overflow: hidden; padding: 56px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: center; gap: 10px">
+      <a href="AddSheet.dark.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #18261B; box-shadow: inset 0 0 0 1px #34483A; flex-shrink: 0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+      <div>
+        <h1 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 24px">We found 7 items</h1>
+        <p style="margin: 2px 0 0; font-size: 14px; color: #9DB09F">Untick anything we got wrong. Tap a row to edit.</p>
+      </div>
+    </header>
+
+    <div style="height: 120px; border-radius: 16px; background: #223024; display: flex; align-items: center; justify-content: center; gap: 8px; color: #9DB09F; font-size: 14px; font-weight: 500">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+      [Your fridge photo, with boxes on each item]
+    </div>
+
+    <section aria-labelledby="spoiled-heading" style="display: flex; flex-direction: column; gap: 6px">
+      <h2 id="spoiled-heading" style="margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #FFB98A">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4M12 17.5v.01"></path></svg>
+        Looks spoiled</h2>
+      <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
+        <sc-for list="{{spoiled}}" as="s" hint-placeholder-count="1">
+          <li style="border-bottom: 1px solid #2A3A2D; display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px">
+            <span style="{{s.tileStyle}}">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{s.stroke}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{s.icon}}"></path></svg></span>
+            <span style="flex: 1; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{s.name}}</span>
+            <button type="button" aria-label="{{s.tossLabel}}" style="height: 44px; padding: 0 12px; border-radius: 12px; background: #18261B; border: 1px solid #34483A; color: #FFB98A; font-size: 15px; font-weight: 600; flex-shrink: 0">Toss it</button>
+            <button type="button" aria-label="{{s.keepLabel}}" style="height: 44px; padding: 0 12px; border-radius: 12px; background: #18261B; border: 1px solid #34483A; color: #B9D871; font-size: 15px; font-weight: 600; flex-shrink: 0">Keep it</button>
+          </li>
+        </sc-for>
+      </ul>
+    </section>
+
+    <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px">
+      <sc-for list="{{found}}" as="f" hint-placeholder-count="6">
+        <li style="border-bottom: 1px solid #2A3A2D; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px">
+          <label style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px">
+            <input type="checkbox" checked="{{f.checked}}" style="width: 22px; height: 22px; accent-color: #B9D871; margin: 0; flex-shrink: 0">
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+              <span style="font-size: 16px; font-weight: 600">{{f.name}}</span>
+              <span style="{{f.metaStyle}}">{{f.meta}}</span>
+            </span>
+          </label>
+          <div role="group" aria-label="{{f.qtyLabel}}" style="display: flex; align-items: center; background: #24361F; border-radius: 12px; flex-shrink: 0">
+            <button aria-label="Less" style="width: 36px; height: 40px; border: 0; background: transparent; color: #B9D871; font-size: 20px; font-weight: 600">−</button>
+            <span style="min-width: 44px; text-align: center; font-size: 14px; font-weight: 600; color: #E8F0DA">{{f.qty}}</span>
+            <button aria-label="More" style="width: 36px; height: 40px; border: 0; background: transparent; color: #B9D871; font-size: 20px; font-weight: 600">+</button>
+          </div>
+        </li>
+      </sc-for>
+    </ul>
+
+    <a href="#" style="align-self: flex-start; font-size: 15px; font-weight: 600">+ Add something we missed</a>
+  </main>
+
+  <footer style="padding: 12px 20px 34px; background: #0F1A12; border-top: 1px solid #2A3A2D; display: flex; flex-direction: column; gap: 8px">
+    <p style="margin: 0; font-size: 13px; color: #9DB09F; text-align: center">Expiry dates are estimates from typical shelf life. You can change any of them.</p>
+    <p style="margin: 0; font-size: 13px; color: #9DB09F; text-align: center">Decide on spoiled items to continue</p>
+    <a href="Fridge.dark.dc.html" aria-disabled="true" style="opacity: .45; text-decoration: none; height: 56px; border-radius: 16px; background: #B9D871; color: #13261A; display: flex; align-items: center; justify-content: center; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">Add 6 items</a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":940}}'>
+class Component extends DCLogic {
+renderVals() {
+const meta = 'font-size: 13px; color: #9DB09F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis';
+const f = (name, m, qty, opts) => Object.assign({ name, meta: m, qty, qtyLabel: 'Quantity of ' + name, metaStyle: meta, checked: true }, opts || {});
+const tile = (bg) => 'width: 40px; height: 40px; border-radius: 12px; background: ' + bg + '; display: flex; align-items: center; justify-content: center; flex-shrink: 0';
+const sp = (name, icon, stroke, bg) => ({ name, icon, stroke, tileStyle: tile(bg), tossLabel: 'Toss ' + name, keepLabel: 'Keep ' + name });
+return {
+spoiled: [
+sp('Strawberries', 'M12 8c-1-2-4-3-6-1-3 3-1 10 2 12 1 1 3 1 4 0 1 1 3 1 4 0 3-2 5-9 2-12-2-2-5-1-6 1zM12 8c0-2 1-3.5 3-4.5', '#A8366E', '#F8E1EC')
+],
+found: [
+f('Baby spinach', 'Veggies · use in 5 days', '1 bag'),
+f('Greek yogurt', 'Dairy · use in 10 days', '1 tub'),
+f('Chicken thighs', 'Protein · use in 3 days', '1.4 lb'),
+f('Bananas', 'Fruit · ripe, use soon', '5', { metaStyle: 'font-size: 13px; color: #FFD970; font-weight: 500' }),
+f('Cheddar', 'Dairy · not sure, tap to fix', '8 oz'),
+f('Eggs', 'Protein · use in 28 days', '12')
+]
+};
+}
+}
+</script>
+</body>
+</html>
