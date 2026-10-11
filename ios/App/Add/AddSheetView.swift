@@ -72,7 +72,7 @@ struct AddSheetView: View {
                                  onBack: { flow.reset() }, onRetry: { flow.run() },
                                  onRetake: { retake(flow) }, onType: { flow.open(.text) })
         case .destination(let destination):
-            AddPlaceholderView(destination: destination, onBack: { flow.reset() })
+            AddDestinationView(destination: destination, onBack: { flow.reset() }, onOpen: { flow.open($0) }, onFinished: { dismiss() })
         }
     }
 
