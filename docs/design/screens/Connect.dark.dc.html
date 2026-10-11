@@ -13,6 +13,7 @@
 <style>
 body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
 a{color:#B9D871}a:hover{color:#E8F0DA}
+li:last-child>a{border-bottom:0}
 
 body{background:#0F1A12}</style>
 </helmet>
@@ -51,7 +52,8 @@ body{background:#0F1A12}</style>
       <h3 id="gr-h" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #9DB09F">Groups · 2</h3>
       <ul style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px; overflow: hidden">
         <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
-          <li><a href="GroupDetail.dark.dc.html" style="text-decoration: none; color: #E8F0DA; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border-bottom: 1px solid #2A3A2D">
+          <li><a href="GroupDetail.dark.dc.html" style="text-decoration: none; color: #E8F0DA; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-bottom: 1px solid #2A3A2D">
+            <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 18px; background: #24361F; color: #B9D871; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.8 3.5 6"></path></svg></span>
             <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 600">{{g.name}}</span><span style="font-size: 13px; color: #9DB09F">{{g.meta}}</span></span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9DB09F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a></li>
         </sc-for>

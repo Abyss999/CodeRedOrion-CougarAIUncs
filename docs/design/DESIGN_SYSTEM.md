@@ -144,14 +144,14 @@ Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped
 | `StorageSegmented` | Fridge | Fridge / Pantry / Freezer |
 | `RemoveSheet` | Remove | 3 outcome tiles, all outlined on `surface`; the selected one (Shared it, with its Given-to row) fills `limeTint`. *Used it* acts in one tap |
 | `WasteReasonList` | Remove | A grouped list of four 68 pt one-tap rows (icon + title): Expired, Forgot about it, Didn't like it, Other |
-| `AddSheet` | Add | Hero tile (fridge photo) + 2×2 tiles (one item, type/say, barcode, receipt) |
+| `AddSheet` | Add | Hero tile (photo: whole fridge or one item) + 2×2 tiles (Type it, Say it, Barcode, Receipt) |
 | `PantryWidget` | Social | `lime` card: 3 food tiles (group icon + name, no quantities) plus a "+N more" tile. The whole card is a link that pushes Food Pantry (row 18) |
 | `RequestNote` | Social | Sticky note: source header, text, who/when, an **Offer** button that opens the Offer confirmation |
 | `DetectedItemRow` | Photo review, Type or say it, Receipt review | One row for every add-review list: a 24 pt circular checkbox (the `FridgeSelect` one: filled `forest` with an `onForest` tick, else a 2 pt `muted` ring) inside a 44 pt tappable row (`role=checkbox`); the name; a meta line of food group (plus quantity where there's no stepper, or the raw receipt line above it) followed by one status badge (`ExpiryBadge`, `UseSoonBadge`, or "Not sure" when confidence < 0.5). Trailing slot: `QuantityStepper` (photo) or price (receipt). Non-food receipt lines read "Not food", with no badge, unticked |
 | `FilterChip` | Recipes | 36 pt pill. Selected uses `forest`/`onForest`; unselected is outlined |
 | `RecipeHero`, `RecipeRow` | Recipes, Home | Hero on `forest` with expiring-item chips (`forestChip` with `onForestChip` text, "Chicken · Today"); rows with a "Uses N" badge |
 | `UseSoonBadge` | Fridge, Photo review | Shown when `freshness == semi_fresh` (ripe or starting to turn). Pill with `useSoonBg`/`useSoonInk`: 6.7:1 light, 9.5:1 dark. Text is "Use soon". It's distinct from the expiry badges and from the urgent "Looks off" (spoiled). In photo review it's the row's badge, like everywhere else |
-| `StatTile`, `ImpactHero` | Impact | Hero on forest showing **food saved (lb/oz)**, with CO₂e as a secondary line in the same units ("41 lb CO₂e … about a 46-mile drive"); tiles on surface. Donated reads "shared" |
+| `StatTile`, `ImpactHero` | Impact | Hero on forest showing **food saved (lb/oz)**, with carbon emissions as a secondary line in the same units ("41 lb of carbon emissions avoided"; no driving equivalent); tiles on surface; a centred waste-rate card (44 pt figure, lb line, meter). Donated reads "donated" on Impact |
 | `WeeklyChart`, `ReasonBars` | Impact | Swift Charts; colors `chartSaved` / `chartWasted` |
 | `TabBar` | all tabs | Home, Recipes, [+], Fridge, Social |
 
