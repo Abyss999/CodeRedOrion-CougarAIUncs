@@ -39,6 +39,20 @@ container. It is idempotent, so restarts are safe. The upgrade creates the `time
 `citext` extensions, all tables, and the `food_events` hypertable.
 For the host venv (and for tests) run it by hand: `cd backend && ../.venv/bin/flask --app wsgi db upgrade`.
 
+**Environment variables** (`.env`, from `.env.example`; compose passes the whole file to the `api` container):
+| Variable | Used by | Notes |
+|---|---|---|
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | compose `db` | keep consistent with the URLs below |
+| `DATABASE_URL`, `TEST_DATABASE_URL` | API (host runs), tests | compose overrides `DATABASE_URL` to `db:5432` inside the network; the test database must differ |
+| `FLASK_ENV`, `API_PORT` | API | `API_PORT` is the host port (default 5055) |
+| `JWT_SECRET` | API | long random string |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | API | model recorded in `docs/DECISIONS.md` |
+| `GOOGLE_IOS_CLIENT_IDS` | API | comma-separated iOS OAuth client IDs; unset makes `POST /auth/oauth/google` return `503 oauth_not_configured` |
+| `ML_SERVICE_URL` | API | empty = Gemini-vision fallback for photos; receipts need it |
+| `ROBOFLOW_API_KEY`, `KAGGLE_API_TOKEN` | dataset prep, Colab | never commit |
+| `PIPELINE_DATA`, `OCR_TIMEOUT_S`, `PIPELINE_MAX_EXTRACT_GB` | `pipeline/` | optional, see `docs/PIPELINE.md` |
+| `GUNICORN_THREADS` | `backend/entrypoint.sh` | optional, default 4. The container runs one `gthread` worker (`--timeout 120`), so a slow Gemini call does not block other requests and the in-process recipe cache stays shared. It is not in `.env.example`; add it to `.env` to change it |
+
 **Backend tests need their own database.** The suite drops and rebuilds its schema by running the
 migrations, so it refuses to run unless `TEST_DATABASE_URL` is set and differs from `DATABASE_URL`.
 Create the database once:
@@ -53,12 +67,12 @@ no prompt or user data). Sum them with:
 docker compose logs api | python3 scripts/gemini_cost.py
 ```
 The prices for `gemini-3.8-flash` are in the script and were checked on 2026-10-10: $0.75 in /
-$3.75 out per 1M tokens until 2026-12-31, then $1.50 / $7.50.
+$3.75 out per 1M tokens until 2026-12-31 (it doubles to $1.50 / $7.50 on 2027-01-01).
 
 ## 4. iOS
 ```bash
 cd ios
-xcodegen generate            # creates FoodWasteReducer.xcodeproj (gitignored — re-run after editing project.yml)
+xcodegen generate            # creates FoodWasteReducer.xcodeproj (gitignored — re-run after editing project.yml); the app's display name is BiteDown
 open FoodWasteReducer.xcodeproj
 ```
 Tests from the command line:

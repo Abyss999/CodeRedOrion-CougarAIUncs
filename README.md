@@ -34,11 +34,11 @@ This is an active hackathon prototype. The backend is ahead of the iOS interface
 
 | Area | What exists | What remains |
 |---|---|---|
-| Inventory and accounts | Authentication, bulk item creation, editing, storage filters, removal outcomes with undo, and account deletion | Connect the iOS screens to the API |
+| Inventory and accounts | Email and Google sign-in (`user_identities`), bulk item creation, editing, storage filters, removal outcomes with undo (single and batch), and account deletion | Connect the iOS screens to the API |
 | Recipes and photo entry | Gemini integration and an ML-service photo route with Gemini fallback | Verify live AI calls and the complete user flow |
-| Sharing | Friends, groups, group pantries, share listings, and requests in the API | Build the iOS interactions |
+| Sharing | Friends, groups, group pantries, share listings, and requests posted to friends and/or several groups in the API | Build the iOS interactions |
 | Impact | Timestamped food events, outcome totals, weekly trends, and waste tips | Build the dashboard UI and validate the integrated flow |
-| iOS | SwiftUI tab shell, shared theme, and recorded shell build checks | Implement functional screens and API connectivity |
+| iOS | Foundation merged: design tokens and fonts, `APIClient` with Live and Mock clients, Keychain, glass tab bar, motion and test conventions (display name BiteDown) | Implement functional screens (Fridge is in review) and API connectivity |
 | Guided onboarding | Idea only (deferred for v1) | Food catalog, checklist UI, and completion/resume state |
 | Vision and receipts | Training pipeline, inference service, receipt-text parser, and evaluation tools | Validate trained models and real image-to-text performance |
 
@@ -81,7 +81,7 @@ cp .env.example .env
 ```
 
 Edit `.env`: set the database credentials and a strong `JWT_SECRET`; configure
-`GEMINI_API_KEY` and a model available to your account for AI features. Keep database passwords
+`GEMINI_API_KEY` and a model available to your account for AI features. For Google sign-in set `GOOGLE_IOS_CLIENT_IDS` (steps in the [setup guide](docs/SETUP.md)). Keep database passwords
 consistent with the database URLs. Keep real credentials out of commits.
 
 ```bash

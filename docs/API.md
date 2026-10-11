@@ -1,8 +1,8 @@
 # API (v0 contract)
 
-Status: ✅ = implemented in Wave 1 (backend core). Social endpoints are Wave 3 (✅ implemented, migration `0002_social`). Base URL:
+Status: ✅ = implemented and merged on `main` (backend core, social, items wave 2, insights wave 2, Google sign-in, multi-audience requests; migrations `0001`-`0006`). Base URL:
 `http://127.0.0.1:5055`. JSON in/out, `snake_case`, ISO-8601 UTC timestamps (`...Z`). Auth:
-`Authorization: Bearer <jwt>` (HS256, 30-day expiry) on everything except `/health` and `/auth/*`.
+`Authorization: Bearer <jwt>` (HS256, 30-day expiry) on everything except `/health`, `/auth/signup`, `/auth/login` and `/auth/oauth/google` (`DELETE /auth/me` needs the token).
 Errors always: `{"error": {"code": "...", "message": "..."}}` (including 404/405/413/500).
 UUID path ids that are malformed return 404. Numeric money/weight fields serialise as JSON numbers.
 
@@ -353,7 +353,7 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
   - **Cache:** per user, keyed by a SHA-256 of all the caller's active items (id, name, category,
     quantity, unit, expiry) plus `max_results` and `dietary`; TTL 6 h (`RECIPE_CACHE_TTL_SECONDS`, `0`
     disables). Any add/edit/remove/restore changes the key, so the next call goes to Gemini. In-process,
-    shared by the single gunicorn worker's threads (lock-guarded; lost on restart). Each lookup logs one INFO line on
+    shared by the single gunicorn `gthread` worker's threads (4 by default, `GUNICORN_THREADS`; lock-guarded; lost on restart). Each lookup logs one INFO line on
     `app.recipes.cache`: `recipes_cache status=hit age_s=<n>` or `status=miss reason=empty|items_changed|expired`
     (no user data). Errors (`502`) are not cached.
   - With no active items → `200 {recipes: []}` without calling Gemini; Gemini missing → `502`.
@@ -402,7 +402,7 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
   (`expired`, `forgot`, `didnt_like`, `other`); `past_expiry` and `saved_recent` are new codes.
 
 ## Gemini usage logging
-Every Gemini call (`parse_text`, `detect`, `recipes`, `shelf_life`) writes one INFO line on the
+Every Gemini call (`parse_text`, `detect`, `receipt_categorize`, `recipes`, `shelf_life`) writes one INFO line on the
 logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compose logs api`):
 
     gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
@@ -416,8 +416,8 @@ Tokens come from the response's `usage_metadata` (`output_tokens` includes think
 data and the API key are never logged. Cost report:
 
     docker compose logs api | python scripts/gemini_cost.py
-    python scripts/gemini_cost.py api.log --price gemini-2.5-flash=0.30,2.50 --default-price 0.30,2.50
+    python scripts/gemini_cost.py api.log --price gemini-3.8-flash=0.75,3.75 --default-price 0.75,3.75
 
 `scripts/gemini_cost.py` prints calls, errors, tokens and USD per model + purpose and a total. Its
-price table (USD per 1M input/output tokens) is a placeholder dated 2026-10-10 and must be verified
-against Google's pricing page; override per model with `--price MODEL=IN,OUT`.
+price table (USD per 1M input/output tokens) was verified against Google's pricing page on 2026-10-10;
+`gemini-3.8-flash` and `gemini-3.6-flash` double on 2027-01-01 (to 1.50 / 7.50), so re-check before relying on it. Override per model with `--price MODEL=IN,OUT`.
