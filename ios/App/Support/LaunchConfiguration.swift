@@ -7,12 +7,16 @@ import Foundation
 /// - `-UITestSignedIn`         start signed in as Priya (no Keychain access)
 /// - `-UITestFailNetwork`      every mock call fails with a network error
 /// - `-UITestSlowNetwork`      every mock call takes `slowDelay` seconds
+/// - `-UITestShowToast`        show the Undo toast on launch inside the Home tab (marker `toast.undo.marker` after Undo)
+/// - `-UITestReduceMotion`     force Reduce Motion on (simctl has no reduce_motion switch)
 struct LaunchConfiguration: Equatable, Sendable {
     var useMockAPI = false
     var seed: String?
     var signedIn = false
     var failNetwork = false
     var slowNetwork = false
+    var showToast = false
+    var reduceMotion = false
 
     static let slowDelay: Duration = .seconds(3)
     static let defaultDelay: Duration = .milliseconds(150)
@@ -22,6 +26,8 @@ struct LaunchConfiguration: Equatable, Sendable {
     static let flagSignedIn = "-UITestSignedIn"
     static let flagFailNetwork = "-UITestFailNetwork"
     static let flagSlowNetwork = "-UITestSlowNetwork"
+    static let flagShowToast = "-UITestShowToast"
+    static let flagReduceMotion = "-UITestReduceMotion"
 
     init() {}
 
@@ -30,6 +36,8 @@ struct LaunchConfiguration: Equatable, Sendable {
         signedIn = arguments.contains(Self.flagSignedIn)
         failNetwork = arguments.contains(Self.flagFailNetwork)
         slowNetwork = arguments.contains(Self.flagSlowNetwork)
+        showToast = arguments.contains(Self.flagShowToast)
+        reduceMotion = arguments.contains(Self.flagReduceMotion)
         if let i = arguments.firstIndex(of: Self.flagSeed), arguments.indices.contains(i + 1) {
             seed = arguments[i + 1]
         }

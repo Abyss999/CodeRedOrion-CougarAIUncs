@@ -146,6 +146,10 @@ enum Theme {
         /// 18: AddSheet option tiles and pill buttons (artboards).
         static let optionTile: CGFloat = 18
         static let input: CGFloat = 12
+        /// Skeleton text bars.
+        static let bar: CGFloat = 4
+        /// Food-group icon tile and skeleton avatar.
+        static let avatar: CGFloat = 12
         static let card: CGFloat = 16
         static let hero: CGFloat = 20
         static let sheet: CGFloat = 28

@@ -59,12 +59,18 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources: [Tests/UnitTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FoodWasteReducer
   FoodWasteReducerUITests:
     type: bundle.ui-testing
     platform: iOS
     sources: [Tests/UITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FoodWasteReducer
 schemes:

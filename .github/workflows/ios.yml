@@ -29,4 +29,4 @@ jobs:
         working-directory: ios
         run: |
           xcodebuild test -project FoodWasteReducer.xcodeproj -scheme FoodWasteReducer \
-            -destination "platform=iOS Simulator,name=$SIM_NAME" CODE_SIGNING_ALLOWED=NO
+            -destination "platform=iOS Simulator,name=$SIM_NAME,OS=26.5" CODE_SIGNING_ALLOWED=NO

@@ -2,6 +2,36 @@ import SwiftUI
 
 enum AppTab: Hashable {
     case home, recipes, add, fridge, social
+
+    var title: String {
+        switch self {
+        case .home: "Home"
+        case .recipes: "Recipes"
+        case .add: "Add"
+        case .fridge: "Fridge"
+        case .social: "Social"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .home: "house"
+        case .recipes: "frying.pan"
+        case .add: "plus.circle.fill"
+        case .fridge: "refrigerator"
+        case .social: "person.2"
+        }
+    }
+
+    var accessibilityID: String {
+        switch self {
+        case .home: AccessibilityID.Tab.home
+        case .recipes: AccessibilityID.Tab.recipes
+        case .add: AccessibilityID.Tab.add
+        case .fridge: AccessibilityID.Tab.fridge
+        case .social: AccessibilityID.Tab.social
+        }
+    }
 }
 
 /// Placeholder tab shell (screens come later from docs/design/). Uses the system `TabView`
@@ -10,23 +40,18 @@ enum AppTab: Hashable {
 struct RootTabView: View {
     @State private var selection: AppTab = .home
     @State private var showAdd = false
+    private let tabOrder: [AppTab] = [.home, .recipes, .add, .fridge, .social]
 
     var body: some View {
         TabView(selection: $selection) {
-            Tab("Home", systemImage: "house", value: AppTab.home) {
-                placeholder("Home") { VersionLabel() }
-            }
-            .accessibilityIdentifier(AccessibilityID.Tab.home)
-            Tab("Recipes", systemImage: "frying.pan", value: AppTab.recipes) { placeholder("Recipes") }
-                .accessibilityIdentifier(AccessibilityID.Tab.recipes)
-            Tab("Add", systemImage: "plus.circle.fill", value: AppTab.add) { placeholder("Add") }
-                .accessibilityIdentifier(AccessibilityID.Tab.add)
-            Tab("Fridge", systemImage: "refrigerator", value: AppTab.fridge) { placeholder("Fridge / Pantry") }
-                .accessibilityIdentifier(AccessibilityID.Tab.fridge)
-            Tab("Social", systemImage: "person.2", value: AppTab.social) { placeholder("Social") }
-                .accessibilityIdentifier(AccessibilityID.Tab.social)
+            tab(.home) { HomePlaceholderView() }
+            tab(.recipes) { placeholder("Recipes") }
+            tab(.add) { placeholder("Add") }
+            tab(.fridge) { placeholder("Fridge / Pantry") }
+            tab(.social) { placeholder("Social") }
         }
         .tint(Theme.Colors.forest)
+        .background(TabBarIdentifiers(ids: tabOrder.map(\.accessibilityID)))
         .onChange(of: selection) { old, new in
             if new == .add {
                 selection = old
@@ -36,13 +61,25 @@ struct RootTabView: View {
         .sheet(isPresented: $showAdd) { AddSheetPlaceholder() }
     }
 
-    private func placeholder<Extra: View>(_ title: String, @ViewBuilder extra: () -> Extra = { EmptyView() }) -> some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Text(title)
-            extra()
+    /// The identifier sits on the tab's label content (not on the `Tab`), and the icon is hidden
+    /// from accessibility so the button's label is the title alone.
+    private func tab<Content: View>(_ t: AppTab, @ViewBuilder content: @escaping () -> Content) -> some TabContent<AppTab> {
+        Tab(value: t) {
+            content()
+        } label: {
+            Label {
+                Text(t.title)
+            } icon: {
+                Image(systemName: t.symbol).accessibilityHidden(true)
+            }
+            .accessibilityIdentifier(t.accessibilityID)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.Colors.ground.ignoresSafeArea())
+    }
+
+    private func placeholder(_ title: String) -> some View {
+        Text(title)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.Colors.ground.ignoresSafeArea())
     }
 }
 

@@ -1,5 +1,4 @@
-// Shared build settings. Per-developer overrides live in the gitignored ../Local.xcconfig
-// (copy ../Local.xcconfig.example). The `#include?` is optional, so CI and Simulator builds
-// work without it.
+// Shared defaults. Debug/Release include this FIRST, then assign their own values, then include the
+// optional gitignored ../Local.xcconfig LAST so it can override anything (APP_BUNDLE_ID,
+// DEVELOPMENT_TEAM, API_BASE_URL).
 APP_BUNDLE_ID = com.coderedorion.FoodWasteReducer
-#include? "../Local.xcconfig"

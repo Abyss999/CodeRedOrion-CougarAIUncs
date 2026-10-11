@@ -22,7 +22,7 @@ enum UndoToastTiming {
 /// Bottom toast: message, "Undo" button (44 pt target) and a 5 s progress bar.
 /// Accessibility ids: `toast.undo` (container), `toast.undo.button`, `toast.undo.progress`.
 struct UndoToastView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
 
@@ -109,7 +109,7 @@ extension View {
 }
 
 private struct UndoToastModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     @Binding var item: UndoToastItem?
 
     func body(content: Content) -> some View {

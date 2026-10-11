@@ -8,6 +8,7 @@ struct FoodWasteReducerApp: App {
         WindowGroup {
             RootTabView()
                 .environment(env)
+                .environment(\.reduceMotionOverride, env.launch.reduceMotion ? true : nil)
         }
     }
 }

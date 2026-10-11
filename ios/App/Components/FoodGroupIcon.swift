@@ -60,7 +60,7 @@ struct FoodGroupIcon: View {
     var tile: CGFloat = Theme.Size.avatar
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: Theme.Radius.avatar, style: .continuous)
             .fill(group.palette.tile)
             .frame(width: tile, height: tile)
             .overlay { FoodGroupGlyph(group: group, size: tile * 0.55) }

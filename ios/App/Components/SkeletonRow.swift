@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Moving highlight for skeletons: 1.2 s linear, repeating. Reduce Motion: static (no sweep).
 struct ShimmerModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     @State private var phase: CGFloat = -1
 
     func body(content: Content) -> some View {
@@ -38,11 +38,11 @@ extension View {
 struct SkeletonRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(fill)
+            RoundedRectangle(cornerRadius: Theme.Radius.avatar, style: .continuous).fill(fill)
                 .frame(width: Theme.Size.avatar, height: Theme.Size.avatar)
             VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4).fill(fill).frame(width: 140, height: 14)
-                RoundedRectangle(cornerRadius: 4).fill(fill).frame(width: 96, height: 11)
+                RoundedRectangle(cornerRadius: Theme.Radius.bar).fill(fill).frame(width: 140, height: 14)
+                RoundedRectangle(cornerRadius: Theme.Radius.bar).fill(fill).frame(width: 96, height: 11)
             }
             Spacer(minLength: 0)
             RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous).fill(fill)
@@ -59,7 +59,8 @@ struct SkeletonRow: View {
     private var fill: Color { Theme.Colors.limeTint }
 }
 
-/// A rounded card of `count` skeleton rows with hairline dividers (`<screen>.loading`).
+/// A rounded card of `count` skeleton rows with hairline dividers: a single accessibility element
+/// "Loading" with id `<screen>.loading` (no per-row ids).
 /// Callers cross-fade it to content with `.motionTransition(.opacity)` / `Theme.Motion.quick`.
 struct SkeletonList: View {
     let screen: String
@@ -68,12 +69,14 @@ struct SkeletonList: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<count, id: \.self) { i in
-                SkeletonRow().accessibilityIdentifier(AccessibilityID.State.skeletonRow(screen, i))
+                SkeletonRow()
                 if i < count - 1 { Divider().overlay(Theme.Colors.hairline) }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .accessibilityElement(children: .contain)
+        // One VoiceOver stop for the whole list, not one per row.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
         .accessibilityIdentifier(AccessibilityID.State.loading(screen))
     }
 }

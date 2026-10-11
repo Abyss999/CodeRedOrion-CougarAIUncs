@@ -1,12 +1,14 @@
 import Foundation
 import Observation
+import os
 import Security
 
 /// Secure storage for the session. `KeychainSessionStorage` is the real one;
 /// `InMemorySessionStorage` is used by the mock/UI-test path so tests never touch the Keychain.
 protocol SessionStorage: Sendable {
     func load() -> AuthSession?
-    func save(_ session: AuthSession)
+    /// Returns false if the session could not be persisted (e.g. Keychain error -34018 in unsigned builds).
+    @discardableResult func save(_ session: AuthSession) -> Bool
     func clear()
 }
 
@@ -15,7 +17,7 @@ final class InMemorySessionStorage: SessionStorage, @unchecked Sendable {
     private var session: AuthSession?
     init(_ session: AuthSession? = nil) { self.session = session }
     func load() -> AuthSession? { lock.withLock { session } }
-    func save(_ session: AuthSession) { lock.withLock { self.session = session } }
+    @discardableResult func save(_ session: AuthSession) -> Bool { lock.withLock { self.session = session }; return true }
     func clear() { lock.withLock { session = nil } }
 }
 
@@ -39,13 +41,20 @@ struct KeychainSessionStorage: SessionStorage {
         return try? APICoding.decoder.decode(AuthSession.self, from: data)
     }
 
-    func save(_ session: AuthSession) {
-        guard let data = try? APICoding.encoder.encode(session) else { return }
+    @discardableResult
+    func save(_ session: AuthSession) -> Bool {
+        guard let data = try? APICoding.encoder.encode(session) else { return false }
         SecItemDelete(baseQuery as CFDictionary)
         var add = baseQuery
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        let status = SecItemAdd(add as CFDictionary, nil)
+        if status != errSecSuccess {
+            // -34018 (errSecMissingEntitlement) happens in unsigned builds.
+            Logger(subsystem: "com.coderedorion.FoodWasteReducer", category: "auth")
+                .error("Keychain save failed, OSStatus \(status)")
+        }
+        return status == errSecSuccess
     }
 
     func clear() { SecItemDelete(baseQuery as CFDictionary) }
@@ -57,6 +66,8 @@ struct KeychainSessionStorage: SessionStorage {
 @Observable
 final class AuthStore {
     private(set) var session: AuthSession?
+    /// True if the last sign-in could not be stored; the session lives in memory only (signed out on relaunch).
+    private(set) var persistenceFailed = false
     private let storage: SessionStorage
 
     var token: String? { session?.token }
@@ -70,7 +81,7 @@ final class AuthStore {
 
     func signIn(_ session: AuthSession) {
         self.session = session
-        storage.save(session)
+        persistenceFailed = !storage.save(session)
     }
 
     func signOut() {

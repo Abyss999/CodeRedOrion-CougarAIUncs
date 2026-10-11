@@ -45,6 +45,15 @@ enum AccessibilityID {
         static func skeletonRow(_ screen: String, _ index: Int) -> String { "\(screen).skeleton.\(index)" }
     }
 
+    enum Toast {
+        static let container = "toast.undo"
+        static let button = "toast.undo.button"
+        static let message = "toast.undo.message"
+        static let progress = "toast.undo.progress"
+        /// Debug hook (`-UITestShowToast`): appears after Undo is tapped.
+        static let marker = "toast.undo.marker"
+    }
+
     /// Debug-only runtime API base URL entry point (long-press the version label).
     enum Debug {
         static let versionLabel = "debug.versionLabel"

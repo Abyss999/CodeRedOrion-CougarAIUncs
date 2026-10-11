@@ -41,16 +41,20 @@ struct DebugSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Error first, so it is always on screen (even at AX5 on small phones with the keyboard up).
+                if let error {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.Colors.urgentInk)
+                            .accessibilityIdentifier(AccessibilityID.Debug.baseURLError)
+                    }
+                }
                 Section("API base URL") {
                     TextField("https://example.trycloudflare.com", text: $text)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                         .accessibilityIdentifier(AccessibilityID.Debug.baseURLField)
-                    if let error {
-                        Text(error).foregroundStyle(Theme.Colors.urgentInk)
-                            .accessibilityIdentifier(AccessibilityID.Debug.baseURLError)
-                    }
                     Text("In use: \(current)").font(Theme.Fonts.meta).foregroundStyle(Theme.Colors.muted)
                         .accessibilityIdentifier(AccessibilityID.Debug.baseURLCurrent)
                 }
@@ -78,7 +82,10 @@ struct DebugSettingsSheet: View {
 
     private func save() {
         if baseURL.setOverride(text) { error = nil; refresh() }
-        else { error = "Enter a valid http:// or https:// URL." }
+        else {
+            error = "Enter a valid http:// or https:// URL."
+            AccessibilityNotification.Announcement("Enter a valid http or https URL.").post()
+        }
     }
 }
 #endif

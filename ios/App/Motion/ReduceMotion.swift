@@ -24,6 +24,14 @@ extension View {
         modifier(ShakeModifier(trigger: trigger))
     }
 
+    /// New item at the top of a list: moves down 8 pt and fades in over 0.3 s; removal fades.
+    /// Reduce Motion: a plain fade. Pair with `.motionAnimation(Theme.Motion.listInsert, value: items)`.
+    func listInsertTransition() -> some View {
+        motionTransition(.asymmetric(insertion: .modifier(active: InsertOffset(y: -Theme.Motion.listInsertOffset, opacity: 0),
+                                                          identity: InsertOffset(y: 0, opacity: 1)),
+                                     removal: .opacity))
+    }
+
     /// Scale-in (0.8 -> 1) for a tapped tile's checkmark. Reduce Motion: fade only.
     func checkmarkScaleIn(_ isShown: Bool) -> some View {
         modifier(CheckmarkScaleModifier(isShown: isShown))
@@ -36,7 +44,7 @@ extension View {
 }
 
 private struct MotionAnimationModifier<V: Equatable>: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     let animation: Animation
     let value: V
     func body(content: Content) -> some View {
@@ -45,7 +53,7 @@ private struct MotionAnimationModifier<V: Equatable>: ViewModifier {
 }
 
 private struct MotionTransitionModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     let transition: AnyTransition
     func body(content: Content) -> some View {
         content.transition(Theme.Motion.transition(transition, reduceMotion: reduceMotion))
@@ -53,7 +61,7 @@ private struct MotionTransitionModifier: ViewModifier {
 }
 
 private struct ShakeModifier<T: Equatable>: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     let trigger: T
     func body(content: Content) -> some View {
         if reduceMotion {
@@ -84,7 +92,7 @@ private struct ShakeModifier<T: Equatable>: ViewModifier {
 }
 
 private struct CheckmarkScaleModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     let isShown: Bool
     func body(content: Content) -> some View {
         content
@@ -95,7 +103,7 @@ private struct CheckmarkScaleModifier: ViewModifier {
 }
 
 private struct NumericChangeModifier<V: Equatable>: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     let value: V
     func body(content: Content) -> some View {
         content
@@ -107,7 +115,7 @@ private struct NumericChangeModifier<V: Equatable>: ViewModifier {
 /// Number that counts up to `value` (Impact hero). Reduce Motion: shows the final value immediately.
 /// Counts again whenever `value` changes (range change). Finishes within 0.5 s.
 struct CountUpText: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @MotionReduced private var reduceMotion
     let value: Double
     var format: (Double) -> String = { String(format: "%.1f", $0) }
     @State private var shown: Double?
@@ -131,4 +139,10 @@ struct CountUpText: View {
         }
         shown = value
     }
+}
+
+struct InsertOffset: ViewModifier {
+    let y: CGFloat
+    let opacity: Double
+    func body(content: Content) -> some View { content.offset(y: y).opacity(opacity) }
 }

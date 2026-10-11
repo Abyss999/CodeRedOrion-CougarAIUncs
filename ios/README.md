@@ -32,6 +32,8 @@ builds work without `Local.xcconfig` (`CODE_SIGNING_ALLOWED=NO`).
 | `-UITestSignedIn` | start signed in as Priya |
 | `-UITestFailNetwork` | every mock call throws a network error |
 | `-UITestSlowNetwork` | every mock call takes 3 s (default 150 ms) |
+| `-UITestShowToast` | shows the Undo toast on launch inside the Home tab; tapping Undo shows `toast.undo.marker` |
+| `-UITestReduceMotion` | forces Reduce Motion on (root `reduceMotionOverride`; simctl has no switch for it) |
 Seed, signed-in, fail and slow imply `-UITestMockAPI`. Mock login accepts any credentials except password `wrong-password` (401); signup with `taken@example.com` returns 409 `email_taken`.
 
 ## Accessibility identifiers
@@ -43,16 +45,19 @@ Convention `screen.element[.id]`, lowercase, defined in `App/Support/Accessibili
 - Debug: `debug.versionLabel`, `debug.settings`, `debug.baseURL.field|save|reset|error|current`.
 
 ## Motion (docs/design/MOTION.md)
-All animation goes through the Reduce Motion choke point; screen code never calls `withAnimation` or `.animation` directly.
-- Tokens: `Theme.Motion.quick | standard | emphasized`, `staggerStep` (40 ms), `staggerCap` (8), `shimmerDuration` (1.2 s), `staggerDelay(index:)`.
-  `Theme.Motion.animation(_:reduceMotion:)` returns `quick` under Reduce Motion; `Theme.Motion.transition(_:reduceMotion:)` returns `.opacity`.
-- Helpers (`App/Motion`): `withMotion(_:reduceMotion:_:)`, `.motionAnimation(_:value:)`, `.motionTransition(_:)`, `.shake(trigger:)`
-  (3 x 6 pt in 0.3 s, opacity dip under Reduce Motion), `.checkmarkScaleIn(_:)`, `.numericChange(value:)`, `CountUpText(value:format:)` (jumps to the final value under Reduce Motion).
-- Skeletons: `.shimmering()` (1.2 s linear sweep, static under Reduce Motion) is built into `SkeletonRow` / `SkeletonList`.
-- Stagger: keep a `StaggerController`, call `restart()` only on first load or a new result (never on refresh), and put
-  `.staggeredAppearance(index:controller:rise:)` on rows. Rows appearing outside the window just appear.
-- Haptics: `Haptics.success() / warning() / error() / selection() / lightImpact()` via a `HapticsProviding` provider
-  (`SystemHaptics`, `NoOpHaptics`, `RecordingHaptics` for unit tests). Mock-API launches use `NoOpHaptics`. Unaffected by Reduce Motion.
-- Undo toast: `.undoToast(item: $toast)` with `UndoToastItem(message:actionTitle:onUndo:onTimeout:)`. 5 s (15 s while VoiceOver or Switch Control is on),
-  progress bar, 44 pt Undo button, posts a VoiceOver announcement. Attach it to the screen content inside a tab, not to the `TabView`
-  (it would cover the tab bar). Ids: `toast.undo`, `toast.undo.message`, `toast.undo.button`, `toast.undo.progress` (progress is hidden from VoiceOver).
+All animation goes through the Reduce Motion choke point; screen code never calls `withAnimation` or `.animation` directly,
+and never reads `accessibilityReduceMotion` itself (use `@MotionReduced private var reduceMotion`, which honours `-UITestReduceMotion`).
+- Tokens: `Theme.Motion.quick | standard | emphasized`, `staggerStep` (40 ms), `staggerCap` (6; items past the 6th share the 6th's delay, max 0.2 s),
+  `chartStaggerStep` (20 ms), `staggerItem` (0.3 s, so a stagger ends by 0.5 s), `listInsert` (0.3 s), `shimmerDuration` (1.2 s), pulse constants.
+  `Theme.Motion.animation(_:reduceMotion:)` returns `quick` (0.15 s fade) under Reduce Motion; `transition(_:reduceMotion:)` returns `.opacity`.
+- Helpers (`App/Motion`): `withMotion`, `.motionAnimation(_:value:)`, `.motionTransition(_:)`, `.shake(trigger:)`, `.checkmarkScaleIn(_:)`,
+  `.numericChange(value:)`, `CountUpText` (MOTION.md: final value immediately under Reduce Motion), `.listInsertTransition()` (new item at the top, down 8 pt + fade).
+- Composites animate as one unit: `.staggeredAppearance(index:controller:rise:step:)` composites the view first; `.growsFromBaseline(index:controller:)`
+  is one `scaleY` from the bottom (Impact stacked bars). Reduce Motion: 0.15 s fade.
+- `ListeningPulse(diameter:)`: 8 pt, 30% peak, 1.6 s loop; static 4 pt ring at 25% under Reduce Motion (id `listening.pulse`).
+- Skeletons: `.shimmering()` (1.2 s, static under Reduce Motion). `SkeletonList` is one VoiceOver element "Loading" (`<screen>.loading`, no per-row ids).
+- Stagger: keep a `StaggerController`, call `restart()` only on first load or a new result (never on refresh).
+- Haptics: `Haptics.success() / warning() / error() / selection() / lightImpact()` via `HapticsProviding` (`SystemHaptics`, `NoOpHaptics`, `RecordingHaptics`). Mock-API launches use `NoOpHaptics`.
+- Undo toast: `.undoToast(item: $toast)` with `UndoToastItem(message:actionTitle:onUndo:onTimeout:)`. 5 s (15 s with VoiceOver or Switch Control), progress bar,
+  44 pt Undo, VoiceOver announcement. Attach it to the screen content inside a tab, not to the `TabView`. Ids: `toast.undo`, `.message`, `.button`, `.progress`.
+- Tab identifiers are installed on the `UITabBarItem`s by `TabBarIdentifiers` (SwiftUI's own identifier was flaky on iOS 26).
