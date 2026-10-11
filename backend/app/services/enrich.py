@@ -119,7 +119,8 @@ def _enrich(cands, facets, image, source, started):
     sent, with_image = len(groups), sum(1 for c in images if c)
     try:
         rows = gemini.enrich_items(items, images, facets)
-    except gemini.UpstreamError:
+    except gemini.UpstreamError as e:
+        log.warning("enrich upstream_error=%s", e)  # "Gemini request failed: <ExceptionType>", no user data
         return "failed", "upstream_error", sent, with_image, 0
     got = apply(cands, groups, rows, facets)
     if got == 0:
