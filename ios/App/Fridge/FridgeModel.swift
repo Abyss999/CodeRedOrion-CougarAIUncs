@@ -38,6 +38,9 @@ final class FridgeModel {
 
     var storage: Storage = .fridge
     var toast: UndoToastItem?
+    /// The Undo toast for a removal made from the sheet, held until the sheet has dismissed so the
+    /// full 5 s window is visible (`showPendingToast()`). The removal itself is not delayed.
+    private var pendingToast: UndoToastItem?
     var banner: FridgeBanner?
     let stagger = StaggerController()
     /// DEBUG probe `debug.stagger.count`: staggers run on a storage's first load only.
@@ -128,7 +131,7 @@ final class FridgeModel {
         banner = nil
         locallyRemoved.insert(item.id)
         withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { delete(item.id) }
-        toast = UndoToastItem(message: "\(item.name) removed") { [weak self] in
+        pendingToast = UndoToastItem(message: "\(item.name) removed") { [weak self] in
             self?.undo(item, location: location, reduceMotion: reduceMotion)
         }
         let api = self.api
@@ -144,10 +147,18 @@ final class FridgeModel {
         }
     }
 
+    /// Called once the remove sheet has finished dismissing: the toast (and its countdown) starts now.
+    func showPendingToast() {
+        guard let pending = pendingToast else { return }
+        pendingToast = nil
+        toast = pending
+    }
+
     private func removeFailed(_ item: Item, location: Location, choice: RemoveChoice, error: Error, reduceMotion: Bool) {
         let undone = !locallyRemoved.contains(item.id)
         locallyRemoved.remove(item.id)
         withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { insert(item, at: location) }
+        if pendingToast?.message == "\(item.name) removed" { pendingToast = nil }
         if toast?.message == "\(item.name) removed" { toast = nil }
         guard !undone else { return }   // already back via Undo; nothing to report
         Haptics.error()
@@ -178,6 +189,8 @@ final class FridgeModel {
     }
 
     private func restoreFailed(_ item: Item, location: Location, error: Error, reduceMotion: Bool) {
+        // 409 not_removed: the item is already active, so the restored row is right. No banner.
+        if (error as? APIError) == .notRemoved { return }
         locallyRemoved.insert(item.id)
         withMotion(Theme.Motion.standard, reduceMotion: reduceMotion) { delete(item.id) }
         Haptics.error()

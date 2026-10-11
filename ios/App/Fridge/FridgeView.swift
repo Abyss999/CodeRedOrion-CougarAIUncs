@@ -36,7 +36,8 @@ struct FridgeView: View {
         .motionAnimation(Theme.Motion.standard, value: model.banner?.id)
         .undoToast(item: $model.toast)
         .task(id: model.storage) { await model.loadIfNeeded(model.storage) }
-        .sheet(item: $removing) { item in
+        // The Undo toast appears (and its countdown starts) only after the sheet has gone.
+        .sheet(item: $removing, onDismiss: { model.showPendingToast() }) { item in
             RemoveSheet(item: item) { choice in
                 model.remove(item, choice: choice, reduceMotion: reduceMotion)
             } close: {

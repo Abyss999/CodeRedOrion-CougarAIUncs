@@ -41,8 +41,10 @@ builds work without `Local.xcconfig` (`CODE_SIGNING_ALLOWED=NO`).
 | `-UITestFailListOnce` | the first item list call fails, the retry succeeds |
 | `-UITestFailRemove` | only `POST /items/:id/remove` fails (row rolls back, `fridge.remove.error` banner) |
 | `-UITestFailRestore` | only `POST /items/:id/restore` fails (Undo rolls back, banner) |
+| `-UITestRestoreNotRemoved` | restore throws 409 `not_removed` (item already active): the row stays, no banner |
 | `-UITestSlowRemove` / `-UITestSlowRestore` | that call alone takes 3 s |
 | `-UITestRecordHaptics` | records haptics and exposes them on the `debug.haptics` probe |
+| `-UITestUndoWindow <seconds>` | Undo toast window in seconds (e.g. `30`) instead of 5 s (15 s with VoiceOver / Switch Control) |
 
 Seeds: `fridge` (default) is the Fridge artboard: 8 items, all in the fridge (pantry and freezer are empty), covering
 fresh, `semi_fresh` (bananas, "Use soon") and spoiled (strawberries, "Check"). `item-spinach` has an open Share listing
@@ -50,7 +52,7 @@ claimed by Marcus Ojeda (`user-marcus`), so its sheet shows `remove.recipient`; 
 no claimer (no recipient line). `listing` returns the same data. `expired` has past-date items ("Expired"), `empty` has none, `long` has 36 across all 9 groups.
 In the mock, a donated removal fulfils the open listing and restore reopens it.
 
-Every flag above except `-UITestShowToast`, `-UITestReduceMotion` and `-UITestRecordHaptics` implies `-UITestMockAPI`. Mock login accepts any credentials except password `wrong-password` (401); signup with `taken@example.com` returns 409 `email_taken`.
+Every flag above except `-UITestShowToast`, `-UITestReduceMotion`, `-UITestRecordHaptics` and `-UITestUndoWindow` implies `-UITestMockAPI`. Mock login accepts any credentials except password `wrong-password` (401); signup with `taken@example.com` returns 409 `email_taken`.
 
 ## Accessibility identifiers
 Convention `screen.element[.id]`, lowercase, defined in `App/Support/AccessibilityID.swift`; tests use the same constants.
