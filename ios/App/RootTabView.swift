@@ -43,29 +43,36 @@ struct RootTabView: View {
     @State private var showAdd = false
     /// `-UITestOpenImpact` (DEBUG): ImpactView is presented on launch until Home links to it.
     @State private var showImpact = false
+    @State private var showSettings = false
+    @State private var settingsFocusServer = false
+    @State private var showConnect = false
+    @State private var openRecipe: Recipe?
     private let tabOrder: [AppTab] = [.home, .recipes, .add, .fridge, .social]
 
     var body: some View {
         TabView(selection: tabSelection) {
             tab(.home) {
                 HomeView(api: env.api,
-                         onOpenSettings: {},        // Settings screen: later PR
-                         onOpenImpact: {},          // Impact screen: later PR
-                         onOpenRecipe: { _ in },    // Recipe detail: later PR
-                         onOpenItem: { _ in },      // Item detail: later PR
-                         onOpenServerSettings: {},  // Settings › Debug "Server address": later PR
+                         onOpenSettings: { settingsFocusServer = false; showSettings = true },
+                         onOpenImpact: { showImpact = true },
+                         onOpenRecipe: { openRecipe = $0 },
+                         onOpenItem: { _ in selection = .fridge },  // Item detail: opened from the Fridge row
+                         onOpenServerSettings: { settingsFocusServer = true; showSettings = true },
                          onSeeAllFood: { selection = .fridge },
                          onAddFood: { showAdd = true })
             }
             tab(.recipes) { RecipesView() }
             tab(.add) { Color.clear }  // never shown: selecting Add presents `AddSheetView`
             tab(.fridge) { FridgeView(api: env.api) }
-            tab(.social) { SocialView() }
+            tab(.social) { SocialView(onOpenConnect: { showConnect = true }) }
         }
         .tint(Theme.Colors.forest)
         .background(TabBarIdentifiers(entries: tabOrder.map { .init(id: $0.accessibilityID, label: $0.title) }))
         .sheet(isPresented: $showAdd) { AddSheetView() }
         .fullScreenCover(isPresented: $showImpact) { ImpactView(api: env.api) }
+        .sheet(isPresented: $showSettings) { NavigationStack { SettingsView(focusServerAddress: settingsFocusServer) } }
+        .sheet(isPresented: $showConnect) { ConnectView() }
+        .sheet(item: $openRecipe) { recipe in NavigationStack { RecipeDetailView(recipe: recipe) } }
         .task {
             #if DEBUG
             if env.launch.openImpact { showImpact = true }
