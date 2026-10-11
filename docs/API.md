@@ -155,6 +155,14 @@ post it straight back.
   dairy→dairy, grains→bakery, pantry→pantry_dry, fruit/veggies→produce_leafy (short-life on purpose),
   protein→seafood/eggs/meat by keyword, else `other`. Numbers may arrive as strings (`"$3.48"`, `"1,29"`)
   and are parsed; unusable → `price: null` / `total: null`; `quantity` defaults to 1 (and to 1 if not positive).
+  Receipt total/payment lines are dropped before Gemini and before building candidates
+  (`candidates.is_receipt_total`): the name must start with optional `sales`/`grand`/card-network prefixes
+  plus a keyword (`total`, `subtotal`/`sub total`/`sub-total`, `tax`, `change`, `cash`, `card`, `balance`,
+  `tender`, or a card network `visa|debit|credit|mastercard|mc|amex|discover`), followed only by amounts,
+  `%`/currency/punctuation, masked card digits (`****1234`, `x1234`, `XXXX1234`) or the words `due, amount,
+  amt, paid, tendered, tend, back, purchase, sale, savings, saved, auth, approved, chip, contactless` (or a
+  card network). So `TOTAL 4.21`, `CHANGE DUE`, `VISA CREDIT ****1234` are dropped; `Total Cereal`,
+  `Cash & Carry Crackers`, `Cashews` are kept.
 - **Gemini category guide.** Every Gemini prompt that assigns a category (text parse, vision, receipt
   lines) carries the same definitions as `ml/yolo/taxonomy.py`: `produce_leafy` = short-life produce
   (greens, herbs, berries, tomatoes, cucumbers, peppers, bananas, avocados, papaya, pineapple...),

@@ -106,15 +106,26 @@ def category_from_name(name: str) -> str:
     return _CATEGORY_FROM_GROUP.get(group, "other")
 
 
-# Receipt total/payment lines (TOTAL, SUBTOTAL, SALES TAX, CHANGE DUE, VISA CARD...). Anchored at the
-# start with a word boundary so food like "Cashews", "Cardamom pods" or "Taxi"-style names survive.
-_RECEIPT_TOTAL = re.compile(
-    r"^\s*(?:(?:sales|grand|visa|debit|credit)\s+)?(sub\s*-?\s*total|total|tax|change|cash|card|balance|tender)\b",
+# Receipt total/payment lines (TOTAL, SUBTOTAL, SALES TAX, CHANGE DUE, VISA CREDIT ****1234...): optional
+# prefixes + a keyword (or a card network) at the start, followed ONLY by amounts, punctuation, masked card
+# digits or words from _RECEIPT_TAIL. "Total Cereal", "Cashews" or "Cash & Carry Crackers" are food.
+_PAYMENT = "visa|debit|credit|mastercard|mc|amex|discover"
+_RECEIPT_HEAD = re.compile(
+    rf"^\s*(?:(?:sales|grand|{_PAYMENT})\s+)*(?:sub\s*-?\s*total|total|tax|change|cash|card|balance|tender|{_PAYMENT})\b",
     re.IGNORECASE)
+_RECEIPT_TAIL = {"due", "amount", "amt", "paid", "tendered", "tend", "back", "purchase", "sale", "savings", "saved",
+                 "auth", "approved", "chip", "contactless", *_PAYMENT.split("|")}
+
+
+def _receipt_tail_ok(tok: str) -> bool:
+    core = re.sub(r"[\W_]", "", tok.lower())  # drops %, $, *, punctuation
+    return not core or core in _RECEIPT_TAIL or re.fullmatch(r"x*\d+", core) is not None
 
 
 def is_receipt_total(name) -> bool:
-    return bool(_RECEIPT_TOTAL.match(str(name or "")))
+    name = str(name or "")
+    m = _RECEIPT_HEAD.match(name)
+    return bool(m) and all(_receipt_tail_ok(t) for t in name[m.end():].split())
 
 
 def from_receipt_lines(lines: list[dict], enriched: list[dict] | None = None) -> list[dict]:
