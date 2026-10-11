@@ -2,7 +2,7 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-10 (checkpoint 5b; "Data / ML track" section by the data owner's session, LemurTech22). **`food-main` (VPS) only orchestrates**: it plans, rules,
+_Last updated: 2026-10-10 (checkpoint 5b; "Data / ML track" section updated by the data owner's session, LemurTech22, with #62 open). **`food-main` (VPS) only orchestrates**: it plans, rules,
 reviews and merges, and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the
 building** (owner decision): builder + QA sub-agents, Xcode and simulators, Docker and every test run,
 backend included, plus any `.github/workflows` push (the VPS token can't). It starts from the "In flight on
@@ -21,7 +21,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 | Backend PR 2 `feat/insights-wave2`: impact split, reasons, previous period, 6-week series; recipe servings + `uses_items` + per-user cache; **`remove-batch` and `restore-batch`** (approved) | **merged (#57)** | 965 passed / 98%; BE-9, BE-10, BE-13 fixed |
 | Backend PR 3 `feat/oauth`: **Google only**, generic `user_identities.provider` | **merged (#60)**; 1411 passed / 98% | the owner creates the Google OAuth client (the Mac sends the steps) |
 | iOS foundation `feat/ios-foundation`: tokens incl. `Theme.Motion`, Outfit, assets and glyphs, APIClient + Live/Mock, Keychain, glass tab bar, a11y IDs, states, Debug base URL, Xcode 26 CI | **merged (#47)** | QA: unit 96 / UI 16 pass; IOS-4..10 then fixed by the builder |
-| ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS |
+| ML data (5 sources), pipeline, freshness `fresh/semi_fresh/spoiled` | merged | leakage and stratification gates PASS; **8 sources once #62 merges** |
 | New data sources: **MeatScan** (cow meat), **DaFiF** (fish), **Food Spoilage Status** (Roboflow); food-hvk7g pending | `feat/datasets-spoilage-meat-fish`, **#62** | Pipeline QA PASS (PL-5 open), ML QA PASS with named risks (ML-51/52/55); see "Data / ML track" |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22 owns it** (owner, 2026-10-10). Other sessions don't schedule it unless the owner asks | notebook ready; the next Colab run picks up the new sources |
 | Receipts → full candidates (#54, Jose / LemurTech22) | **merged (#54)**; BE-11–14 fixed | ML check PASS (independent) |
@@ -36,6 +36,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    - further `ml/yolo`, `ml/eval` or pipeline data work
 
    What's merged stays as it is. The photo flow uses the Gemini fallback.
+   **Data owner's next actions:** get #62 merged (Pipeline + ML QA PASS, CI green), then run Colab: T4, Secrets `ROBOFLOW_API_KEY` (private) + `KAGGLE_API_TOKEN`, DRY_RUN then the real run with the same RUN_ID. Hand `export.zip` to ML QA for the YOLO gate; quote spoiled recall per source with Wilson CIs (named risks in `docs/PIPELINE.md`).
 2. **Mac (`food-main-mac`):** the iOS foundation (#47) re-verify, then merge. Then build the screens in this order, one PR each with iOS QA, screenshots, a motion recording and a Design delta:
    1. Fridge + removal (+ Undo)
    2. Add + photo review + text / barcode / receipt
@@ -127,7 +128,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 
 ## QA status
 - **Backend:** PASS on `main` after #57 (965 passed, 98%). Open: BE-7 (info). BE-11, 12 and 14 are fixed on #54, pending merge.
-- **ML:** data, pipeline, parser and notebook PASS. YOLO not evaluated (paused: a teammate owns the models). Open: ML-11–14, ML-28, ML-32, ML-40.
+- **ML:** data, pipeline, parser and notebook PASS. #62 (new sources): Pipeline QA PASS, ML QA PASS on real data with named risks ML-51/52/55. YOLO not evaluated yet (the teammate's Colab run). Open: ML-11–14, ML-28, ML-32, ML-40, PL-5.
 - **Design / motion:** motion demos PASS (two rounds).
 - **iOS:** first build and dark theme PASS. Foundation in QA.
 - **Integration:** not run yet.

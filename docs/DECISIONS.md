@@ -2,6 +2,14 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-10 — New training sources and data rulings (data owner LemurTech22, #62)
+- **Three sources added (all CC BY 4.0):** MeatScan (cow meat, Zenodo 16764338), DaFiF (fish, Mendeley vx4ptwk3pb) and Food Spoilage Status (Roboflow food-monitoring, v1). **food_hvk7g stays pending**: it has 0 generated versions on Roboflow (not downloadable) and no freshness labels.
+- **DaFiF labels come from storage days**, because the release labels no images: days 1-3 = fresh, days 9-11 = spoiled, days 4-8 dropped (data owner's rule). The companion paper's per-species cut-offs are paywalled; revisit if someone gets them.
+- **Keep the new sources in the Colab run with named risks labelled** (data owner; ML QA had suggested capping beef): beef is train-only and its spoiled class is scene-confounded (ML-52); fish tray colour tracks the label (ML-55); fish held-out is one unseen batch (ML-51). Spoiled recall is reported per source with Wilson CIs. Labels: `docs/PIPELINE.md` "Named risks".
+- **MeatScan is never downloaded whole.** The 25.4 GB RAR is non-solid with a QuickOpen index, so originals are range-read (about 15 min for 900 instead of about 4 h for the archive). The authors' augmented copies are excluded by the release CSV, and each member's header is checked against the index.
+- **Roboflow copies of one photo share a split group** (rotations, flips and crop tiles; ML-50), and a cell demoted to "not measurable" moves wholly to train (ML-53).
+- **The Colab dataset cache is keyed by a `sources.json` hash** (`fwr_runs/<RUN_ID>/data_<DATA_VER>/`), so a changed source list always rebuilds instead of reusing an older dataset.
+
 ## 2026-10-10 — Google Sign-In and removal rulings (#60, Fridge screen)
 - **`POST /auth/oauth/google` returns `created: true|false` in the body** as well as 201/200, so the app doesn't depend on status codes.
 - **Safe account linking.** A Google sign-in links to an existing password account only if `email_verified` is true and the email is `gmail.com` / `googlemail.com`, or a Workspace `hd` claim is present. Otherwise → 409 `account_exists_use_password`, and nothing is written. *Why:* for other domains Google's `email_verified` is weaker, and auto-linking would let anyone with a Google account for that address take over the password account. The rejected alternative was accepting the risk for the demo.
@@ -25,6 +33,7 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **The rename is user-facing only.** That covers the canvas (sign-in mark, settings version line, titles), the doc titles, the README and the iOS `CFBundleDisplayName`. Internal names stay: the Xcode target and scheme `FoodWasteReducer`, the repo, the Docker services and the bundle id. Renaming those would churn every open branch for no user-visible gain.
 
 ## 2026-10-10 — ML models handed to a teammate (owner)
+- The teammate is **LemurTech22** (data and modeling owner). Their work lands through PRs with QA sign-off like any other (#54 receipts, #62 data sources).
 - **ML model work is paused on our side.** A teammate is building the models. The Colab run, the `export.zip` YOLO gate, weights in `ml/serve`, the from-photo `source: "yolo"` check, GLM-OCR on MPS and further `ml/yolo` / `ml/eval` / pipeline data work are off the active queue until the owner says otherwise. The merged datasets, split rules, notebook and pipeline stay as they are. **The photo add flow, and so the demo path, runs on the existing Gemini-vision fallback** (`/items/from-photo` with `ML_SERVICE_URL` unset). Receipt OCR has no fallback (502), so receipt scan isn't available until the teammate's OCR lands.
 
 ## 2026-10-10 — Training data (Mac, stage 2)
