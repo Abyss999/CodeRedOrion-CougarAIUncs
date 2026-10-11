@@ -145,3 +145,25 @@ Contract grep: `docs/API.md` and the Gemini prompt are 3-value. No two-value enu
 - BE-6 verified fixed. New and extended tests in `tests/test_freshness_contract.py`: `moldy`, `Mouldy`, `overripe`, `decayed`, `rotting`, `damaged`, `DEFECTIVE` -> spoiled and `half-fresh` -> semi_fresh with no warning; `ripe`, `Ripe`, `unripe`, `good`, `Over-Ripe` -> fresh with exactly one warning; a Gemini from-photo run with `moldy`/`overripe`/`decayed` -> spoiled and `ripe` -> fresh with a single warning; and `test_backend_word_lists_equal_taxonomy`, which loads `ml/yolo/taxonomy.py` by path and checks the backend semi aliases equal `SEMI_WORDS` plus `use soon`, the spoiled aliases equal `SPOILED_WORDS` (the exact `spoiled` value is handled separately), no `FRESH_WORDS` entry is aliased to another class, and the `FRESHNESS` tuples match.
 - Note: `Over-Ripe` (hyphenated) is not the taxonomy word `overripe`, so it stays fresh + warning in both backend and serve. They agree.
 - No new backend bugs.
+
+## 2026-10-10 - receipt abbreviations (branch feat/receipt-abbrevs)
+
+**Result: PASS.** Backend `pytest -q --cov=app` = **523 passed, 1 skipped, coverage 96%** (`fwr_test`, localhost:5433; no train.py/xcodebuild running). Pipeline `pytest pipeline/tests -o python_files="test_*.py qa_*.py"` = 164 passed, 2 skipped, including the no-duplicate-keys / shared-keys-agree test. New file `tests/test_food_group_abbrevs.py`.
+
+| Checked | Result |
+|---|---|
+| 44 receipt-style names using the new abbreviations -> expected group (`GV SKM MLK GAL` dairy, `CHKN BRST BNLS` protein, `ORG BROC CROWNS` veggies, `STRAWB 1LB` fruit, `OJ NFC 52OZ` pantry, `RCE JASMINE` grains, `SLMN FILLET` protein, `PNAPL CHUNKS` fruit, ...) | ok |
+| All 46 listed keys present in `ABBREVIATIONS`; `gr pot pine ban straw` absent; keys lowercase alpha | ok |
+| #22's 39-row table (`test_food_group_names.py`) unchanged | ok |
+| No key shared with pipeline `abbreviations.json` with a different expansion | ok |
+| `TOM ROMA` -> veggies (tomato); `TOMMY'S`, `TOMMYS`, `ATOM`, `CUSTOM` do not hit (whole-token; `TOMMY'S` tokenises to `tommy`,`s`) | ok |
+| `CUC` inside `CUCINA`, `ACUC` no hit; `CUCINA PASTA SAUCE` -> pantry | ok |
+| `GRP RED` fruit; `GROUP PURCHASE FEE`, `GROUPER` not fruit | ok |
+| `BREADED CHICKEN`, `BRED CHICKEN` -> protein (protein is checked before grains); `BRED` alone -> grains | ok |
+| Priority: `STRAWB YOGURT`, `PEPR JACK CHEESE` dairy; `APPL JCE`, `ORNG JCE` pantry; `TOM TURKEY` protein | ok |
+| Pipeline `clean()` for `GV WHL MILK GAL` (dairy), `KS ORG EGGS` (protein), `BANANAS` (fruit) unchanged | ok |
+
+### Findings
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| BE-7 | info | Backend and pipeline disagree on juice: backend `OJ NFC 52OZ` / `APPL JCE` -> pantry, pipeline receipt output -> `other` (class `juice`, documented in PIPELINE.md). Same name, two groups depending on entry point. | open, optional |
