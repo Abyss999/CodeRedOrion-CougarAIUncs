@@ -810,6 +810,39 @@ Splits: train 3,761 / val 348 / held-out 567 images. This is a single-source dat
 
 | ID | Sev | Summary | Status |
 |---|---|---|---|
-| ML-57 | low | Cell 5 runs `!python train.py ...` (both branches): a crash is ignored, and `train.py` never clears `<RUN_DIR>/export`, so cell 6 can report "DRY RUN OK" (or load/download `detector.pt`) from an earlier run's export with the same RUN_ID. Fix: `subprocess.run([...], check=True)` as in cell 4 | open (builder) |
+| ML-57 | low | Cell 5 runs `!python train.py ...` (both branches): a crash is ignored, and `train.py` never clears `<RUN_DIR>/export`, so cell 6 can report "DRY RUN OK" (or load/download `detector.pt`) from an earlier run's export with the same RUN_ID. Fix: `subprocess.run([...], check=True)` as in cell 4 | **fixed** (verified 2026-10-11, below) |
 
 **Verdict: PASS** for the cell-4 fix and the agrifreshnet leakage re-check. The 1.12% was the stale dataset; the branch code gives 0.35%. ML-57 does not block this PR.
+
+## 2026-10-11: ML-57 fix (cell 5) + full eight-source rebuild gates (PR #62)
+
+**ML-57: verified fixed** (uncommitted diff, cell 5 only, plus `ml/yolo/tests/test_notebook_dry_run.py`).
+- `shutil.rmtree(f"{RUN_DIR}/export", ignore_errors=True)` then `run_train(...)` = `subprocess.run([sys.executable, "train.py", ...], check=True)`. Argument list is token-for-token the old `!python train.py` line: `--data`, `--epochs`/`--cls-epochs` 1/1 (dry, `/content/fwr_data_dry`) and 80/30 (real, `/content/fwr_data`), `--device auto --weights last --resume --semi-fresh-threshold SEMI_FRESH_THRESHOLD --project RUN_DIR`. `shutil`, `subprocess`, `sys`, `RUN_DIR`, `DRY_RUN` are defined in cell 1; cwd is `ml/yolo` (cell 1 `%cd`).
+- Deleting the export is safe: `train.py` always rebuilds `<project>/export` (mkdir, copy detector.pt / freshness.pt, run `export_predictions`, copy heldout_gt / manifest / class_names / report), also when `--resume` returns "skipped" for both stages; nothing reads the old export. Checkpoints live in `<project>/det` and `<project>/cls` and are not touched; the Drive dataset cache (`CACHE_DIR/fwr_data*`) is a sibling, not under `export`.
+- Executed the real cell-5 source against a stub `train.py` in a temp dir: dry and real argv match the old command exactly, stale `export/` is gone, det/cls `last.pt` kept; a stub exiting 3 raises `CalledProcessError` (Run all stops before cell 6; cell 6 run by hand then fails "export is missing"). Regression test added: `ml/eval/tests/test_notebook_train_cell.py`.
+- Note (not a bug): `subprocess.run` without capture relies on Colab forwarding child stdout to the cell (cell 3 already does the same for the pipeline commands). Confirm on the dry run that epoch progress is visible.
+
+**Full rebuild gates** on the builder's `mldata/repro_full/fwr_data` (all eight active sources, food_hvk7g pending; built with the branch's `prepare_dataset.py`). Re-run by me into `mldata/repro_full/qa_leak`, `qa_strat`, `qa_sib`; dataset not modified (sha256 of report / manifest / heldout_gt unchanged, 67,250 files, no `.cache`).
+
+| Gate | Result |
+|---|---|
+| `leakage_check.py` | **ML-21 PASS**, exit 0, session audit `_all_ok` true. 0 within 60 s / 300 s for every source. pHash: **agrifreshnet 2 / 754 = 0.27%** (both pairs distance 6, different capture dates), fresh_stale 0/229, fridge_objects 0/114, hien_fridge 0/183, vegqual 0/137, dafif 0/88, food_spoilage_status 0/27, meatscan 0 held-out. Identical to the builder's leakage.json |
+| `stratification_check.py` | **PASS, FAILURES: none**, exit 0; never-trained none; report_vs_manifest all ok; required cells missing from held-out: none unexpected (not measurable: beef/fresh, beef/spoiled, onion/fresh, onion/spoiled). Info: bitter_melon/spoiled and papaya/semi_fresh have no val image |
+| `parent_sibling_check.py all` | exit 0; 0 straddling parents and 0 held-out siblings in all 8 sources |
+| cls dirs | train and val both exactly fresh, semi_fresh, spoiled |
+
+Splits: train 11,777 / val 1,241 / held-out 1,532 images, 23 active classes, `split_grouping` session.
+
+**Why main's Colab dataset had 1.12% and this one 0.27% (likely, not proven):** the branch's `prepare_dataset.py` diff does not touch pHash or near-duplicate logic; it changes grouping (`parent_stem`, ML-50) and the ML-53 demotion moves. Those, plus a different source mix (5 vs 8), reshuffle which groups land in held-out. The residual pairs are borderline (distance 6 in `imagehash`) and prepare uses its own pHash (up to 2 bits from `imagehash`), so a few can survive its near-dup drop. The margin under 1% is assignment-dependent, not guaranteed by construction; the gate remains the protection.
+
+**New bug (blocks the Colab run):**
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-58 | high | Cell 4 prints `{x: v[x] for x in (..., "phash_near_dup", "phash_near_dup_pct")}` for every source in leakage.json, but `leakage_check.py` writes no pHash keys for a source with 0 held-out originals. meatscan is train-only, so on this branch's data the cell raises `KeyError: 'phash_near_dup'` right after the leakage check passes; training never starts. Reproduced on my `qa_leak/leakage.json`. Fix in the notebook: `v.get(x)` in the print (the asserts use `criterion`, which is present). Pinned by `test_ml58_cell4_leakage_loop_handles_train_only_source` | **fixed** (verified 2026-10-11, below) |
+
+**Tests:** `ml/yolo/tests` 64 passed; `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped; `ml/eval/tests` 223 passed, 1 failed (the ML-58 test, expected).
+
+**Verdict:** ML-57 **fixed, PASS**. Full eight-source dataset **PASS** on every gate. PR #62 **FAIL until ML-58 is fixed**: the notebook would stop in cell 4 on any build that includes meatscan.
+
+**ML-58 re-check (2026-10-11): fixed.** The only new notebook hunk is cell 4's print, now `v.get(x)`; both asserts are unchanged. Replaying the loop on `mldata/repro_full/qa_leak/leakage.json` runs through all 8 sources (meatscan prints `phash_near_dup: None`, and every `criterion` assert passes). Tests: `ml/yolo/tests` 64 passed; `ml/eval/tests` 224 passed (including the ML-58 test); `pipeline/tests/qa_new_sources.py` 94 passed, 2 skipped. **Final verdict for PR #62: PASS** (ML-57 and ML-58 fixed, every gate on the eight-source build passes; ML-51, ML-52 and ML-55 remain labelled risks).
