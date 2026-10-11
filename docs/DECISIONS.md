@@ -2,6 +2,13 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — Photo enrichment with Gemini (PR #79, FrankinstyLe; rulings recorded by food-orch)
+- **Crops only on the YOLO path.** When YOLO produced boxes, each detection is cut from the photo (512 px JPEG, metadata dropped, nothing stored) and sent to Gemini. On the Gemini-vision fallback there are no boxes, so the call is text-only. *Why:* the fallback has already looked at the photo, and a crop is the least data that still lets the model see the food.
+- **Model knowledge only, no grounding.** Expiry days and nutrition come from the model's own knowledge, with no search or retrieval. They are estimates: `nutrition.estimated` is always true, and dates reuse `expiry_source: "gemini"`, clamped to 0..2 x the table default + 3. *Why:* grounding adds latency and cost for no demo value.
+- **Nutrition is per 100 g** (`items.nutrition`, `basis: "per_100g"`), never per item or per serving. *Why:* the item's weight is unknown, and it matches the core keys of the recipe `macros` object so one UI component serves both.
+- **Gemini returns numbers only, no free text.** The server validates every value (bounds, macro mass, kcal near 4P+4C+9F) and turns anything unusable into `null`. *Why:* free text from a model would reach the UI and the prompt path unchecked.
+- Enrichment is opt-in (`enrich=expiry,nutrition`) and never changes the HTTP status: any failure is a 200 with the table dates. Privacy: on Google's unpaid Gemini tier, submitted content may be used to improve products, so real users' photos need a billing-enabled key.
+
 ## 2026-10-11 — Design feedback round 3 (teammate wedwqc, 08:28–08:46; canvas v52–v53; design QA READY WITH FIXES, fixes applied)
 - **Owner: Home has a settings gear, never a profile picture** (44 pt, VoiceOver "Settings"), on Home, HomeEmpty and ServerError.
 - **Owner: the Home tip stays an observation**, one line and dismissible. No recipe suggestions in the tip.
