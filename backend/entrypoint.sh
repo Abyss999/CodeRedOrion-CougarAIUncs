@@ -15,4 +15,8 @@ until flask --app wsgi db upgrade; do
   sleep 3
 done
 
-exec gunicorn -b 0.0.0.0:5055 wsgi:app
+# One worker process (the recipe cache is in-process) with threads, so a slow Gemini call
+# doesn't block other requests. gthread keeps heartbeating while a request thread is busy, so
+# --timeout only reaps a truly hung worker; 120 s still covers a slow Gemini call plus a retry.
+exec gunicorn -b 0.0.0.0:5055 --workers 1 --worker-class gthread \
+  --threads "${GUNICORN_THREADS:-4}" --timeout 120 --graceful-timeout 30 wsgi:app

@@ -573,3 +573,38 @@ Targeted runs, from `backend/` on `fwr_test`:
 | BE-16 | low | PR 3: one shared `google_auth.email_verified` (bool True, or "true" in any case after trimming) is used by verification and by linking | fixed, verified |
 
 **No open bugs.** N1 to N3 are resolved in `docs/API.md` and N4 is resolved on main (now merged). This final verdict supersedes the interim verdicts above.
+
+## chore/gunicorn-gthread (backend QA)
+Change under test: `backend/entrypoint.sh` now runs
+`exec gunicorn -b 0.0.0.0:5055 --workers 1 --worker-class gthread --threads "${GUNICORN_THREADS:-4}" --timeout 120 --graceful-timeout 30 wsgi:app`.
+No Python changes. The builder's audit says the module-level caches are already lock-protected. These tests check that claim.
+
+### New tests (QA-owned)
+- `tests/test_gunicorn_gthread.py` (3 tests, about 9 s, skipped if gunicorn is not importable)
+  - `test_entrypoint_runs_one_gthread_process`: parses the `exec gunicorn` line from `entrypoint.sh`, joining continuations and expanding `${VAR:-default}`. It asserts gthread, `--workers 1`, `--threads` of `${GUNICORN_THREADS:-4}` (4 by default, and it follows the env var), `--timeout 120`, `--graceful-timeout 30`, bind `0.0.0.0:5055`, no `--preload`, `wsgi:app`, and that `db upgrade` runs before `exec gunicorn`.
+  - Real-gunicorn fixture: starts `python -m gunicorn` with the flags parsed from the entrypoint. Only the bind (a free `127.0.0.1` port) and the app spec (`tests.gthread_wsgi:app`) are swapped. `tests/gthread_wsgi.py` builds the real app on `TEST_DATABASE_URL` with test config and replaces `gemini._generate` with a 3 s sleep. It never creates, drops or migrates anything, and it refuses to start without `FWR_GTHREAD_QA=1`. The DB is safe because the fixture depends on the session `app` fixture, so the schema is already built under the advisory lock. Users, tokens and items come from the normal `signup`/`make_item` fixtures. gunicorn is stopped by its own PID (SIGTERM, then SIGKILL after 15 s) before the test returns.
+  - `test_fast_requests_not_blocked_by_slow_gemini_call`: sends one `POST /items/parse-text` (3 s, authed). While it is in flight, it sends 3x `GET /health` and 3x authed `GET /items`. Each fast request must be 200 in under 1 s, and all of them must finish before the slow call does. `/items` returns the user's item through the DB. The slow call returns 200 with the stubbed candidate in about 3 s.
+  - `test_four_concurrent_slow_calls_run_in_parallel`: 4 users send `parse-text` at the same time. Wall time must be under 1.8x one call (measured about 3.1 s; serial would be 12 s).
+- `tests/test_thread_safety.py` (7 tests, about 2.5 s; the switch interval is set to 10 us to force interleaving)
+  - recipe_cache, 16 threads x 300 ops on disjoint users (put, then get, invalidate by changing the key, get): no exceptions or cross-user data, put-then-get always hits, an old key is never served, and exactly one well-formed hit/miss log line per get, with hits and misses matching what `get` returned.
+  - recipe_cache with `MAX_USERS=8`: 16 workers x 4 users, plus a thread calling `clear()` in a loop and an observer that samples the size under `_lock`. Size stays at or below 8 at every sample and at the end, any non-None result is exactly that user's current entry, and log lines equal gets.
+  - JWKS, using a stubbed slow fetcher and a frozen clock: 8 concurrent cold lookups do exactly 1 fetch. 8 concurrent lookups on stale keys do exactly 1 refetch. Stale keys while Google is down: all 8 verify with the stale key after 1 attempt. Unknown kids: 8 concurrent tokens with a newly rotated `k2` do exactly 1 refetch and all verify, 8 junk kids in the same window do 0 refetches, and 8 junk kids in the next window do exactly 1.
+  - `gemini._generate` with a stubbed `genai.Client`: 16 threads x 6 calls (a third of them non-transient errors). Exactly 96 usage lines, each a complete line matching the full `gemini_usage ...` format (ok lines carry token counts, error lines carry `null`), and the per-thread ok/error counts match the calls.
+
+### Negative controls (scratch plugins, not committed)
+- Old entrypoint (`exec gunicorn -b 0.0.0.0:5055 wsgi:app`, sync worker): all 3 gunicorn tests fail. The flag test fails, the fast requests are blocked behind the slow call, and the 4 slow calls take 12.08 s.
+- `google_auth._lock` replaced by a no-op: the 3 JWKS single-flight tests fail (more than 1 fetch).
+- `recipe_cache._lock` replaced by a no-op: the recipe-cache tests still pass. Under the GIL, the individual OrderedDict operations don't interleave visibly in this harness. So these tests guard behaviour (no leaks, the bound, log agreement) but would not catch the lock being removed. The lock is still needed for correctness on paper (eviction loop and get-then-pop).
+
+### Targeted runs
+- `test_thread_safety.py` x3: 7 passed each time.
+- `test_gunicorn_gthread.py` + `test_oauth_google.py` + `test_gemini_usage.py` + `test_insights_wave2_recipes.py`: 259 passed.
+- Every gunicorn PID started was confirmed gone afterwards.
+
+### Bugs
+None found. The latest ID is still BE-16.
+
+**Interim verdict: PASS pending the full suite** (the orchestrator runs it).
+
+### Final verdict for chore/gunicorn-gthread (backend)
+**Result: PASS (final).** The orchestrator ran the full suite on `chore/gunicorn-gthread` at HEAD a9b6a11 (clean tree): `pytest -q --cov=app` = **1421 passed, 1 skipped in 154 s, total coverage 98%**. No gunicorn processes were left afterwards. **No open bugs** (the latest ID is still BE-16). This supersedes the interim verdict above.

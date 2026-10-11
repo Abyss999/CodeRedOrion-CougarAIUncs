@@ -23,7 +23,7 @@ a{color:#1F4D2B}a:hover{color:#13261A}
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
       <div>
         <h2 id="rr-title" style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 22px">Why did it go?</h2>
-        <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Baby spinach · one tap and you're done</p>
+        <p style="margin: 2px 0 0; font-size: 14px; color: #45584A">Baby spinach</p>
       </div>
     </header>
 
@@ -31,12 +31,10 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
         <button style="min-height: 96px; border: 0; border-radius: 16px; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF; padding: 14px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; text-align: left; color: #13261A">
           <span style="font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">{{r.label}}</span>
-          <span style="font-size: 13px; color: #45584A">{{r.hint}}</span>
         </button>
       </sc-for>
     </div>
 
-    <p style="margin: 0; padding: 12px 14px; border-radius: 14px; background: #EEF5D6; font-size: 14px; line-height: 1.45; color: #2B3D30">Your reasons shape your tips. Spinach was forgotten twice before, so next time we'll remind you on day 3.</p>
   </section>
 </div>
 </x-dc>
@@ -45,10 +43,10 @@ class Component extends DCLogic {
 renderVals() {
 return {
 reasons: [
-{ label: 'Expired', hint: 'Went off before I got to it' },
-{ label: 'Forgot about it', hint: 'Lost at the back' },
-{ label: "Didn't like it", hint: 'Not for me' },
-{ label: 'Other', hint: 'Something else' }
+{ label: 'Expired' },
+{ label: 'Forgot about it' },
+{ label: "Didn't like it" },
+{ label: 'Other' }
 ]
 };
 }

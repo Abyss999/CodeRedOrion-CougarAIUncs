@@ -11,7 +11,7 @@ the Mac" table below and reports to `food-main`. Nothing is built or tested on t
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
-all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). #47 (iOS foundation) and #54 (receipt candidates) merged. Backend PR 3 (Google OAuth) merged (#60). In flight: the Fridge + removal screen on the Mac. iOS Wave 2 is underway on the Mac (foundation
+all docs are merged on `main`. Backend PRs 1 and 2 merged (#50, #57). README/BiteDown merged (#49). #47 (iOS foundation) and #54 (receipt candidates) merged. Backend PR 3 (Google OAuth) merged (#60). gthread merged (#63). The Fridge + removal screen (#64) is fixing CI (Undo-toast UI tests on the slow runner). **Design feedback round and dark-mode artboards are on the canvas** (2026-10-11): see DECISIONS. iOS Wave 2 is underway on the Mac (foundation
 first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Photo add runs on the Gemini fallback until their model lands.**
 
 | Area | State | Evidence |
@@ -47,7 +47,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
    7. Social (pantry, composer, connect, group)
    8. Auth (email + Google)
    9. Settings
-3. **Owner:** the Google OAuth client (steps in `docs/SETUP.md`). **Mac:** the gthread one-liner (one process, threads, lock-guarded recipe cache) before integration QA. **Owner:** the Google OAuth client.
+3. **Owner:** the Google OAuth client (steps in `docs/SETUP.md`). gthread is merged (#63). **Owner:** the Google OAuth client.
 4. ~~The YOLO gate, `ml/serve` weights and the from-photo `source: "yolo"` check~~ are paused (see 1).
 5. **Wave 4, integration QA:** the demo path on the full stack, then on the phone through the tunnel.
 6. **Wave 5, UI review** (Impeccable critique and polish, web-design-guidelines) once the UI is feature-complete. Then iOS QA re-runs everything.
@@ -71,7 +71,7 @@ first). **ML model work is paused (owner, 2026-10-10): a teammate owns it.** Pho
 ## In flight on the Mac (pick up here)
 | Item | Branch / PR | Worktree | Next action |
 |---|---|---|---|
-| Fridge + removal screen | not started | - | Unblocked (#47 merged): the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
+| Fridge + removal screen | #64, CI fix | `wt/ios-fridge` | Then the Fridge polish PR per the 2026-10-11 feedback: the first screen per `SCREENS.md` plus its `MOTION.md` row, with an iOS builder + iOS-frontend QA, Design delta, light/dark screenshots and a clip |
 
 **Mac notes:**
 - **Worktrees** are in `../wt/<name>` next to the main checkout. Remove merged ones with `git worktree remove`, and only the ones this project created.

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark: Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
+a{color:#B9D871}a:hover{color:#E8F0DA}
+
+body{background:#0F1A12}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1A12; display: flex; flex-direction: column">
+  <main style="flex: 1; overflow: hidden; padding: 64px 20px 0; display: flex; flex-direction: column; gap: 24px">
+    <header style="display: flex; justify-content: space-between; align-items: flex-end">
+      <div>
+        <p style="margin: 0; font-size: 15px; color: #9DB09F">Friday, Oct 10</p>
+        <h1 style="margin: 2px 0 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 30px; letter-spacing: -0.01em">Hi, Priya</h1>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px">
+      <a href="Settings.dark.dc.html" aria-label="Profile and settings" style="width: 44px; height: 44px; border-radius: 22px; background: #18261B; border: 1px solid #34483A; box-sizing: border-box; color: #B9D871; text-decoration: none; display: flex; align-items: center; justify-content: center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"></circle><circle cx="12" cy="10" r="3"></circle><path d="M6.2 18.4c1.3-2 3.4-3.2 5.8-3.2s4.5 1.2 5.8 3.2"></path></svg>
+      </a>
+      <a href="Impact.dark.dc.html" style="text-decoration: none; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-radius: 22px; background: #D9EC8F; color: #1F4D2B; font-weight: 600; font-size: 14px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19c8 0 14-6 14-14C11 5 5 11 5 19z"></path></svg>
+        13.7 lb saved
+      </a>
+      </div>
+    </header>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 20px">Use these first</h2>
+        <a href="Fridge.dark.dc.html" style="font-size: 15px; font-weight: 500">See all</a>
+      </div>
+      <div style="background: #18261B; border-radius: 16px; display: flex; flex-direction: column">
+        <sc-for list="{{soon}}" as="item" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #2A3A2D">
+            <div style="{{item.tileStyle}}">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{item.stroke}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{item.icon}}"></path></svg>
+            </div>
+            <div style="flex: 1; min-width: 0">
+              <div style="font-size: 16px; font-weight: 600">{{item.name}}</div>
+              <div style="font-size: 13px; color: #9DB09F">{{item.meta}}</div>
+            </div>
+            <span style="{{item.badgeStyle}}">{{item.when}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-family: Outfit, sans-serif; font-weight: 600; font-size: 20px">Cook tonight</h2>
+      <a href="#" style="text-decoration: none; background: #B9D871; color: #13261A; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #13261A; font-weight: 600">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2F4A2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+          Uses 3 items expiring this week</span>
+        <span style="font-family: Outfit, sans-serif; font-size: 22px; font-weight: 600; line-height: 1.2">Chicken thighs with garlicky spinach and yogurt sauce</span>
+        <span style="font-size: 14px; color: #2F4A2A">35 min · 2 servings</span>
+      </a>
+    </section>
+
+    <section style="display: flex; gap: 12px; align-items: center; padding: 0 0 0 16px; border-radius: 16px; border: 1px solid #34483A">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"></path></svg>
+      <p style="margin: 0; flex: 1; min-width: 0; padding: 14px 0; font-size: 15px; line-height: 1.45; color: #C9D6BC">Cilantro went in the bin 3 times this month.</p>
+      <button type="button" aria-label="Dismiss tip" style="width: 44px; height: 44px; margin: 2px 2px 2px 0; flex-shrink: 0; border: 0; border-radius: 14px; background: transparent; color: #9DB09F; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </button>
+    </section>
+  </main>
+
+  <nav aria-label="Tabs" style="padding: 6px 14px 26px; box-sizing: border-box">
+    <div style="height: 62px; border-radius: 31px; background: rgba(24,38,27,0.82); box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; padding: 0 5px">
+    <a href="Home.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; background: rgba(185,216,113,0.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #B9D871; font-size: 10px; font-weight: 600">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"></path></svg>Home</a>
+    <a href="#" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"></path><path d="M2 10h20"></path><path d="M9 7c0-1.2 1-1.8 1-3M14 7c0-1.2 1-1.8 1-3"></path></svg>Recipes</a>
+    <a href="AddSheet.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #B9D871; font-size: 10px; font-weight: 600">
+      <span style="width: 28px; height: 28px; border-radius: 14px; background: #B9D871; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#13261A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>Add</a>
+    <a href="Fridge.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="M6 10h12M9 5v2M9 13v3"></path></svg>Fridge</a>
+    <a href="Social.dark.dc.html" style="text-decoration: none; height: 52px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #8FA391; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.8 3.5 6"></path></svg>Social</a>
+    </div>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const urgent = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #4A2614; color: #FFB98A';
+const soon = 'font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #24361F; color: #B9D871';
+const ICON = {
+protein: 'M14.5 3.5a6 6 0 0 1 6 6c0 3.3-2.7 5.4-5.6 5.9l-3.6 3.6a2.2 2.2 0 1 1-3.1-3.1l-.6-.6a2.2 2.2 0 1 1 3.1-3.1l3.6-3.6c.5-2.9 0-5.1.2-5.1z',
+veggies: 'M7 17l-3 3M15.5 8.5l-8 8c-1.4-1.4-1.4-3.6 0-5l3-3c1.4-1.4 3.6-1.4 5 0zM15.5 8.5c.8-2.2 2.7-3.5 5-3.5M15.5 8.5c2.2-.8 3.5-2.7 3.5-5',
+dairy: 'M8 3h8v3l2 3v12H6V9l2-3zM6 9h12M8 6h8'
+};
+const tile = (bg) => 'width: 40px; height: 40px; border-radius: 12px; background: ' + bg + '; display: flex; align-items: center; justify-content: center; flex-shrink: 0';
+return {
+soon: [
+{ icon: ICON.protein, stroke: '#FF9E8A', tileStyle: tile('#3D1F1A'), name: 'Chicken thighs', meta: '1.4 lb · Protein', when: 'Today', badgeStyle: urgent },
+{ icon: ICON.veggies, stroke: '#8FD69A', tileStyle: tile('#1C3320'), name: 'Baby spinach', meta: '5 oz bag · Veggies', when: 'Tomorrow', badgeStyle: urgent },
+{ icon: ICON.dairy, stroke: '#9DB7F0', tileStyle: tile('#1C2540'), name: 'Greek yogurt', meta: '32 oz tub · Dairy', when: '2–3 days', badgeStyle: soon }
+]
+};
+}
+}
+</script>
+</body>
+</html>
