@@ -36,6 +36,10 @@ struct FridgeView: View {
         .motionAnimation(Theme.Motion.standard, value: model.banner?.id)
         .undoToast(item: $model.toast)
         .task(id: model.storage) { await model.loadIfNeeded(model.storage) }
+        // Sign-in, sign-out or a different user: reset and reload. Not fired at launch (no initial).
+        .onChange(of: env.auth.session) { old, new in
+            Task { await model.sessionChanged(from: old?.user, to: new?.user) }
+        }
         // The Undo toast appears (and its countdown starts) only after the sheet has gone.
         .sheet(item: $removing, onDismiss: { model.showPendingToast() }) { item in
             RemoveSheet(item: item) { choice in

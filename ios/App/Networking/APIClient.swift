@@ -88,7 +88,8 @@ protocol APIClient: Sendable {
 
     // MARK: People
     /// `GET /people/reachable` (coming): friends and members of your groups.
-    func reachablePeople() async throws -> [Person]
+    /// With `itemId` the backend flags the item's claimer (`isClaimer`) and sorts them first.
+    func reachablePeople(itemId: String?) async throws -> [Person]
 
     // MARK: Insights
     func impact(range: ImpactRange) async throws -> Impact
@@ -117,5 +118,6 @@ extension APIClient {
         try await removeBatch(ids: ids, outcome: outcome, recipient: .default)
     }
     func createShare(itemId: String) async throws -> Listing { try await createShare(itemId: itemId, groupId: nil) }
+    func reachablePeople() async throws -> [Person] { try await reachablePeople(itemId: nil) }
     func recipesSuggest() async throws -> [Recipe] { try await recipesSuggest(maxResults: nil, dietary: nil) }
 }

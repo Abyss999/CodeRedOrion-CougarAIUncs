@@ -23,7 +23,9 @@ struct VersionLabel: View {
             .onLongPressGesture(minimumDuration: 0.8) { showDebug = true }
             .accessibilityAddTraits(.isButton)
             .accessibilityHint("Long press for debug settings")
-            .sheet(isPresented: $showDebug) { DebugSettingsSheet(baseURL: env.baseURL) }
+            .sheet(isPresented: $showDebug) {
+                DebugSettingsSheet(baseURL: env.baseURL, api: env.api, auth: env.auth)
+            }
         #else
         label
         #endif
@@ -33,6 +35,8 @@ struct VersionLabel: View {
 #if DEBUG
 struct DebugSettingsSheet: View {
     let baseURL: BaseURLProvider
+    let api: APIClient
+    let auth: AuthStore
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var error: String?
@@ -70,6 +74,7 @@ struct DebugSettingsSheet: View {
                     } footer: {
                         Text("Overrides the Info.plist API_BASE_URL until reset. Must be http(s).")
                     }
+                    DebugAccountSection(api: api, auth: auth)
                 }
                 .onChange(of: errorTick) {
                     // After the row is inserted, bring it on screen above the keyboard. Not animated,

@@ -121,5 +121,13 @@ enum AccessibilityID {
         static let baseURLReset = "debug.baseurl.reset"
         static let baseURLError = "debug.baseurl.error"
         static let baseURLCurrent = "debug.baseurl.current"
+        static let accountEmail = "debug.account.email"
+        static let accountPassword = "debug.account.password"
+        static let accountName = "debug.account.name"
+        static let accountSignIn = "debug.account.signin"
+        static let accountSignUp = "debug.account.signup"
+        static let accountSignOut = "debug.account.signout"
+        static let accountStatus = "debug.account.status"
+        static let accountError = "debug.account.error"
     }
 }
