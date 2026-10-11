@@ -12,9 +12,10 @@ bp = Blueprint("people", __name__, url_prefix="/people")
 
 def _can_see_item(item, me) -> bool:
     """Owner; a member of the item's group pantry; or anyone the item's open listing is visible to."""
-    if item.owner_id == me:
-        return True
-    if item.group_id is not None and social.membership(item.group_id, me) is not None:
+    if item.group_id is not None:  # group pantry: CURRENT membership only (an ex-member owner is out)
+        if social.membership(item.group_id, me) is not None:
+            return True
+    elif item.owner_id == me:
         return True
     listing = ShareListing.query.filter_by(item_id=item.id, status="open").first()
     if listing is None:

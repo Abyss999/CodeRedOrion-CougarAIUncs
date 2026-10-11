@@ -8,8 +8,8 @@ from ..auth import require_auth
 from ..errors import not_found, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import WASTE_REASONS, Item
-from ..services import gemini, recipe_cache
-from ._util import json_body, parse_uuid
+from ..services import gemini, recipe_cache, social
+from ._util import check_len, json_body, parse_uuid
 
 bp = Blueprint("insights", __name__)
 
@@ -227,7 +227,7 @@ def build_tips(uid) -> list:
     params = {"uid": uid}
     tips = []
     today = date.today()
-    soon = (Item.query.filter(Item.owner_id == uid, Item.removed_at.is_(None),
+    soon = (Item.query.filter(social.caller_active_items_filter(uid),
                               Item.predicted_expiry <= today + timedelta(days=2))
             .order_by(Item.predicted_expiry, Item.added_at).all())
     past = [i.name for i in soon if i.predicted_expiry < today]
@@ -327,6 +327,8 @@ def match_uses_items(names, items) -> list:
 
 
 MAX_FOCUS = 10
+MAX_DIETARY = 10
+MAX_DIETARY_LEN = 40
 MAX_PAYLOAD_ITEMS = 20  # the soonest-expiring items sent to Gemini
 
 
@@ -346,17 +348,19 @@ def _focus_ids(body) -> list:
 @bp.post("/recipes/suggest")
 @require_auth
 def suggest_recipes():
-    body = request.get_json(silent=True) if request.data else {}
-    if not isinstance(body, dict):
-        raise validation_error("Request body must be a JSON object.")
+    body = json_body() if request.data else {}  # rejects non-objects and NUL characters
     n = body.get("max_results", 3)
     if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 10:
         raise validation_error("max_results must be an integer 1-10.")
     dietary = body.get("dietary", [])
     if not isinstance(dietary, list) or not all(isinstance(d, str) for d in dietary):
         raise validation_error("dietary must be a list of strings.")
+    if len(dietary) > MAX_DIETARY:
+        raise validation_error(f"dietary must have at most {MAX_DIETARY} entries.")
+    for d in dietary:
+        check_len(d, "dietary entry", MAX_DIETARY_LEN)
     focus_ids = _focus_ids(body)
-    active = (Item.query.filter(Item.owner_id == g.user.id, Item.removed_at.is_(None))
+    active = (Item.query.filter(social.caller_active_items_filter(g.user.id))
               .order_by(Item.predicted_expiry, Item.added_at, Item.id).all())
     mine = {i.id for i in active}
     if any(f not in mine for f in focus_ids):  # unknown, removed or someone else's: 404, as in the batch endpoints

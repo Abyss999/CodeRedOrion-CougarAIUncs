@@ -23,7 +23,9 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 
 String caps (over-limit -> `400 validation_error`): item `name` 200, item `unit` 32, `display_name` 60, `email` 254 (signup, login, `POST /friends`), `password` 256 (signup min 8; login max 256), group `name` 60, `invite_code` 64, request `text` 280. A malformed path id is `404 not_found` naming the resource ("Item/Group/User/Request/Listing not found.").
 
-Group pantry items: editing (`PATCH`), removing and restoring them (single and batch) needs CURRENT group membership, including for the user who added them. Ex-member: single endpoints `403 forbidden`; batch endpoints `404 not_found` (whole batch, no existence leak).
+`POST /recipes/suggest`: the body goes through the same JSON-object check as every endpoint (any `\u0000` in any string -> `400 validation_error`); `dietary` has at most 10 entries of at most 40 characters each (`400` otherwise).
+
+Group pantry items: editing (`PATCH`), removing and restoring them (single and batch) needs CURRENT group membership, including for the user who added them. Ex-member: single endpoints `403 forbidden`; batch endpoints `404 not_found` (whole batch, no existence leak). An ex-member's old group items are also excluded from `POST /recipes/suggest` (an `item_ids` entry naming one -> `404 not_found`, like an unknown id) and from `GET /tips` (expiry observations); `GET /people/reachable?item_id=` for such an item -> `404 not_found`. `GET /impact` is unchanged: it counts the user's own past food events.
 
 ## Health
 - ✅ `GET /health` → `200 {"status": "ok"}`
