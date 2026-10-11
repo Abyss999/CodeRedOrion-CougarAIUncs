@@ -1,7 +1,7 @@
 # Setup
 
 ## Prerequisites
-- macOS with **Xcode 16+** (iOS), **Homebrew**, `brew install xcodegen`
+- macOS with **Xcode 26** (iOS 26 SDK; the app targets iOS 18+), **Homebrew**, `brew install xcodegen`
 - **Docker Desktop** (or another Docker engine with Compose v2)
 - **Python 3.12**
 - Node (for `npx skills`), `gh` CLI logged in

@@ -41,6 +41,17 @@ def parse_date(value, field):
         raise validation_error(f"{field} must be an ISO date (YYYY-MM-DD).")
 
 
+# Upper bounds (BE-9). est_price is numeric(10,2): the largest storable value is 99,999,999.99 and
+# anything bigger overflows in Postgres (was a 500). quantity / est_weight_kg are unbounded numeric
+# columns, but huge finite floats overflow to inf in the derived weight / CO2e maths and the JSON
+# output, so they get generous sanity caps.
+MAX_NUMBER = {
+    "est_price": 99_999_999.99,
+    "quantity": 1_000_000,
+    "est_weight_kg": 100_000,
+}
+
+
 def parse_number(value, field, *, positive=False, allow_none=False):
     if value is None and allow_none:
         return None
@@ -50,6 +61,9 @@ def parse_number(value, field, *, positive=False, allow_none=False):
         raise validation_error(f"{field} must be a finite number.")
     if value < 0 or (positive and value == 0):
         raise validation_error(f"{field} must be {'positive' if positive else 'non-negative'}.")
+    hi = MAX_NUMBER.get(field)
+    if hi is not None and value > hi:
+        raise validation_error(f"{field} must be at most {hi:,}.")
     return value
 
 

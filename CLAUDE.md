@@ -1,4 +1,4 @@
-# Food Waste Reducer: agent rules
+# BiteDown: agent rules
 
 iOS app that tracks fridge and pantry food, predicts expiry, flags spoilage from photos, suggests
 recipes from expiring items, and lets friends and groups share surplus. Removing food with an

@@ -346,6 +346,121 @@ def restore_item(item_id):
     return jsonify(item=_owner_view(item))
 
 
+# ---- batch remove / restore -------------------------------------------------------------------
+BATCH_MAX = 100
+BATCH_OUTCOMES = ("used", "donated")
+
+
+def _batch_ids(body) -> list:
+    raw = body.get("item_ids")
+    if not isinstance(raw, list) or not raw:
+        raise validation_error("item_ids must be a non-empty list.")
+    if len(raw) > BATCH_MAX:
+        raise validation_error(f"At most {BATCH_MAX} item_ids per request.")
+    ids = [parse_uuid(v) for v in raw]
+    if len(set(ids)) != len(ids):
+        raise validation_error("item_ids must not contain duplicates.")
+    return ids
+
+
+def _batch_items(ids) -> list:
+    """Lock every requested item in ONE query (ordered by id, so concurrent batches can't deadlock)
+    and check visibility in one more. Any id that is unknown or that the caller may not remove
+    (another user's personal item, a group item of a group they are not in) -> 404 for the whole
+    batch, so existence does not leak. Returns the items in request order."""
+    rows = db.session.execute(db.select(Item).where(Item.id.in_(ids)).order_by(Item.id)
+                              .with_for_update()).scalars().all()
+    by_id = {i.id: i for i in rows}
+    groups = set(social.my_groups(g.user.id)) if any(
+        i.owner_id != g.user.id and i.group_id is not None for i in rows) else set()
+    for iid in ids:
+        it = by_id.get(iid)
+        if it is None or not (it.owner_id == g.user.id or (it.group_id is not None and it.group_id in groups)):
+            raise not_found("Item not found.")
+    return [by_id[i] for i in ids]
+
+
+def _batch_view(items) -> list:
+    shares = share_summaries(i.id for i in items if i.owner_id == g.user.id)
+    return [serialize_item(i, shares.get(i.id)) if i.owner_id == g.user.id
+            else serialize_item(i, include_share=False) for i in items]
+
+
+@bp.post("/remove-batch")
+@require_auth
+def remove_batch():
+    """Remove several items with one outcome (used | donated), all or nothing. Mirrors
+    `POST /items/:id/remove`: one `remove` event per item in the same transaction, donated fulfils
+    each item's open listing (recipient = its claimer)."""
+    body = json_body()
+    outcome = body.get("outcome")
+    if outcome not in BATCH_OUTCOMES:
+        raise validation_error(f"outcome must be one of {', '.join(BATCH_OUTCOMES)}.")
+    unknown = set(body) - {"item_ids", "outcome"}
+    if unknown:
+        raise validation_error(f"Unknown fields: {', '.join(sorted(unknown))}.")
+    ids = _batch_ids(body)
+    items = _batch_items(ids)
+    if any(i.removed_at is not None for i in items):
+        raise ApiError(409, "already_removed", "One or more items have already been removed.")
+
+    now = datetime.now(timezone.utc)
+    for item in items:
+        item.removed_at, item.outcome, item.waste_reason = now, outcome, None
+        item.removed_after_expiry = now.date() > item.predicted_expiry
+        if item.est_weight_kg is None:
+            item.est_weight_kg = impact.estimate_weight_kg(item.category, item.quantity, item.unit)
+        db.session.add(_event(item, "remove", user_id=g.user.id, outcome=outcome, waste_reason=None,
+                              co2e_kg=impact.co2e_kg(item.category, item.est_weight_kg)))
+    if outcome == "donated":
+        for listing in ShareListing.query.filter(ShareListing.item_id.in_(ids),
+                                                 ShareListing.status == "open").all():
+            listing.status, listing.fulfilled_at, listing.recipient_id = "fulfilled", now, listing.claimed_by
+    out = _batch_view(items)  # before commit: expire_on_commit would reload every item one by one
+    db.session.commit()
+    return jsonify(items=out)
+
+
+@bp.post("/restore-batch")
+@require_auth
+def restore_batch():
+    """Undo several removals (each < 10 minutes old), all or nothing. Mirrors
+    `POST /items/:id/restore`: deletes each item's `remove` event and reopens listings the removal
+    fulfilled, in one transaction under the row locks."""
+    body = json_body()
+    unknown = set(body) - {"item_ids"}
+    if unknown:
+        raise validation_error(f"Unknown fields: {', '.join(sorted(unknown))}.")
+    ids = _batch_ids(body)
+    items = _batch_items(ids)
+    if any(i.removed_at is None for i in items):
+        raise ApiError(409, "not_removed", "One or more items have not been removed.")
+    now = datetime.now(timezone.utc)
+    if any(now - i.removed_at > RESTORE_WINDOW for i in items):
+        raise ApiError(409, "restore_window_expired", "Items can only be restored within 10 minutes of removal.")
+
+    removed_at = {i.id: i.removed_at for i in items}
+    since = min(removed_at.values()) - timedelta(minutes=1)
+    # One query for every candidate event; per item keep the latest one written after its removal.
+    latest = {}
+    for ev in (FoodEvent.query.filter(FoodEvent.item_id.in_(ids), FoodEvent.event_type == "remove",
+                                      FoodEvent.time >= since).order_by(FoodEvent.time.desc()).all()):
+        if ev.item_id not in latest and ev.time >= removed_at[ev.item_id] - timedelta(minutes=1):
+            latest[ev.item_id] = ev
+    if latest:
+        db.session.query(FoodEvent).filter(FoodEvent.id.in_([e.id for e in latest.values()]),
+                                           FoodEvent.time >= since).delete(synchronize_session=False)
+    for listing in ShareListing.query.filter(ShareListing.item_id.in_(ids),
+                                             ShareListing.status == "fulfilled").all():
+        if listing.fulfilled_at == removed_at[listing.item_id]:
+            listing.status, listing.fulfilled_at, listing.recipient_id = "open", None, None
+    for item in items:
+        item.removed_at = item.outcome = item.waste_reason = item.removed_after_expiry = None
+    out = _batch_view(items)  # before commit (see remove_batch); the summary query autoflushes
+    db.session.commit()
+    return jsonify(items=out)
+
+
 # ---- adding food: parse / photo / receipt / barcode -------------------------------------------
 
 @bp.post("/parse-text")
