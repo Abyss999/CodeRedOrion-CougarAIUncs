@@ -20,6 +20,8 @@ actor MockAPIClient: APIClient {
         var expiredSession = false
         /// `fromPhoto` finds nothing (`-UITestPhotoNone`).
         var photoFindsNothing = false
+        /// `impact` returns zeros (the `empty` seed): the Impact empty state.
+        var emptyImpact = false
     }
 
     private(set) var behavior: Behavior
@@ -59,7 +61,7 @@ actor MockAPIClient: APIClient {
         if let e = behavior.failures[method] { throw e }
         if authenticated, behavior.expiredSession {
             signedInUser = nil
-            await auth?.signOut()
+            await auth?.expireSession()
             throw APIError.unauthorized
         }
         if authenticated, auth != nil, signedInUser == nil, await auth?.isSignedIn == false { throw APIError.unauthorized }
@@ -327,7 +329,7 @@ actor MockAPIClient: APIClient {
 
     func impact(range: ImpactRange) async throws -> Impact {
         try await gate("impact")
-        return MockData.impact(range: range)
+        return behavior.emptyImpact ? MockData.emptyImpact(range: range) : MockData.impact(range: range)
     }
 
     func tips() async throws -> [Tip] { try await gate("tips"); return MockData.tips }

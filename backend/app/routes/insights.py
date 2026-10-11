@@ -300,6 +300,18 @@ def clean_servings(v):
     return int(v) if 1 <= v <= 20 else None
 
 
+def clean_minutes(v):
+    """Integer 1-600, else None (the caller drops the recipe: the iOS client needs a non-null Int)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    v = int(round(v))
+    return v if 1 <= v <= 600 else None
+
+
+def clean_str_list(v) -> list:
+    return [x for x in v if isinstance(x, str)] if isinstance(v, list) else []
+
+
 def _norm(name) -> str:
     return " ".join(str(name).lower().split())
 
@@ -386,10 +398,17 @@ def suggest_recipes():
         if not isinstance(r, dict):
             continue
         r = dict(r)
+        title, minutes = r.get("title"), clean_minutes(r.get("minutes"))
+        if not isinstance(title, str) or not title.strip() or minutes is None:
+            continue  # the iOS client decodes title: String and minutes: Int, so one bad recipe would break the list
+        r["title"], r["minutes"] = title.strip(), minutes
+        r["steps"] = clean_str_list(r.get("steps"))
+        r["missing_items"] = clean_str_list(r.get("missing_items"))
         r["servings"] = clean_servings(r.get("servings"))
         r["uses_items"] = match_uses_items(r.get("uses_items"), items)
         r["macros"] = clean_macros(r.get("macros"))
         r["macros_estimated"] = True
         out.append(r)
+    out = out[:n]  # Gemini was asked for a few spares; cut to the caller's max_results after filtering
     recipe_cache.put(g.user.id, key, out)
     return jsonify(recipes=out)

@@ -2,13 +2,14 @@
 
 _The app is **BiteDown** (owner, 2026-10-10; see `docs/DECISIONS.md`). Internal names such as `FoodWasteReducer` stay._
 
-_Last updated: 2026-10-11 (checkpoint 10). **`food-main` (VPS) orchestrates**: it plans, rules, reviews and merges,
+_Last updated: 2026-10-11 (checkpoint 11). **`food-main` (VPS) orchestrates**: it plans, rules, reviews and merges,
 and owns the canvas and the orchestrator docs. **`food-main-mac` (the Mac) does all the building**: builder + QA
 sub-agents (**Sonnet**, owner preference), Xcode and simulators, Docker and every test run, plus any
 `.github/workflows` push. The owner also lets the Mac merge a PR when it judges it ready, and edit the canvas when
 the owner asks. **`food-orch`** (a second Mac session, since checkpoint 8) took over from `food-main-mac`: independent QA on
 teammate PRs, canvas rounds when handed the canvas (round 3 is done, and the canvas is back with `food-main`) and this file at
-checkpoints. All three update this file and the affected `docs/` at
+checkpoints. **Since checkpoint 10:** `food-modal-test` (iOS simulator test pass) and the "PR merge review" session own
+merges on the Mac; `food-main` reviews the Auth PR. All of them update this file and the affected `docs/` at
 every checkpoint (`CLAUDE.md` Rules). Rules: [`CLAUDE.md`](CLAUDE.md)._
 
 ## Current status
@@ -17,15 +18,20 @@ isn't done (see the honesty list). The design gate is closed (canvas v51 = #75);
 merged (#74, #76). **PR0 "shared foundation" is merged (#81).** Five screen branches are built and in iOS QA on the Mac:
 Fridge polish, Add 2a (photo), Home, Impact and Auth (see In flight). Canvas round 4 is merged (v54, #91). Gemini photo
 enrichment (#79) is merged, and its four QA bugs are re-verified (#84). The ML compose service (#89) and the ML-69 fix (#88)
-are merged.
+are merged. **Since checkpoint 10:** bounded Gemini timeouts (#94), upload validation (#102), the friend QR + pickup spot
+design (canvas v55, #99), the Gemini quota ruling (#100), the receipt Gemini-fallback ruling (#101) and Google OAuth done (#103)
+are merged. **Gemini:** no live calls from agents or QA (quota, #100).
 
 | Area | State | Evidence |
 |---|---|---|
-| Backend: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | full suite 2199 passed / 98% (#79) |
+| Backend: auth, items, removal, events, impact, tips, social, AI endpoints, food groups, macros, Gemini cost logging | merged | full suite 2313 passed / 98% (#94) |
 | Items wave 2 (#50), insights wave 2 + batch remove/restore (#57), Google sign-in (#60), gthread (#63), multi-audience requests + tips (#66) | merged | BE-8 … BE-16 fixed |
 | **Given to** recipient: `recipient_id` omitted / null / user on remove and remove-batch; self → 400 | merged (#74) | 1642 passed / 98%; BE-17 fixed |
 | UI gaps: `GET /requests?mine=1`, owner `share.audience`, `GET /auth/me`, `GET /people/reachable` | merged (#76) | 1708 passed / 98% |
 | Receipts → candidates, Gemini guide + retry (Jose) | merged (#54) | BE-11–14 fixed |
+| Bounded Gemini timeouts (`GEMINI_TIMEOUT_S`, every call site) + recipe `title`/`minutes` validation | merged (#94; fold #98) | QA PASS, 2313 passed; BE-23/24/25 fixed. Commit d7ace18 (after the QA PASS) re-checked by food-orch: PASS |
+| Reject non-image uploads before any upstream call; HTTP `code=` in the Gemini usage log | merged (#102; fold #107) | independent QA PASS; BE-26/27/28 fixed |
+| **Receipt Gemini vision fallback** (`source: ocr\|gemini`; ruling #101) + `ml/serve` `/ocr` hardening (Truc) | **#95 open: independent QA FAIL** | BE-29 (stale call-site count, CI red), BE-30 (`_to_num` locale formats + unicode minus), BE-31 (low, retry latency), ML-73 (low, OCR warmup). Back with Truc |
 | Gemini photo enrichment: `enrich=expiry,nutrition` on from-photo, `items.nutrition` (migration 0007), `item_ids` on `/recipes/suggest` (Truc) | merged (#79) | independent QA PASS WITH OPEN BUGS; BE-19/20/22 verified fixed, BE-21 accepted as documented (#84) |
 | iOS foundation (#47), **Fridge + removal + Undo** (#64) and **PR0 shared foundation** (#81) | merged | Fridge: 17 Pro + SE AX5 unit 146 / UI 51; IOS-12 fixed; IOS-13 open (low); two CI flakes fixed in tests. PR0: 17 Pro unit 354 / UI 51, SE AX5 34/34, IOS-14–18 fixed |
 | ML data, 8 sources (#62), Colab unrar build fix (#73, Jose) | merged | independent QA PASS on both; ML-64 (low) + ML-65 (info) open for Jose |
@@ -34,7 +40,7 @@ are merged.
 | **First trained model** `fwr_20261011` (FAST: detector 30 ep ≈ 26 min, classifier 10 ep ≈ 17 min on a T4) | trained, **not scored: its metrics must not be quoted until the ML gate in `docs/QA.md` runs on it** (the Drive copy of `predictions.jsonl` was truncated) | weights: Drive `fwr_runs/fwr_20261011/data_a4729025_fast/export/`, local `../mldata/models/fwr_fast_20261011` (`current` →). The Drive `predictions.jsonl` was truncated by Drive sync; score from `export.zip` |
 | Compose `ml` service (opt-in profile, no host port, CPU, OCR off) + `OCR_BACKEND=off` (Jose) | merged (#89) | ML QA PASS (ML-70–72 fixed, incl. the serve image that never built); photo → YOLO → Gemini enrichment → `POST /items` verified end to end in containers on 2026-10-11 |
 | ML training, YOLO gate, `ml/serve` weights, GLM-OCR | **teammate LemurTech22's track**; Colab can run | don't schedule agents for it unless the owner asks |
-| Design | 38 screens (22 + the gap audit's 16, incl. FulfilConfirm) + dark artboards; canvas v54 (round 4), mirrored in #91 (round 3: v53, #82) | `docs/design/`; design QA READY WITH FIXES, fixes applied |
+| Design | 38 screens + dark artboards, plus friend QR + pickup spot (FriendScan, FriendAdded, PickupSpot; canvas v55, #99); round 4 is v54 (#91) | `docs/design/`; design QA READY WITH FIXES, fixes applied |
 
 ## Next steps
 1. **Finish QA on the five built screen branches** (see In flight): Fridge polish, Add 2a, Home, Impact, Auth. Then commit
@@ -46,8 +52,11 @@ are merged.
    the Impact PR (or whichever lands second) wires Home's `onOpenImpact`.
 3. **On merge, the orchestrator adds the new Theme tokens to `DESIGN_SYSTEM.md`:** `toastTrack` / `toastBar` (Fridge polish),
    `onLime` (Home), `chartDonated` (Impact; local in `ImpactParts.swift` for now) and the `Theme.AddFlow` sizes (Add 2a).
-4. **wedwqc's canvas threads** (round 3) are applied but still open on the canvas: they weren't sent to Claude, so a person with edit access must resolve them.
-5. **Owner:** create the Google OAuth iOS client (`docs/SETUP.md`).
+4. **wedwqc's canvas threads** (rounds 3–4) are applied but still open on the canvas: they weren't sent to Claude, so a person with edit access must resolve them.
+5. **Open PR queue:** Auth merges first (food-main reviews it). Then:
+   - **#95** (Truc): independent QA FAIL. It waits on Truc's fixes for BE-29/30, then food-orch re-verifies with the full suites.
+   - **#104** (backend QA sweep) and **#105** (iOS QA sweep), by duwudlekat. They supersede the closed #97 and need independent QA plus a collision check with the screen PRs. #105's sign-in must be DEBUG-only.
+   - **#106** (Truc, README for vision and receipts): docs review.
 6. **Teammate (LemurTech22):** ML QA scores `fwr_20261011` on the held-out split
    (`ml/eval/detection_metrics.py` + `check_thresholds.py` on the `export.zip` predictions) before photos switch from the Gemini
    fallback to YOLO in the demo. Early spot check: names right, some fresh items called spoiled (they then skip Gemini enrichment
@@ -113,11 +122,11 @@ are merged.
 
 ## Honesty list (what the demo fakes; say so in the demo script)
 - **Photo detection:** the Gemini fallback (`source: "gemini"`) until the teammate's YOLO lands. "Check again" works the same way.
-- **Receipt OCR:** no OCR service, so live returns 502. The demo uses Mock, or shows the receipt tile as unavailable.
+- **Receipt OCR:** no OCR engine is deployed. Once #95 merges, receipts fall back to Gemini vision (`source: "gemini"`); until then live returns 502, and the demo uses Mock or shows the receipt tile as unavailable.
 - **Barcode:**
   - **Scanner:** `DataScannerViewController` doesn't run on the Simulator, so the Simulator uses a DEBUG manual-code field.
   - **Lookup:** Open Food Facts is real.
-- **Google sign-in:** hidden until the owner's OAuth client id exists.
+- **Google sign-in:** the OAuth client exists (#103). The Auth PR turns `googleSignInEnabled` on.
 - **Gemini-generated:** recipes, tips' wording and macros are labelled estimates.
 - **Static content:** spoilage signs ("What to look for").
 - **Client-side:** lb/oz conversion. Units, default storage and currency are on-device only.
@@ -132,7 +141,10 @@ are merged.
 | Impact (IOS-50…59) | `feat/ios-impact` (from 0329c6d) | `wt/ios-impact` | Built (clean build). **QA in progress.** Reached by the DEBUG flag `-UITestOpenImpact` (`-UITestImpactFailOnce` for retry) until Home's link is wired. Then the round-4 delta + targeted re-QA |
 | Auth (IOS-60…69) | `feat/ios-auth` (from 0329c6d) | `wt/ios-auth` | Built; `AuthGate` is the app root. QA partial: unit 23/23, UI 17/19. **The builder is fixing SignUp submit doing nothing** (possibly high) and removing the LogIn "no account" message (the enumeration ruling). Then the full QA run, incl. whether flagless launches still reach the tabs |
 | Queued | - | - | Add 2b after 2a; Recipes after Home; then Item detail → Social → Settings |
-| `docs/checkpoint-10` | this PR | `wt/checkpoint-9` | `food-main` reviews and merges |
+| #95 receipt Gemini fallback (BE-29…31, ML-73) | `feat/glm-ocr-live` (Truc) | `wt/glm-ocr` (food-orch, QA only) | Waiting on Truc's fixes; then food-orch re-verifies (full suites) and the merge sessions merge on PASS + green CI |
+| #104 / #105 QA sweeps (duwudlekat) | `qa/sweep-backend`, `qa/sweep-ios` | - | Independent QA + a collision check with the screen PRs |
+| #106 README (Truc) | `Truc_branch` | - | Docs review |
+| `docs/checkpoint-11` | this PR | `wt/checkpoint-11` (food-orch) | `food-main` reviews and merges |
 
 Each screen PR numbers its iOS bugs inside its own block (above), so parallel branches can't collide.
 
@@ -154,7 +166,10 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
   - `.venv` for the backend.
   - `.venv-ml` for light ML/eval tests (no imagehash or unrar).
   - The pipeline replay runs in a scratch venv with `-r pipeline/requirements.txt flask unrar-cffi==0.2.2`.
-- **Heavy runs** (xcodebuild, full backend suites, Docker builds, dataset builds) take the shared lock `<scratchpad>/heavy.lock`
+- **No heavy lock since checkpoint 10 (owner, deadline):** everything runs in parallel. Each QA agent has its own simulator and
+  DerivedData (auth-qa 17 Pro BF4A0E86, home-qa SE FFA5D7A9, new ones for qa-fridge / qa-add / qa-impact): never share or touch
+  another agent's. Full backend suites still queue on `fwr_test` through the suite's advisory lock.
+- **History (until checkpoint 10):** heavy runs (xcodebuild, full backend suites, Docker builds, dataset builds) took the shared lock `<scratchpad>/heavy.lock`
   (`mkdir`, then write the owner's name to `owner`). Targeted single-file pytest is fine alongside xcodebuild, but never two runs
   on `fwr_test` at once. Lessons from five parallel screen pairs (2026-10-11):
   - **Never build or test without the lock**, even after a wait timeout: report and stop. (An agent did, and deleted another's lock mid-run.)
@@ -214,7 +229,8 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
   - Round 4 (v54, #91): ItemShared "Given to <name>" opens RemoveSheet prefilled with the claimer (`.default`), approved.
   - Round 3 (owner): the Home profile button becomes a settings gear; the tip stays observation-only; Social posts through one green "+" beside Requests, with a person-plus button for Connect (approved, #82); request notes keep 280 chars and the board clamps to 4 lines; chat and a waste-tracking metric are out of scope.
 - **Open owner items:**
-  - the Google OAuth client
+  - ~~the Google OAuth client~~ **done (2026-10-11):** the iOS client exists, and it's in the Mac's `.env` (`GOOGLE_IOS_CLIENT_IDS`) and gitignored `ios/Local.xcconfig`. The backend verifies tokens (a bogus one → 401). The Auth PR can turn `googleSignInEnabled` on.
+  - **Gemini:** a free-tier key can hit its quota mid-demo (it happened 2026-10-11, and the key was swapped). Enabling billing removes that risk. Rotate the key after the demo.
   - nothing else blocking
 - **Watch for:**
   - Home must switch `Recipe.usesItems` to the object shape (#57).
@@ -225,9 +241,9 @@ Each screen PR numbers its iOS bugs inside its own block (above), so parallel br
   - Jose's (LemurTech22) optional answers on closed #21.
 
 ## QA status
-- **Backend:** PASS on `main` after #79 (2199 passed, 98%). BE-8 … BE-22 resolved (BE-21 accepted as documented; #84 re-verified BE-19–22). Open: BE-7 (info). Follow-up only if memory gets tight: lower `ENRICH_MAX_PIXELS` to about 25 MP.
+- **Backend:** PASS on `main` after #94 (2313 passed, 98%) and #102 (independent PASS). BE-8 … BE-28 resolved; BE-29/30/31 open on #95 (FAIL). Earlier: BE-8 … BE-22 resolved (BE-21 accepted as documented; #84 re-verified BE-19–22). Open: BE-7 (info). Follow-up only if memory gets tight: lower `ENRICH_MAX_PIXELS` to about 25 MP.
 - **ML / pipeline:** the 8-source dataset (#62) and #73 are independent PASSes; the FAST profile (#87) and ML-69 (#88) are ML QA PASSes. ML-57/59/60/61/63/66/69/70/71/72 and PL-8 fixed (ML-70–72: compose `ml` service, ML QA PASS); PL-5 won't-fix; ML-51/52/55/62 named risks. Open: ML-11–14, ML-28, ML-32, ML-40, ML-64 (low), ML-65 (info), ML-67 (low), ML-68 (info). First model trained (`fwr_20261011`), **not evaluated yet**.
-- **Design:** the full-canvas UI/UX gate passed with fixes (v51). Round 3 is READY WITH FIXES, with the fixes applied (v53, #82).
+- **Design:** the full-canvas UI/UX gate passed with fixes (v51). Rounds 3 and 4 are READY WITH FIXES, with the fixes applied (v53 #82, v54 #91). Friend QR + pickup spot is v55 (#99).
 - **iOS:** the foundation (#47), Fridge (#64) and PR0 (#81) PASS; IOS-14–18 fixed. IOS-13 open (low). Five screen branches in
   QA (no verdicts yet): Home IOS-40 fixed (re-QA pending), IOS-41 low; Auth SignUp submit under investigation.
 - **Integration:** not run yet.

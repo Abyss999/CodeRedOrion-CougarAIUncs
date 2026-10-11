@@ -106,10 +106,10 @@ def test_timeout_goes_to_the_client_in_milliseconds(app, gem, monkeypatch):
     assert seen.client_kwargs[-1]["http_options"].timeout == 7000
 
 
-def test_other_helpers_set_no_client_timeout(gem, monkeypatch):
+def test_other_helpers_use_gemini_timeout_not_enrich_timeout(gem, monkeypatch):
     seen = install(monkeypatch, answer({"name": "Milk"}))
     gemini.parse_text("milk")
-    assert seen.client_kwargs == [{}], "only enrichment passes http_options"
+    assert seen.client_kwargs[-1]["http_options"].timeout == 30000, "GEMINI_TIMEOUT_S default, not ENRICH_TIMEOUT_S"
 
 
 @pytest.mark.parametrize("facets,props,required", [
