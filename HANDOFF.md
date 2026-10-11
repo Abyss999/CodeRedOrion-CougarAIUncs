@@ -1,9 +1,11 @@
 # Handoff
 
-_Last updated: 2026-10-10 (checkpoint 4b). **`food-main` is now both the orchestrator and the Mac
-builder.** `mobile-food` (VPS orchestrator) and `food-waste` (Mac builder) have both handed off because
-their context was full. `food-main` plans, rules and merges, and builds by fanning out builder + QA
-sub-agents in worktrees. It doesn't hand-edit feature code. Rules: [`CLAUDE.md`](CLAUDE.md)._
+_Last updated: 2026-10-10 (checkpoint 4b). **`food-main` (VPS) is the orchestrator**: it plans, rules,
+reviews and merges. `mobile-food` and the first Mac builder session `food-waste` have handed off because
+their context was full. **Mac-only work** (Xcode, simulators, the Mac's Docker stack, MPS, the Colab
+`export.zip` gate, and pushing `.github/workflows`, which the VPS token can't do) needs **a fresh Mac
+builder session**. That session starts from the "In flight on the Mac" table below and reports to
+`food-main`. Backend-only PRs can also be built on the VPS. Rules: [`CLAUDE.md`](CLAUDE.md)._
 
 ## Current status
 **Backend, the ML data pipeline, the full design (22 screens, with a motion spec tested by QA) and
@@ -61,9 +63,9 @@ first). The Colab training run is ready for the owner.**
   - Backend QA: impact before and after for every mutation, query-count N+1 checks, and rollback on forced failure.
 
 ## Orchestrator handoff (to `food-main`)
-**Your job:** plan, rule, review and merge, own the canvas and the orchestrator docs, **and run the Mac builds** by fanning out builder + QA sub-agents, one pair per PR, each in its own worktree. Sub-agents never run git, so you commit, push and open PRs.
+**Your job:** plan, rule, review and merge, and own the canvas and the orchestrator docs. Builds happen in builder sessions (a fresh Mac session for iOS and anything Mac-only), each running builder + QA sub-agent pairs.
 
-- **Retired sessions:** `food-waste` and `mobile-food` are no longer reachable for work. Everything is in this file, `docs/` and the open PRs.
+- **Retired sessions:** `food-waste` and `mobile-food` are retired. Everything is in this file, `docs/` and the open PRs. CI workflow edits must be pushed from the Mac session.
 - **Merge routine** for each PR:
   1. `gh pr view` to check mergeable, CI and files.
   2. Check that a QA PASS is recorded in `docs/qa/<area>.md`.
