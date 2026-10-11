@@ -6,6 +6,21 @@ Newest first. Each entry: date, decision, why, alternatives considered.
 - **Datasets and licences, verified on each source page:** fridge_objects (Roboflow, wajeeha workspace), hien_fridge (Roboflow, gracelearning) and VegQual (figshare 30596084) are all **CC BY 4.0**, which requires attribution (see `docs/ML.md` "Attributions" and the README). The fresh/stale fruit set is **raghavrpotdar/fresh-and-stale-images-of-fruits-and-vegetables (Kaggle, CC0)**.
 - **Dropped `sriramr/fruits-fresh-and-rotten-for-classification`.** The Kaggle API reports its licence as "Unknown", so we can't confirm our use is allowed. `muhammad0subhan/fruit-and-vegetable-disease-healthy-vs-rotten` (CC0) was also rejected: at 5.2 GB it breaks the 8 GB disk budget on the Mac.
 
+## 2026-10-10 — Motion
+- **Motion is calm and functional** (`docs/design/MOTION.md`). It confirms an action, shows where
+  something went, or shows that the app is working. The whole sequence takes at most 0.5 s, with
+  stagger delays included. Composites animate as one unit. Reduce Motion gets fades, never a
+  skipped animation. Haptics are used only at key moments.
+- The values were **tuned by QA** with frame-by-frame tests of the canvas demos. Round 1 found
+  stacked-bar segments coming apart, 680–770 ms sequences, a loud mic pulse and a missing
+  reduce-motion state. Round 2 passed every check.
+
+## 2026-10-10 — Orchestrator moved to the `food-main` session
+- The orchestrator role (review, merge, rulings, design canvas, orchestrator-owned docs) moved from
+  the VPS session `mobile-food` to the session `food-main`, to start with a fresh context. The Mac
+  session `food-waste` still builds. The process is unchanged; see `CLAUDE.md` and the
+  "Orchestrator handoff" section of `HANDOFF.md`.
+
 ## 2026-10-10 — Sign-in and screen set
 - **Sign-in is email + Google only.** Sign in with Apple was removed: the capability can't be
   signed without a paid Apple Developer team, and passkeys need associated domains (also paid).
