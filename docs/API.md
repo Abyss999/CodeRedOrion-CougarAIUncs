@@ -244,6 +244,12 @@ Candidates are **not saved** until `POST /items`. Every candidate also carries a
 post it straight back.
 - ✅ `POST /items/parse-text` `{text (<=4000 chars)}` → `200 {candidates: [item…]}` (Gemini);
   `502 upstream_unavailable` when Gemini is not configured/failing.
+- **Image uploads (`from-photo`, `from-receipt`).** The `image` bytes are checked before any Gemini or ML call.
+  Accepted: JPEG, PNG, WEBP and HEIC/HEIF (HEIC is recognised by its `ftyp` brand, since Pillow here has no HEIF decoder;
+  it is forwarded as `image/heic`). Anything else (a text file renamed `.jpg`, PDF, GIF, a cut-off JPEG/PNG, a
+  decompression bomb) → `400 validation_error` ("image must be a JPEG, PNG, WEBP or HEIC photo.") with no upstream
+  call. Empty or missing → `400`; over 10 MB → `413`. The MIME type sent to Gemini/ML is derived from the bytes, not
+  from the client's `Content-Type` part header.
 - ✅ `POST /items/from-photo` multipart `image` (required), `mode=fridge|single` (default `fridge`) →
   `200 {candidates: [{name, category, confidence, freshness: "fresh"|"semi_fresh"|"spoiled", bbox: [x1,y1,x2,y2]|null,
   …}], source: "yolo"|"gemini"}`. Uses `ML_SERVICE_URL`/detect when set; if unset **or the ML
@@ -538,14 +544,16 @@ after 1.5 s, so the worst case is 2 x 30 + 1.5 = 61.5 s, under gunicorn's 120 s 
 Every Gemini call (`parse_text`, `detect`, `receipt_categorize`, `recipes`, `shelf_life`, `enrich`) writes one INFO line on the
 logger `app.gemini.usage` (its own stderr handler, so it shows in `docker compose logs api`):
 
-    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error
+    gemini_usage model=<model> purpose=<purpose> input_tokens=<n|null> output_tokens=<n|null> total_tokens=<n|null> latency_ms=<n> status=ok|error code=<http|null>
 
 A response that is not usable JSON (unparseable, a scalar such as `null`/string/number/bool, or an
 object whose `items`/`candidates`/`recipes`/`days` value is not a list) counts as a failed call
 (`status=error`, one line) and the endpoint returns `502 upstream_unavailable` (BE-13); for the shelf-life
 estimate on `POST /items` it falls back to the default table.
 Tokens come from the response's `usage_metadata` (`output_tokens` includes thinking tokens); they are
-`null` when it is missing, and on `status=error` when the call failed. Prompts, response text, user
+`null` when it is missing, and on `status=error` when the call failed. `code` is the upstream HTTP status:
+`200` on `status=ok`; on `status=error` the `.code` of the google-genai `APIError`/`ClientError`/`ServerError` (`code=429`), or
+`code=null` when the failure carried none (timeout, network error, unusable JSON). Prompts, response text, user
 data and the API key are never logged. Cost report:
 
     docker compose logs api | python scripts/gemini_cost.py
