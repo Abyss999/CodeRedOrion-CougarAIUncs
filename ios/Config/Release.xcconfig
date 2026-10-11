@@ -1,0 +1,5 @@
+#include "Base.xcconfig"
+// TODO(owner): set the production API URL here (or in Local.xcconfig for a demo tunnel).
+API_BASE_URL = https:/$()/api.foodwastereducer.example
+// Last, so Local.xcconfig overrides everything above. Optional: builds work without it.
+#include? "../Local.xcconfig"

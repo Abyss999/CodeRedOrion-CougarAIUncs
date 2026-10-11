@@ -1,10 +1,18 @@
 # XcodeGen spec. Generate the project with `xcodegen generate` (from ios/).
 # The .xcodeproj is gitignored — edit this file, never the generated project.
+# Deployment target is iOS 18 (Tab(value:) API); build with Xcode 26 / the iOS 26 SDK so the
+# system TabView renders as the Liquid Glass bar.
 name: FoodWasteReducer
 options:
   bundleIdPrefix: com.coderedorion
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
 settings:
   base:
     SWIFT_VERSION: "5.10"
@@ -14,23 +22,55 @@ targets:
   FoodWasteReducer:
     type: application
     platform: iOS
-    sources: [App]
+    sources: [App, Resources]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
     info:
       path: App/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleDisplayName: Food Waste Reducer
+        CFBundleDisplayName: BiteDown
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        API_BASE_URL: $(API_BASE_URL)
         NSCameraUsageDescription: Take photos of your fridge, food and receipts to add items.
+        NSMicrophoneUsageDescription: Speak the food you want to add, like "two bananas and a loaf of bread".
+        NSSpeechRecognitionUsageDescription: Turn what you say into a list of food items to add.
+        UIAppFonts:
+          - Outfit-Medium.ttf
+          - Outfit-SemiBold.ttf
+    # NSAppTransportSecurity > NSAllowsLocalNetworking is added to the plist for Debug only and
+    # removed for Release (XcodeGen can't vary Info.plist per configuration).
+    preBuildScripts:
+      - name: ATS local networking (Debug only)
+        basedOnDependencyAnalysis: false
+        script: |
+          PLIST="${SRCROOT}/App/Info.plist"
+          B=/usr/libexec/PlistBuddy
+          "$B" -c "Delete :NSAppTransportSecurity" "$PLIST" 2>/dev/null || true
+          if [ "${CONFIGURATION}" = "Debug" ]; then
+            "$B" -c "Add :NSAppTransportSecurity dict" -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST"
+          fi
   FoodWasteReducerTests:
     type: bundle.unit-test
     platform: iOS
     sources: [Tests/UnitTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FoodWasteReducer
   FoodWasteReducerUITests:
     type: bundle.ui-testing
     platform: iOS
     sources: [Tests/UITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: FoodWasteReducer
 schemes:

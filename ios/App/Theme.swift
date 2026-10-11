@@ -28,6 +28,8 @@ enum Theme {
         static let noteLime = Color(light: 0xE4F2C4, dark: 0x2A3A1F)
         static let chartSaved = Color(light: 0x277338, dark: 0x24783D)
         static let chartWasted = Color(light: 0xE8A04C, dark: 0xC6802F)
+        static let useSoonBg = Color(light: 0xFFF1B8, dark: 0x3A3112)
+        static let useSoonInk = Color(light: 0x6B5000, dark: 0xFFD970)
         /// No dark row in the design doc. Light: ink at 0.6 alpha (as before). Dark: pure
         /// black at 0.6 alpha, because a light-ink (#E8F0DA) scrim would brighten the
         /// content behind a sheet instead of dimming it.
@@ -58,24 +60,73 @@ enum Theme {
             "noteLime": (0xE4F2C4, 0x2A3A1F, 1),
             "chartSaved": (0x277338, 0x24783D, 1),
             "chartWasted": (0xE8A04C, 0xC6802F, 1),
+            "useSoonBg": (0xFFF1B8, 0x3A3112, 1),
+            "useSoonInk": (0x6B5000, 0xFFD970, 1),
             "scrim": (0x13261A, 0x000000, 0.6),
         ]
     }
 
+    /// Food-group identity colours (DESIGN_SYSTEM "Food-group colours"). Adaptive. Only for
+    /// food-group identity; never for status or charts.
+    enum FoodGroup {
+        struct Palette {
+            let stroke: Color
+            let tile: Color
+        }
+        static let protein = Palette(stroke: Color(light: 0xB0412E, dark: 0xFF9E8A), tile: Color(light: 0xFBE4DE, dark: 0x3D1F1A))
+        static let veggies = Palette(stroke: Color(light: 0x2F7A3A, dark: 0x8FD69A), tile: Color(light: 0xE2F1D8, dark: 0x1C3320))
+        static let fruit = Palette(stroke: Color(light: 0xA8366E, dark: 0xF59AC6), tile: Color(light: 0xF8E1EC, dark: 0x3A1C2B))
+        static let dairy = Palette(stroke: Color(light: 0x3A5BA0, dark: 0x9DB7F0), tile: Color(light: 0xE2E9F7, dark: 0x1C2540))
+        static let grains = Palette(stroke: Color(light: 0x8A6414, dark: 0xE8C46A), tile: Color(light: 0xF5EBCD, dark: 0x33290F))
+        static let pantry = Palette(stroke: Color(light: 0x6A4FA3, dark: 0xC1AAF0), tile: Color(light: 0xECE5F7, dark: 0x2A2140))
+        static let leftovers = Palette(stroke: Color(light: 0x1F7A78, dark: 0x7FD8D3), tile: Color(light: 0xDAF0EE, dark: 0x14302F))
+        static let frozen = Palette(stroke: Color(light: 0x1E7BA8, dark: 0x86CBEE), tile: Color(light: 0xDCEFF8, dark: 0x122C3A))
+        static let other = Palette(stroke: Color(light: 0x5C6E5F, dark: 0xB4C2B6), tile: Color(light: 0xEAEFE6, dark: 0x243026))
+
+        /// Light/dark hex pairs per group, so tests can assert exact resolved values.
+        static let hexTable: [String: (stroke: (light: UInt32, dark: UInt32), tile: (light: UInt32, dark: UInt32))] = [
+            "protein": (stroke: (0xB0412E, 0xFF9E8A), tile: (0xFBE4DE, 0x3D1F1A)),
+            "veggies": (stroke: (0x2F7A3A, 0x8FD69A), tile: (0xE2F1D8, 0x1C3320)),
+            "fruit": (stroke: (0xA8366E, 0xF59AC6), tile: (0xF8E1EC, 0x3A1C2B)),
+            "dairy": (stroke: (0x3A5BA0, 0x9DB7F0), tile: (0xE2E9F7, 0x1C2540)),
+            "grains": (stroke: (0x8A6414, 0xE8C46A), tile: (0xF5EBCD, 0x33290F)),
+            "pantry": (stroke: (0x6A4FA3, 0xC1AAF0), tile: (0xECE5F7, 0x2A2140)),
+            "leftovers": (stroke: (0x1F7A78, 0x7FD8D3), tile: (0xDAF0EE, 0x14302F)),
+            "frozen": (stroke: (0x1E7BA8, 0x86CBEE), tile: (0xDCEFF8, 0x122C3A)),
+            "other": (stroke: (0x5C6E5F, 0xB4C2B6), tile: (0xEAEFE6, 0x243026)),
+        ]
+    }
+
     enum Fonts {
-        /// Outfit must be bundled and listed under UIAppFonts before these resolve.
-        static func display(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
-            .custom("Outfit-SemiBold", size: size, relativeTo: style)
+        /// Outfit static instances bundled in Resources/Fonts and listed under UIAppFonts.
+        /// PostScript names: `Outfit-Medium` (500) and `Outfit-SemiBold` (600).
+        static let displayMedium = "Outfit-Medium"
+        static let displaySemiBold = "Outfit-SemiBold"
+
+        static func display(_ size: CGFloat, relativeTo style: Font.TextStyle, medium: Bool = false) -> Font {
+            .custom(medium ? displayMedium : displaySemiBold, size: size, relativeTo: style)
         }
         static let hero = Fonts.display(48, relativeTo: .largeTitle)
+        static let signInHeadline = Fonts.display(44, relativeTo: .largeTitle)
         static let screenTitle = Fonts.display(30, relativeTo: .largeTitle)
         static let sheetTitle = Fonts.display(22, relativeTo: .title2)
         static let section = Fonts.display(20, relativeTo: .title3)
+        static let cardHeading = Fonts.display(17, relativeTo: .headline)
         static let button = Fonts.display(17, relativeTo: .headline)
+        /// Group header (Fridge): 13 / 600, uppercase, tracked +0.04em. Apply `Theme.Tracking.groupHeader`
+        /// and `.textCase(.uppercase)` (or use `GroupHeaderText`).
+        static let groupHeader = Font.footnote.weight(.semibold)
         static let rowTitle = Font.callout.weight(.semibold)
         static let body = Font.body
         static let meta = Font.footnote
         static let badge = Font.footnote.weight(.semibold)
+    }
+
+    enum Tracking {
+        /// Hero number: -2% of 48 pt.
+        static let hero: CGFloat = -0.96
+        /// Group header: +0.04em of 13 pt.
+        static let groupHeader: CGFloat = 0.52
     }
 
     enum Spacing {
@@ -86,11 +137,23 @@ enum Theme {
         static let gutter: CGFloat = 20
         static let l: CGFloat = 24
         static let xl: CGFloat = 32
+        /// 6: title/meta text stack inside a row, and the group header icon-to-label gap (artboards).
+        static let stack: CGFloat = 6
+        /// 10: horizontal padding inside a badge pill (vertical is `xs`).
+        static let badgeHorizontal: CGFloat = 10
     }
 
     enum Radius {
         static let badge: CGFloat = 10
+        /// 14: segmented-control track, info callouts, RemoveSheet header tile (artboards).
+        static let control: CGFloat = 14
+        /// 18: AddSheet option tiles and pill buttons (artboards).
+        static let optionTile: CGFloat = 18
         static let input: CGFloat = 12
+        /// Skeleton text bars.
+        static let bar: CGFloat = 4
+        /// Food-group icon tile and skeleton avatar.
+        static let avatar: CGFloat = 12
         static let card: CGFloat = 16
         static let hero: CGFloat = 20
         static let sheet: CGFloat = 28
@@ -100,8 +163,33 @@ enum Theme {
         static let minTouch: CGFloat = 44
         static let primaryButton: CGFloat = 56
         static let removalOption: CGFloat = 68
-        static let addButton: CGFloat = 60
         static let avatar: CGFloat = 40
+        /// Food-group glyph on the 40 pt avatar tile (Fridge artboard: 22 pt).
+        static let avatarGlyph: CGFloat = 22
+        /// Food-group glyph in the Fridge group header (Fridge artboard: 16 pt).
+        static let groupHeaderIcon: CGFloat = 16
+        /// Undo toast countdown bar height.
+        static let toastProgress: CGFloat = 3
+        /// Skeleton placeholders, shaped like an `ItemRow`'s title, meta line and `ExpiryBadge`.
+        static let skeletonTitle = CGSize(width: 140, height: 14)
+        static let skeletonMeta = CGSize(width: 96, height: 11)
+        static let skeletonBadge = CGSize(width: 56, height: 24)
+    }
+
+    enum Opacity {
+        /// Fill behind a button sitting on a forest surface (Undo on the toast), tinted `onForest`.
+        static let onForestFill: Double = 0.18
+    }
+
+    /// Drop shadows. Colour is always `Theme.Colors.scrim` at `opacity`.
+    enum Shadow {
+        struct Style {
+            let opacity: Double
+            let radius: CGFloat
+            let y: CGFloat
+        }
+        /// Floating toast above content.
+        static let toast = Style(opacity: 0.25, radius: 12, y: 4)
     }
 }
 
