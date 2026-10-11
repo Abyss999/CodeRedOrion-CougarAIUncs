@@ -199,3 +199,119 @@ Notes (not bugs): an empty-string `freshness` is normalised to `fresh` with a st
 
 - **BE-8 fixed and verified.** `parse_number` now rejects NaN, Infinity and -Infinity with 400. The xfail is now passing tests: `NaN`, `Infinity` and `-Infinity` on create for `confidence`, `est_price`, `quantity` and `est_weight_kg`, and on PATCH for `quantity`, `est_price` and `est_weight_kg`. Each case checks nothing was written (create) or the value is unchanged (PATCH).
 - **BE-9 (low, open):** a finite `est_price` beyond numeric(10,2) (1e8, 1e12, 1e300) overflows in Postgres and returns 500 instead of 400. Repro: `POST /items {"items":[{"name":"x","est_price":1e8}]}`. `test_huge_est_price_is_400_not_500` is xfail strict (3 cases), so it fails loudly once fixed. The same may apply to `est_weight_kg` and `quantity`, which are unbounded `numeric`, so likely only extreme exponents matter there; not tested.
+
+## 2026-10-10 - PR 2 insights-wave2 (branch feat/insights-wave2)
+
+**Result: PASS (final).** Full suite on `feat/insights-wave2` (HEAD 3cf6d3c, clean tree), run by the orchestrator from `backend/` on `fwr_test`: `pytest -q --cov=app` = **965 passed, 1 skipped, 101 s, total coverage 98%** (`gemini.py` 96%, `recipe_cache.py` 98%, `candidates.py` 95%). No xfails are left in `backend/tests`. **Fixed in this PR:** BE-9 (`est_price` overflow → 400, plus the `quantity` / `est_weight_kg` caps), BE-10 (both parts: `/impact` week buckets, the zero-fill and the week/month windows no longer depend on the session time zone or DST), and BE-13 (a scalar or non-list Gemini response → 502 / default shelf life, never a 500; filed on #54, root fix here). The targeted-run details and the two follow-up sections below are the evidence.
+
+| File | Result |
+|---|---|
+| `test_insights_wave2_impact.py` (new) | 20 passed, 1 xfailed (BE-10) at first; 37 passed, 6 xfailed after the re-verify |
+| `test_insights_wave2_batch.py` (new) | 54 passed |
+| `test_insights_wave2_recipes.py` (new) | 48 passed |
+| `test_insights_wave2_bounds.py` (new) | 29 passed |
+| `test_wave2_freshness.py` (BE-9 xfail flipped) | 75 passed |
+| `test_ai_endpoints.py` (uses_items now asserted as objects), `test_macros.py`, `test_impact.py`, `test_wave2_restore.py`, `test_removal.py`, `test_tips.py` | 28 / 28 / 8 / 23 / 26 / 3 passed |
+
+`conftest.py`: `_clean` now also calls `recipe_cache.clear()`, because the cache lives on the session-wide app.
+
+| Area | Checked | Result |
+|---|---|---|
+| `/impact` split | `used` + `donated` = `saved` for count and money (exact), and for kg and co2e (within 0.01 rounding); every range; via SQL fixtures and via the API; `range` echoed | ok |
+| Waste reasons | all 4 always present and zero-filled; sorted by count with ties in enum order; `share` sums to 1 and is 0 when empty; per-reason kg, money and co2e; range-filtered; sums equal `wasted` | ok |
+| Previous period | week and month windows; `now()` pinned in the since query so events sit **exactly** on `since` (current) and on `prev_since` (previous), and 1 µs earlier (previous / excluded); `null` for `all` | ok |
+| `last_6_weeks` | always 6, oldest first, Mondays, the last one is the current UTC bucket; zero-filled; independent of `range`; Monday 00:00:00Z is in the new week and 1 µs earlier in the previous one; the oldest bucket edge is included and 1 µs before it excluded (it still counts in the totals) | ok in a UTC session; see BE-10 |
+| Isolation | another user's remove events (and own `add` events) never reach totals, reasons, previous or the series | ok |
+| `/impact` N+1 | statement count with 0 and 60 events (many weeks and reasons) is equal; 6 for week/month (auth + since + 4), 5 for all | ok |
+| Recipes `servings` | 1..20 int kept (`4.0` becomes 4); 0, 21, negative, 2.5, `"4"`, bool, null, NaN, inf, 1e308 or missing give `null` | ok |
+| `uses_items` | `{item_id, name, predicted_expiry}`; case and space-insensitive; exact match beats containment; soonest-expiring wins; each item once per recipe but reusable across recipes; unmatched or garbage names dropped (never a 500); never another user's, removed or group-member item; only the 20 items sent to Gemini | ok |
+| Recipe cache | the second call is a hit (Gemini called once) and logs `status=hit age_s=`, with a miss logged as `reason=empty`; no user id, email or item names in the log; key covers `max_results` and `dietary` (dietary order-insensitive); add, remove, remove-batch and PATCH of name, quantity, expiry, category or unit all miss with `reason=items_changed`; a removed item is never served from cache; TTL: just under 6 h is a hit, past 6 h a miss with `reason=expired`; TTL 0 disables it; users never see each other's entries (same item names, different results); 502 not cached; no items means no Gemini call and nothing cached; an empty Gemini result is cached; a cached response is byte-identical | ok |
+| `remove-batch` | used and donated: one event per item (outcome, `user_id` = caller, co2e > 0), request order, `share` only on own items, one `removed_at` for the batch; same impact numbers as single removes; 100 ids ok, 101 → 400 | ok |
+| Batch validation | `{"error":{"code","message"}}` 400 for empty, non-list, missing or malformed ids, non-string ids, duplicates, `thrown_out` (with or without a reason), a bad or missing outcome, `waste_reason`, `recipient_id`, unknown fields, or a non-object/invalid JSON body; restore-batch the same, including an unknown `outcome` field; nothing written on any 4xx; 401 without auth | ok |
+| Atomicity | one unknown or foreign id → 404 for the whole batch with state unchanged; a foreign id and a random id give identical bodies (no existence leak); one already-removed id → 409 `already_removed` with nothing written; restore-batch with one active id → 409 `not_removed`, or one removal older than 11 minutes → 409 `restore_window_expired`, nothing restored; a forced failure on `INSERT food_events`, `UPDATE share_listings` or `UPDATE items` (remove) and on `DELETE food_events`, `UPDATE share_listings` or `UPDATE items` (restore) → 500, items, events, listings and `/impact` (all ranges) unchanged | ok |
+| Impact before = after | remove-batch then restore-batch leaves `/impact` for week, month and all **exactly** equal (dict equality, new sections included) and items, events and listings unchanged; 3 cycles then a final removal leave one event per item; mixing single and batch (single removes → batch restore; batch remove → single restore → partial batch restore) works | ok |
+| Sharing | donated batch fulfils open listings (claimed one: `recipient_id` = claimer); it leaves the friend's `/share`; restore-batch reopens with `claimed_by` kept and `recipient_id` / `fulfilled_at` cleared; used batch leaves listings open; a cancelled listing is never touched | ok |
+| Group pantry | a member batch-removes group items (event `user_id` = member, `group_id` set, impact credited to the member) mixed with own items; outsider and ex-member get 404 for remove and restore | ok |
+| Batch N+1 | statement count identical for 1, 2, 20 and 25 items (used: 6 remove / 7 restore; donated with listings: 7 / 8); group-item batches of 2 and 20 equal | ok |
+| Concurrency | two overlapping batches (`[a,b]` and `[c,b]`, 5 rounds, threads + barrier): exactly one 200 and one 409, no deadlock, exactly one event per removed item, the loser's other item untouched | ok |
+| BE-9 / bounds | `est_price` 0, 0.01, 99,999,999.99 ok; 1e8, 1e8 + 0.01, 1e12, 1e300 and **99,999,999.995** (which rounds to 1e8 in numeric(10,2)) → 400, nothing written; same on PATCH (value unchanged); negatives 400; one bad price in a 2-item create writes nothing. `quantity` 1e6 ok / 1e6 + 0.01 → 400 and `est_weight_kg` 1e5 ok / 1e5 + 0.01 → 400 (create and PATCH); 1e300 and 1e308 inputs (including gallon and dozen weight estimates) are 400 or produce strictly valid JSON; everything at its cap → remove and `/impact` stay finite. Strict xfail `test_huge_est_price_is_400_not_500` flipped to a passing test | ok, **BE-9 fixed** |
+
+### Findings
+| ID | Severity | Summary | Status |
+|---|---|---|---|
+| BE-10 | low (latent) | `/impact` week buckets depended on the DB session time zone: in a non-UTC session every `weekly` / `last_6_weeks` date was the Sunday before, and the zero-fill `generate_series` stepped in local time. | **fixed in PR 2** (part 1 and part 2, see the follow-ups below) |
+
+Notes (not bugs):
+- API.md now says 5 queries for week/month and 4 for all (fixed after my first report); the count test asserts exactly that plus the auth lookup.
+- `uses_items` containment matching is greedy. If Gemini says "egg" and the fridge has "Eggplant" expiring before "Eggs", it maps to Eggplant. This follows the contract.
+- The recipe cache key leaves out `freshness` and `storage` (per contract). It is per process, so with N gunicorn workers a user can see up to N different cached sets.
+
+### 2026-10-10 - PR 2 insights-wave2, BE-10 re-verify
+
+**Result: BE-10 fixed as reported, with a residual (BE-10 part 2, low, latent, strict-xfail-tracked).** Targeted runs only: `test_insights_wave2_impact.py` = **37 passed, 6 xfailed**; `test_impact.py` = 8 passed. Full suite still gated.
+
+What I changed in the tests:
+- `test_last_6_weeks_utc_even_if_session_timezone_is_not` is now an ordinary passing test. It runs with the session zone `America/Chicago` and checks:
+  - the 6 dates are the UTC Mondays and each bucket has its event;
+  - `weekly` has the same Mondays;
+  - the whole response equals the one from a UTC session.
+
+  The helper sets the zone on every pooled connection through a `checkout` hook and asserts `SHOW timezone` before the request, so the test can't pass vacuously.
+- New `test_last_6_weeks_stable_across_dst_in_any_session_zone`: 4 session zones (`America/Chicago`, `Pacific/Auckland`, `Asia/Kolkata`, `UTC`) × 4 frozen `now` values (the request's `now()` is rewritten in every statement).
+  - **Frozen times:**
+    - 2026-11-04 12:00Z: the week after US fall-back.
+    - 2026-03-11 12:00Z: the week after US spring-forward.
+    - 2026-11-02 00:00:00Z: exactly the new bucket.
+    - 2026-11-01 23:59:59.999999Z: the last instant of the old bucket; its window crosses NZ spring-forward on 2026-09-27.
+  - **Events in each bucket:**
+    - exactly Monday 00:00Z;
+    - Monday 02:00Z;
+    - the bucket's last microsecond (Sunday 23:59:59.999999Z, which is Sunday evening local time in the Americas);
+    - plus one event 1 µs before the oldest bucket.
+  - **Asserts:**
+    - the dates are the exact expected Mondays;
+    - no zero gaps, and every event is in its own bucket;
+    - `weekly` (range=all) uses the same Monday keys;
+    - the totals are right.
+- New `test_range_windows_do_not_depend_on_session_zone` (week and month): events 30 min either side of N×24 h and 2N×24 h before a frozen `now`. The response must be identical in Chicago and in UTC.
+- `/impact` query count is now asserted **exactly** against the updated API.md: 5 for week/month and 4 for all, plus 1 auth lookup. It's the same with 0 events and with 60.
+
+Evidence that the fix works: Monday dates are correct in all 4 zones and all 4 frozen times; the 6 Chicago/Auckland cases that failed before the fix (Sunday dates) now pass; the Chicago response equals the UTC one at real `now`.
+
+Residual (**BE-10 part 2, low, latent**: it only shows with a non-UTC session zone, and compose and `fwr_test` run in UTC):
+1. In `_LAST_6_WEEKS`, the `ev` CTE's lower bound `time >= time_bucket('1 week', now()) - interval '5 weeks'` is still `timestamptz - interval` with day units, evaluated in the session zone. When the 6-week window crosses a **spring-forward** change, the bound lands 1 h late, so an event in the first hour of the oldest week (Monday 00:00-01:00Z) is dropped. Seen in 2 of the 16 cases: Chicago with now = 2026-03-11 (oldest week 2026-02-02 reads used 0 instead of 1), and Auckland with now = 2026-11-01 23:59Z. Fix: bound with the UTC value already computed (`time >= (cur.wk - interval '5 weeks') AT TIME ZONE 'UTC'`), or use `interval '840 hours'`.
+2. `since` / `prev_since` = `now() - make_interval(days => N)` are also session-zone day arithmetic. Across a DST change the week/month window is N days ± 1 h, not N × 24 h. In Chicago with now = 2026-03-11 an event 167.5 h ago drops out of `range=week`, and with now = 2026-11-04 one 168.5 h ago gets in. Fix: `make_interval(hours => 24 * N)` (or `secs`).
+
+Both are strict xfails (they flip loudly once fixed):
+- `test_last_6_weeks_stable_across_dst_in_any_session_zone[America/Chicago-2026-03-11]` and `[Pacific/Auckland-2026-11-01T23]`
+- `test_range_windows_do_not_depend_on_session_zone[America/Chicago-2026-03-11 ...-week|month]` and `[America/Chicago-2026-11-04 ...-week|month]`
+
+### 2026-10-10 - PR 2 insights-wave2, BE-10 part 2 and BE-13 verified fixed
+
+**Result: PASS on targeted runs, confirmed by the full suite (965 passed, 1 skipped, coverage 98%; see the final verdict above).**
+
+| File | Result |
+|---|---|
+| `test_insights_wave2_gemini_shapes.py` (new) | 106 passed |
+| `test_insights_wave2_impact.py` | 45 passed |
+| `test_impact.py` | 8 passed |
+| `test_ai_endpoints.py` | 28 passed |
+| `test_macros.py` | 28 passed |
+
+`grep xfail backend/tests` finds nothing.
+
+- **BE-10 part 2: fixed in PR 2.** The 6 residual strict xfails now pass as normal tests:
+  - the DST zero-fill cases Chicago with `now` = 2026-03-11 and Auckland with `now` = 2026-11-01T23:59Z;
+  - the week/month window cases in Chicago at 2026-03-11 and 2026-11-04.
+
+  I also added an Auckland 2026-10-01 window case. The `ev` lower bound and `since` / `prev_since` no longer depend on the session zone: the window is exactly N × 24 h, and the oldest week keeps its first hour. **BE-10 is fully fixed (both parts).**
+- **BE-13: fixed at the root in PR 2.** BE-13 was filed on #54, but per the orchestrator's ruling the root fix is here, in `services/gemini.py` (`_as_list` inside `_generate`, plus `_unwrap` in each helper). #54's BE-13 xfails flip once it rebases onto this. The new `test_insights_wave2_gemini_shapes.py` stubs `google.genai.Client`, so the real `_generate` runs:
+  - **Scalars** (`null`, `"oops"`, `""`, `42`, `0`, `3.5`, `-1`, `true`, `false`) on parse-text, from-photo (Gemini path) and recipes/suggest → `502 upstream_unavailable` in the `{"error":{"code","message"}}` shape, never a 500, with exactly one `gemini_usage` line (`status=error`, the right `purpose`, tokens still read from the response).
+  - **A non-list under the expected key** (`items`, `candidates`, `recipes`: `null`, string, number, bool, object) and invalid JSON give the same result.
+  - **`POST /items`** with the same bad shapes for `shelf_life` (scalars, `{"days": <non-list>}`, invalid JSON) → 201 with every item on the default table (`expiry_source=default`, date = `expiry.predict(category, storage)`), one `status=error` line, add events written.
+  - **Still fine:**
+    - a bare list or a `{key: [...]}` list works (`status=ok`);
+    - an object without the key means nothing found: `[]` and 200;
+    - Gemini `days` given as a list or as `{"days": [...]}` → `expiry_source=gemini`;
+    - a 502 from recipes is not cached.
+  - **Service level:** each of the four helpers raises `UpstreamError` (never `TypeError` / `AttributeError`) for every scalar and for invalid JSON, with exactly one error line.

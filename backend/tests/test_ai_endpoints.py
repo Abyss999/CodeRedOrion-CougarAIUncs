@@ -197,7 +197,7 @@ def test_barcode_bad_code(client, user):
 def test_recipes_success_and_ordering(client, user, make_item, monkeypatch):
     from conftest import iso_in
     make_item(user, name="Late", predicted_expiry=iso_in(9))
-    make_item(user, name="Soon", predicted_expiry=iso_in(1))
+    soon = make_item(user, name="Soon", predicted_expiry=iso_in(1))
     seen = {}
     def fake(items, n, dietary):
         seen.update(items=items, n=n, dietary=dietary)
@@ -206,6 +206,9 @@ def test_recipes_success_and_ordering(client, user, make_item, monkeypatch):
     r = client.post("/recipes/suggest", json={"max_results": 1, "dietary": ["vegan"]}, headers=user["headers"])
     assert r.status_code == 200
     assert r.get_json()["recipes"][0]["title"] == "Soup"
+    # backend PR 2: uses_items are mapped back to the caller's items
+    assert r.get_json()["recipes"][0]["uses_items"] == [
+        {"item_id": soon["id"], "name": "Soon", "predicted_expiry": iso_in(1)}]
     assert [i["name"] for i in seen["items"]] == ["Soon", "Late"]
     assert seen["n"] == 1 and seen["dietary"] == ["vegan"]
 

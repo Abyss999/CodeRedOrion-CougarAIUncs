@@ -1,3 +1,4 @@
+import math
 from datetime import date, timedelta
 
 from flask import Blueprint, g, jsonify, request
@@ -6,30 +7,53 @@ from sqlalchemy import text
 from ..auth import require_auth
 from ..errors import upstream_unavailable, validation_error
 from ..extensions import db
-from ..models import Item
-from ..services import gemini
+from ..models import WASTE_REASONS, Item
+from ..services import gemini, recipe_cache
 from ._util import json_body
 
 bp = Blueprint("insights", __name__)
 
 _RANGE_DAYS = {"week": 7, "month": 30, "all": None}
 
-_TOTALS = """
-SELECT
-  count(*) FILTER (WHERE outcome IN ('used','donated'))                       AS s_count,
-  coalesce(sum(est_weight_kg) FILTER (WHERE outcome IN ('used','donated')),0) AS s_kg,
-  coalesce(sum(est_price)     FILTER (WHERE outcome IN ('used','donated')),0) AS s_money,
-  coalesce(sum(co2e_kg)       FILTER (WHERE outcome IN ('used','donated')),0) AS s_co2,
-  count(*) FILTER (WHERE outcome = 'thrown_out')                              AS w_count,
-  coalesce(sum(est_weight_kg) FILTER (WHERE outcome = 'thrown_out'),0)        AS w_kg,
-  coalesce(sum(est_price)     FILTER (WHERE outcome = 'thrown_out'),0)        AS w_money,
-  coalesce(sum(co2e_kg)       FILTER (WHERE outcome = 'thrown_out'),0)        AS w_co2
+
+_KINDS = ("saved", "wasted", "used", "donated")
+_KIND_FILTER = {"saved": "outcome IN ('used','donated')", "wasted": "outcome = 'thrown_out'",
+                "used": "outcome = 'used'", "donated": "outcome = 'donated'"}
+
+
+def _agg_cols(prefix: str, window: str) -> str:
+    """count/kg/money/co2 per kind for one time window, as `<prefix>_<kind>_<metric>` columns."""
+    cols = []
+    for k in _KINDS:
+        f = f"({_KIND_FILTER[k]}) AND ({window})"
+        cols += [f"count(*) FILTER (WHERE {f}) AS {prefix}_{k}_count",
+                 f"coalesce(sum(est_weight_kg) FILTER (WHERE {f}),0) AS {prefix}_{k}_kg",
+                 f"coalesce(sum(est_price) FILTER (WHERE {f}),0) AS {prefix}_{k}_money",
+                 f"coalesce(sum(co2e_kg) FILTER (WHERE {f}),0) AS {prefix}_{k}_co2"]
+    return ",\n  ".join(cols)
+
+
+# Current and previous period in ONE scan (range=all: no previous window, current = everything).
+_TOTALS_ALL = f"""
+SELECT {_agg_cols("c", "true")}
+FROM food_events WHERE user_id = :uid AND event_type = 'remove'
+"""
+_TOTALS_RANGE = f"""
+SELECT {_agg_cols("c", "time >= :since")},
+  {_agg_cols("p", "time < :since")}
+FROM food_events WHERE user_id = :uid AND event_type = 'remove' AND time >= :prev_since
+"""
+
+_REASONS = """
+SELECT waste_reason, count(*) AS n, coalesce(sum(est_weight_kg),0) AS kg,
+       coalesce(sum(est_price),0) AS money, coalesce(sum(co2e_kg),0) AS co2
 FROM food_events
-WHERE user_id = :uid AND event_type = 'remove' {since_clause}
+WHERE user_id = :uid AND event_type = 'remove' AND outcome = 'thrown_out' {since_clause}
+GROUP BY waste_reason
 """
 
 _WEEKLY = """
-SELECT time_bucket('1 week', time) AS week,
+SELECT (time_bucket('1 week', time) AT TIME ZONE 'UTC')::date AS week,
        count(*) FILTER (WHERE outcome IN ('used','donated')) AS saved,
        count(*) FILTER (WHERE outcome = 'thrown_out')        AS wasted
 FROM food_events
@@ -37,10 +61,39 @@ WHERE user_id = :uid AND event_type = 'remove' {since_clause}
 GROUP BY week ORDER BY week
 """
 
+# Last 6 weekly buckets (Monday 00:00 UTC, the time_bucket default), current week included, zero-filled.
+# Everything is converted to UTC wall-clock `timestamp` (no tz) before generate_series / ::date, so
+# neither the bucket dates nor the 1-week steps depend on the session TimeZone or DST (BE-10).
+_LAST_6_WEEKS = """
+WITH cur AS (
+  SELECT time_bucket('1 week', now()) AT TIME ZONE 'UTC' AS wk
+), weeks AS (
+  SELECT generate_series(cur.wk - interval '5 weeks', cur.wk, interval '1 week') AS week FROM cur
+), ev AS (
+  SELECT time_bucket('1 week', time) AT TIME ZONE 'UTC' AS week, outcome FROM food_events
+  WHERE user_id = :uid AND event_type = 'remove'
+    AND time >= ((SELECT wk FROM cur) - interval '5 weeks') AT TIME ZONE 'UTC'  -- UTC arithmetic, DST-proof
+)
+SELECT w.week::date AS week,
+       count(ev.outcome) FILTER (WHERE ev.outcome = 'used')       AS used,
+       count(ev.outcome) FILTER (WHERE ev.outcome = 'donated')    AS donated,
+       count(ev.outcome) FILTER (WHERE ev.outcome = 'thrown_out') AS wasted
+FROM weeks w LEFT JOIN ev ON ev.week = w.week
+GROUP BY w.week ORDER BY w.week
+"""
 
-from types import SimpleNamespace
+_r = lambda v: round(float(v), 2)  # noqa: E731
 
-_ZERO = SimpleNamespace(s_count=0, s_kg=0, s_money=0, s_co2=0, w_count=0, w_kg=0, w_money=0, w_co2=0)
+
+def _period(t, prefix) -> dict:
+    out = {}
+    for k in _KINDS:
+        g_ = lambda m: getattr(t, f"{prefix}_{k}_{m}", 0) if t is not None else 0  # noqa: E731
+        out[k] = {"count": int(g_("count")), "kg": _r(g_("kg")), "money": _r(g_("money")),
+                  "co2e_kg": _r(g_("co2"))}
+    total = out["saved"]["count"] + out["wasted"]["count"]
+    out["waste_rate"] = out["wasted"]["count"] / total if total else 0.0
+    return out
 
 
 @bp.get("/impact")
@@ -50,24 +103,44 @@ def get_impact():
     if rng not in _RANGE_DAYS:
         raise validation_error("range must be week, month or all.")
     days = _RANGE_DAYS[rng]
-    since = db.session.execute(text("SELECT now() - make_interval(days => :d)"),
-                               {"d": days}).scalar() if days else None
+    since = prev_since = None
+    if days:
+        since, prev_since = db.session.execute(
+            text("SELECT now() - make_interval(hours => :h), now() - make_interval(hours => :h2)"),
+            {"h": 24 * days, "h2": 48 * days}).one()  # exact N x 24 h, whatever the session zone / DST
     params = {"uid": g.user.id}
     clause = ""
     if since is not None:
-        params["since"], clause = since, "AND time >= :since"
-    t = db.session.execute(text(_TOTALS.format(since_clause=clause)), params).first()
+        params.update(since=since, prev_since=prev_since)
+        clause = "AND time >= :since"
+    # A fixed query count whatever the data (5 for week/month incl. the `since` lookup, 4 for all) (no per-week / per-reason round trips).
+    t = db.session.execute(text(_TOTALS_RANGE if since is not None else _TOTALS_ALL), params).first()  # may be None under TimescaleDB 2.17 (BE-1)
+    reasons = {row.waste_reason: row for row in
+               db.session.execute(text(_REASONS.format(since_clause=clause)), params)}
     weekly = db.session.execute(text(_WEEKLY.format(since_clause=clause)), params).all()
-    if t is None:  # observed once under TimescaleDB 2.17: an ungrouped aggregate returned no row
-        t = _ZERO
-    total = t.s_count + t.w_count
-    r = lambda v: round(float(v), 2)
+    last6 = db.session.execute(text(_LAST_6_WEEKS), {"uid": g.user.id}).all()
+
+    cur = _period(t, "c")
+    wasted_n = cur["wasted"]["count"]
+    waste_reasons = []
+    for reason in WASTE_REASONS:
+        row = reasons.get(reason)
+        n = int(row.n) if row else 0
+        waste_reasons.append({"reason": reason, "count": n,
+                              "kg": _r(row.kg) if row else 0.0, "money": _r(row.money) if row else 0.0,
+                              "co2e_kg": _r(row.co2) if row else 0.0,
+                              "share": n / wasted_n if wasted_n else 0.0})
+    waste_reasons.sort(key=lambda x: -x["count"])  # stable: ties keep the enum order
     return jsonify(
-        saved={"count": t.s_count, "kg": r(t.s_kg), "money": r(t.s_money), "co2e_kg": r(t.s_co2)},
-        wasted={"count": t.w_count, "kg": r(t.w_kg), "money": r(t.w_money), "co2e_kg": r(t.w_co2)},
-        waste_rate=t.w_count / total if total else 0.0,
-        weekly=[{"week": w.week.date().isoformat(), "saved": w.saved, "wasted": w.wasted}
+        range=rng,
+        saved=cur["saved"], wasted=cur["wasted"], used=cur["used"], donated=cur["donated"],
+        waste_rate=cur["waste_rate"],
+        waste_reasons=waste_reasons,
+        previous=_period(t, "p") if since is not None else None,
+        weekly=[{"week": w.week.isoformat(), "saved": w.saved, "wasted": w.wasted}
                 for w in weekly],
+        last_6_weeks=[{"week": w.week.isoformat(), "used": w.used, "donated": w.donated,
+                       "saved": w.used + w.donated, "wasted": w.wasted} for w in last6],
     )
 
 
@@ -151,6 +224,39 @@ def clean_macros(m):
             "fat_g": round(f, 1)}
 
 
+def clean_servings(v):
+    """Integer 1-20, else None (never an error)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v != int(v):
+        return None
+    return int(v) if 1 <= v <= 20 else None
+
+
+def _norm(name) -> str:
+    return " ".join(str(name).lower().split())
+
+
+def match_uses_items(names, items) -> list:
+    """Map Gemini's item names back to the caller's items -> [{item_id, name, predicted_expiry}].
+    Exact (case/space-insensitive) match first, then containment either way; the soonest-expiring
+    unmatched item wins ties. Each item is used at most once per recipe; unmatched names are dropped."""
+    if not isinstance(names, list):
+        return []
+    out, taken = [], set()
+    for raw in names:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        want = _norm(raw)
+        free = [i for i in items if i.id not in taken]  # `items` is already soonest-first
+        hit = (next((i for i in free if _norm(i.name) == want), None)
+               or next((i for i in free if want in _norm(i.name) or _norm(i.name) in want), None))
+        if hit is None:
+            continue
+        taken.add(hit.id)
+        out.append({"item_id": str(hit.id), "name": hit.name,
+                    "predicted_expiry": hit.predicted_expiry.isoformat()})
+    return out
+
+
 @bp.post("/recipes/suggest")
 @require_auth
 def suggest_recipes():
@@ -163,10 +269,15 @@ def suggest_recipes():
     dietary = body.get("dietary", [])
     if not isinstance(dietary, list) or not all(isinstance(d, str) for d in dietary):
         raise validation_error("dietary must be a list of strings.")
-    items = (Item.query.filter(Item.owner_id == g.user.id, Item.removed_at.is_(None))
-             .order_by(Item.predicted_expiry).limit(20).all())
-    if not items:
+    active = (Item.query.filter(Item.owner_id == g.user.id, Item.removed_at.is_(None))
+              .order_by(Item.predicted_expiry, Item.added_at, Item.id).all())
+    if not active:
         return jsonify(recipes=[])
+    key = recipe_cache.make_key(active, n, dietary)
+    cached = recipe_cache.get(g.user.id, key)
+    if cached is not None:
+        return jsonify(recipes=cached)
+    items = active[:20]  # the 20 soonest-expiring go to Gemini
     payload = [{"name": i.name, "category": i.category, "quantity": float(i.quantity),
                 "unit": i.unit, "expires": i.predicted_expiry.isoformat()} for i in items]
     try:
@@ -178,7 +289,10 @@ def suggest_recipes():
         if not isinstance(r, dict):
             continue
         r = dict(r)
+        r["servings"] = clean_servings(r.get("servings"))
+        r["uses_items"] = match_uses_items(r.get("uses_items"), items)
         r["macros"] = clean_macros(r.get("macros"))
         r["macros_estimated"] = True
         out.append(r)
+    recipe_cache.put(g.user.id, key, out)
     return jsonify(recipes=out)
