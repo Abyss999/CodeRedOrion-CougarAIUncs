@@ -84,11 +84,12 @@ def _unwrap(data, list_key):
 
 
 def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "generate",
-              list_key: str | None = None, timeout_s: float | None = None):
+              list_key: str | None = None, timeout_s: float | None = None, retry: bool = True):
     """Parsed JSON as a list (see `_as_list`). A scalar (null, string, number, bool) or an unusable
     shape is an UpstreamError, logged as exactly one `status=error` usage line. `timeout_s` caps the
     HTTP call (the SDK sets none, and a hung call would pin a request thread: gthread keeps
-    heartbeating, so gunicorn never reaps it); None leaves the call exactly as it was."""
+    heartbeating, so gunicorn never reaps it); None leaves the call exactly as it was. `retry=False` skips the
+    one retry on a transient error (enrichment: a second 25 s attempt would blow the client's time budget)."""
     key = current_app.config.get("GEMINI_API_KEY")
     model = current_app.config.get("GEMINI_MODEL")
     if not key or not model:
@@ -103,7 +104,7 @@ def _generate(contents, schema_hint: str, response_schema=None, purpose: str = "
         config = types.GenerateContentConfig(
             response_mime_type="application/json", system_instruction=schema_hint,
             **({"response_schema": response_schema} if response_schema else {}))
-        for delay in (*RETRY_DELAYS_S, None):
+        for delay in ((*RETRY_DELAYS_S, None) if retry else (None,)):
             try:
                 resp = client.models.generate_content(model=model, contents=contents, config=config)
                 break
@@ -272,7 +273,7 @@ def enrich_items(items: list[dict], crops: list, facets=("expiry", "nutrition"))
         else:
             parts.append(label + " No photo.")
     rows = _unwrap(_generate(parts, hint, _enrich_schema(facets), purpose="enrich", list_key="items",
-                             timeout_s=float(current_app.config.get("ENRICH_TIMEOUT_S", 25))), "items")
+                             timeout_s=float(current_app.config.get("ENRICH_TIMEOUT_S", 25)), retry=False), "items")
     out = [{} for _ in items]
     for row in rows:
         i = row.get("index") if isinstance(row, dict) else None

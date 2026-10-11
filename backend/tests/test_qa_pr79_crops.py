@@ -261,8 +261,6 @@ def test_exif_gps_icc_xmp_comment_are_all_stripped(ctx):
     assert set(_jpeg_markers(out)) <= {0xE0, 0xDB, 0xC0, 0xC2, 0xC4}, [hex(m) for m in _jpeg_markers(out)]
 
 
-@pytest.mark.xfail(strict=True, reason="BE-19: a JPEG COM (comment) segment survives the re-encode (Pillow copies "
-                                       "im.info['comment'] through convert/crop/save)")
 def test_jpeg_comment_segment_is_stripped(ctx):
     src = Image.new("RGB", (300, 300), (120, 120, 120))
     data = encode(src, comment=b"secret-comment-text")

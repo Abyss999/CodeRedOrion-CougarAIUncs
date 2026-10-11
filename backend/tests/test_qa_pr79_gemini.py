@@ -315,16 +315,15 @@ def test_every_existing_gemini_function_leaves_timeout_unset(app, monkeypatch, g
     assert fake.client_kwargs and all(k == {} for k in fake.client_kwargs)
 
 
-def test_transient_504_is_retried_so_worst_case_is_two_timeouts(app, client, user, monkeypatch, gemini_on):
-    """Evidence for the latency budget (BE-19): a DEADLINE_EXCEEDED/503 on the enrich call is retried by the
-    shared retry loop, so the 'one Gemini call' is two HTTP requests, 2 x 25 s + 1.5 s worst case."""
+def test_transient_504_is_not_retried_on_enrich_so_the_budget_is_one_timeout(app, client, user, monkeypatch, gemini_on):
+    """BE-20 fixed: enrichment passes retry=False, so a DEADLINE_EXCEEDED/503 is one HTTP request (25 s at most)."""
     class E(Exception):
         code = 504
     use_yolo(app, monkeypatch, [det("apple")])
     fake = FakeGenai(_raise(E("DEADLINE_EXCEEDED"))).install(monkeypatch)
     r = photo(client, user, "expiry")
     assert r.status_code == 200 and r.get_json()["enrichment"]["reason"] == "upstream_error"
-    assert len(fake.calls) == 2
+    assert len(fake.calls) == 1
 
 
 def test_plain_read_timeout_is_not_retried(app, client, user, monkeypatch, gemini_on):

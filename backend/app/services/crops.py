@@ -57,8 +57,8 @@ def _decode(data: bytes):
         orientation = img.getexif().get(_ORIENTATION_TAG, 1)
     except Exception:  # damaged EXIF is not worth losing the photo for
         orientation = 1
-    img.load()
-    return img.convert("RGB"), orientation if orientation in _TRANSPOSE else 1
+    img.load()  # kept in its own mode: only the small crop is converted to RGB (BE-22: no full-size copy)
+    return img, orientation if orientation in _TRANSPOSE else 1
 
 
 def _cut(img, orientation, box):
@@ -73,7 +73,8 @@ def _cut(img, orientation, box):
     right, bottom = min(width, math.ceil(x2 + pad_x)), min(height, math.ceil(y2 + pad_y))
     if right - left < MIN_SIDE_PX or bottom - top < MIN_SIDE_PX:
         return None
-    crop = img.crop((left, top, right, bottom))
+    crop = img.crop((left, top, right, bottom)).convert("RGB")
+    crop.info = {}  # BE-19: Pillow carries a JPEG comment (and other info keys) through crop and save
     if orientation in _TRANSPOSE:
         crop = crop.transpose(_TRANSPOSE[orientation])
     side = int(current_app.config.get("ENRICH_CROP_MAX_PX", MAX_PX))

@@ -203,7 +203,23 @@ def test_unconfigured_raises_without_creating_a_client(app, monkeypatch, usage_r
     assert seen.client_kwargs == [] and usage_records == []
 
 
-def test_transient_errors_are_retried_once_inside_the_same_call(gem, monkeypatch, usage_records):
+def test_transient_errors_are_not_retried_so_the_time_budget_holds(gem, monkeypatch, usage_records):
+    import google.genai as genai
+
+    calls = []
+
+    class Models:
+        def generate_content(self, **kw):
+            calls.append(1)
+            raise RuntimeError("503 UNAVAILABLE. high demand")
+
+    monkeypatch.setattr(genai, "Client", lambda api_key=None, **k: SimpleNamespace(models=Models()))
+    with pytest.raises(gemini.UpstreamError):
+        gemini.enrich_items(ITEMS[:1], [None], ("expiry",))
+    assert len(calls) == 1 and len(usage_records) == 1 and kv(usage_records[0])["status"] == "error"
+
+
+def test_other_calls_still_retry_a_transient_error_once(gem, monkeypatch, usage_records):
     import google.genai as genai
 
     calls = []
@@ -213,9 +229,9 @@ def test_transient_errors_are_retried_once_inside_the_same_call(gem, monkeypatch
             calls.append(1)
             if len(calls) == 1:
                 raise RuntimeError("503 UNAVAILABLE. high demand")
-            return SimpleNamespace(text=answer({"index": 0, "shelf_life_days": 4}), usage_metadata=None)
+            return SimpleNamespace(text=answer({"name": "Milk"}), usage_metadata=None)
 
     monkeypatch.setattr(genai, "Client", lambda api_key=None, **k: SimpleNamespace(models=Models()))
     monkeypatch.setattr(gemini, "RETRY_DELAYS_S", (0,))
-    assert gemini.enrich_items(ITEMS[:1], [None], ("expiry",)) == [{"index": 0, "shelf_life_days": 4}]
+    assert gemini.parse_text("milk") == [{"name": "Milk"}]
     assert len(calls) == 2 and len(usage_records) == 1

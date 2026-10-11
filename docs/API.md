@@ -257,7 +257,7 @@ post it straight back.
   - *What Gemini sees.* With `source: "yolo"`, a **crop** of each detection cut from the uploaded photo. `bbox`
     is in the raw pixel frame that `ml/serve` decoded (RGB, no EXIF transpose), so the crop is cut there and then
     rotated upright by the photo's EXIF orientation; the longest side is at most 512 px; it is re-encoded as JPEG,
-    which drops EXIF and GPS; nothing is stored. A candidate with no usable box (missing, malformed, mostly
+    which drops EXIF, GPS and any JPEG comment; nothing is stored. A candidate with no usable box (missing, malformed, mostly
     outside the image, under 32 px), an undecodable or over-50-megapixel upload, and everything on
     `source: "gemini"` (there are no boxes) are asked **text-only** (name, category, storage, freshness).
   - *What comes back.* `expiry` → `predicted_expiry` = today + days and `expiry_source: "gemini"`, with days
@@ -269,7 +269,8 @@ post it straight back.
     `status` is `ok` (every candidate got something), `partial`, `skipped` (no call made) or `failed`; `reason` is
     `null`, `not_configured` (no Gemini key), `time_budget` (detection alone took over 30 s), `no_eligible`,
     `upstream_error`, `unusable_response` or `unexpected_error`. **Enrichment never changes the HTTP status:**
-    any failure is a `200` with the table dates. The app should allow this request at least 60 s.
+    any failure is a `200` with the table dates. The enrich call is never retried (one attempt, 25 s at most), so
+    the worst case is detection (skipped past 30 s) plus 25 s. The app should allow this request at least 60 s.
   - *Settings* (app config, defaults shown): `ENRICH_MAX_ITEMS` 12, `ENRICH_CROP_MAX_PX` 512, `ENRICH_TIMEOUT_S` 25,
     `ENRICH_MAX_PIXELS` 50,000,000, `ENRICH_SKIP_AFTER_S` 30, and `ML_BBOX_FRAME` `raw` (set `upright` if
     `ml/serve` ever applies the EXIF transpose before detecting).
@@ -451,7 +452,9 @@ fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
     active item of the caller (unknown, removed, someone else's) → `404 not_found` for the whole request, even with
     an empty fridge; a malformed list or id, more than 10, or duplicates → `400`. Those items are always sent to
     Gemini, even when they are not among the 20 soonest-expiring, flagged `must_use`, and every recipe must use at
-    least one of them. The order stays soonest-expiring first. The cache key includes the ids (in any order) only when
+    least one of them: this is an instruction to Gemini, the server does not check that a recipe obeys it (and
+    `uses_items` matches names back soonest-first, so with two items of the same name the focus one may be reported
+    as its twin). The order stays soonest-expiring first. The cache key includes the ids (in any order) only when
     given, so keys without them are unchanged. Works with `max_results` and `dietary`.
   - `servings`: int 1-20 from Gemini, else `null`.
   - `uses_items`: `[{item_id, name, predicted_expiry (date)}]` — Gemini's names mapped back to the
