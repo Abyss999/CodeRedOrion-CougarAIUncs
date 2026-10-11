@@ -79,8 +79,10 @@ def train_stage(name, model, project, resume, device, **kw):
         if st == "partial":
             print(f"[{name}] resuming {last}: last completed epoch {ep + 1} of {total}")
             m = YOLO(str(last))
-            # resume=True reads every hyperparameter from the checkpoint; only data/device/batch/imgsz can be overridden
-            m.train(resume=True, data=kw["data"], device=device, batch=kw["batch"], imgsz=kw["imgsz"])
+            # resume=True reads every hyperparameter from the checkpoint; Ultralytics lets device/batch/imgsz/cache/val (and data)
+            # be overridden. cache is passed so a checkpoint saved with cache=ram can't bring the RAM cache back (ML-69).
+            m.train(resume=True, data=kw["data"], device=device, batch=kw["batch"], imgsz=kw["imgsz"],
+                    cache=kw.get("cache", False), val=kw.get("val", True))
             return Path(m.trainer.last), Path(m.trainer.best), "resumed"
         print(f"[{name}] no usable checkpoint ({st}); training from scratch")
     m = YOLO(model)
@@ -109,7 +111,9 @@ def main(argv=None):
                     help="P(semi_fresh) needed to label a crop semi_fresh in the exported predictions (env SEMI_FRESH_THRESHOLD, default 0.5)")
     ap.add_argument("--skip-cls", action="store_true")
     ap.add_argument("--cache", choices=("none", "ram", "disk"), default="none",
-                    help="Ultralytics image cache for both stages. ram: decode each image once (the Colab CPU is the bottleneck)")
+                    help="Ultralytics image cache for the DETECTOR (ram: decode each image once; Colab's CPU is the bottleneck). The "
+                         "classifier never caches: Ultralytics keeps its crops at full resolution, 9.4 GB for 14k crops, which "
+                         "OOM-killed a free Colab (ML-69)")
     ap.add_argument("--no-epoch-val", action="store_true",
                     help="skip validation after every epoch (Ultralytics still validates the final epoch). We export last.pt, "
                          "not the best val epoch (ML-28), so per-epoch val only fills results.csv")
@@ -121,6 +125,7 @@ def main(argv=None):
 
     project = str(Path(a.project).resolve())     # absolute, so a resumed run finds the same folders
     speed = dict(cache=False if a.cache == "none" else a.cache, val=not a.no_epoch_val)
+    cls_speed = dict(speed, cache=False)   # ML-69: classifier crops are cached at full resolution -> OOM
     det_last, det_best, how = train_stage("det", a.det_model, project, a.resume, device, data=str(data / "data.yaml"),
                                           epochs=a.epochs, imgsz=a.imgsz, batch=a.batch, **speed)
     det_pt = det_last if a.weights == "last" else det_best
@@ -130,7 +135,7 @@ def main(argv=None):
     cls_pt = None
     if not a.skip_cls:
         cls_last, cls_best, how = train_stage("cls", a.cls_model, project, a.resume, device, data=str(data / "cls"),
-                                              epochs=a.cls_epochs, imgsz=224, batch=a.cls_batch, **speed)
+                                              epochs=a.cls_epochs, imgsz=224, batch=a.cls_batch, **cls_speed)
         print(f"cls {how}")
         cls_pt = cls_last if a.weights == "last" else cls_best
 

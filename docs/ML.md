@@ -322,7 +322,7 @@ decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (def
 | detector | `yolo26n.pt`, 512 px, batch 32, **30 epochs** | `yolo26s.pt`, 640 px, batch 16, 80 epochs |
 | detector train set | **capped**: <= `DET_CAP` (400) boxes per food, `ml/yolo/cap_detector.py` (~4.9k of 11.8k images) | all |
 | classifier | `yolo26n-cls`, 224 px, batch 128, **10 epochs**, all crops | same model, batch 64, 30 epochs |
-| cache / val | `--cache ram`, `--no-epoch-val` (Ultralytics still validates the last epoch) | no cache, val every epoch |
+| cache / val | `--cache ram` (detector only), `--no-epoch-val` (Ultralytics still validates the last epoch) | no cache, val every epoch |
 | checkpoints | `data_<DATA_VER>_fast[_dry]/` | `data_<DATA_VER>[_dry]/` |
 
 - **Why the cap is safe for freshness:** the detector only learns food names; fresh / semi_fresh / spoiled comes from the crop classifier,
@@ -337,6 +337,10 @@ decoding + mosaic. The owner asked for ~30 min, so cell 1's `FAST` checkbox (def
 - **Time is an estimate, not measured on a T4**: ~4.9k images/epoch, CPU-bound at roughly 120-150 img/s with RAM cache -> ~35-40 s per
   epoch -> ~20 min detector, ~5 min classifier, ~3 min export. The Ultralytics progress bar shows the real s/epoch; record it here after the
   first run.
+- **The classifier is never RAM-cached (ML-69).** Ultralytics caches classification crops at their original size: the 14,377 train crops
+  are 9.4 GB decoded, which OOM-killed (SIGKILL) the first FAST run on a free Colab (~12.7 GB) at the start of the classifier stage. The
+  detector cache resizes to 512 px first (~3 GB for 4.9k images). A resumed stage passes `cache` / `val` too (Ultralytics allows those
+  overrides), so a checkpoint saved with `cache=ram` can't bring it back. Measured on that run: detector 30 epochs ~26 min on a T4.
 - Don't train on `pipeline augment-lighting` output in FAST mode: it multiplies the train images (and see `docs/PIPELINE.md` for the lighting sign-off rule).
 
 ### 5e. Run log
