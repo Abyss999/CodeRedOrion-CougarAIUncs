@@ -4,12 +4,30 @@ PostgreSQL + TimescaleDB, one database. Relational tables for state; the `food_e
 **hypertable** is the append-only log the Impact Dashboard is computed from.
 Status: **implemented** in migration `0001_initial` (users, items, share_listings, food_events).
 Migration `0004_items_wave2` adds `items.freshness`, `freshness_checked_at`, `confidence` and makes
-`groups.created_by` nullable. Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
+`groups.created_by` nullable. Migration `0005_user_identities` adds `user_identities` and makes
+`users.password_hash` nullable (OAuth-only accounts). Social tables (`friendships`, `groups`, `group_members`, `requests`, plus `share_listings.claimed_by`
 and the `items.group_id` / `share_listings.group_id` FKs to `groups`) are in migration `0002_social`.
 
 ## Relational tables
 ### users
-`id uuid pk (gen_random_uuid())`, `email citext unique` (lowercased by the API), `password_hash`, `display_name`, `created_at`
+`id uuid pk (gen_random_uuid())`, `email citext unique` (lowercased by the API), `password_hash`
+(text, **null** since 0005 for accounts created through an OAuth provider; email login for them is
+`401`), `display_name`, `created_at`
+
+### user_identities
+External sign-ins linked to a user (migration `0005_user_identities`). Generic so a provider can be
+added later; v1 writes only `provider = 'google'`.
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid pk | `gen_random_uuid()` |
+| provider | text | `google` (app-validated; no DB CHECK) |
+| subject | text | the provider's stable user id (Google `sub`) |
+| user_id | uuid → users, `ON DELETE CASCADE` | indexed (`ix_user_identities_user_id`); `DELETE /auth/me` also deletes these rows explicitly |
+| email | citext, null | email the provider asserted at the last sign-in (informational) |
+| created_at | timestamptz | `now()` |
+
+Unique `uq_user_identities_provider_subject (provider, subject)`. A user can have several identities.
+Downgrade to 0004 drops the table and sets null `password_hash` to the unusable value `'!'`.
 
 ### items
 | Column | Type | Notes |

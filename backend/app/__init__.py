@@ -14,6 +14,8 @@ def create_app(config: dict | None = None) -> Flask:
     app.config["GEMINI_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
     app.config["GEMINI_MODEL"] = os.environ.get("GEMINI_MODEL", "")
     app.config["ML_SERVICE_URL"] = os.environ.get("ML_SERVICE_URL", "")
+    # Comma-separated Google OAuth iOS client ids accepted as the ID-token `aud` (POST /auth/oauth/google).
+    app.config["GOOGLE_IOS_CLIENT_IDS"] = os.environ.get("GOOGLE_IOS_CLIENT_IDS", "")
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
     if config:
         app.config.update(config)
