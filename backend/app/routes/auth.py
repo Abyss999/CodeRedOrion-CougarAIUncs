@@ -8,7 +8,7 @@ from ..auth import make_token, require_auth
 from ..errors import ApiError, upstream_unavailable, validation_error
 from ..extensions import db
 from ..models import (TOMBSTONE_USER_ID, FoodEvent, Friendship, Group, GroupMember, HelpRequest, Item,
-                      ShareListing, User, UserIdentity)
+                      RequestAudience, ShareListing, User, UserIdentity)
 from ..services import google_auth
 from ._util import iso, json_body
 
@@ -74,8 +74,8 @@ def _display_name(claims) -> str:
     return claims["email"].split("@", 1)[0][:DISPLAY_NAME_MAX] or "BiteDown user"
 
 
-# Google is authoritative for these mailboxes; for any other domain, only a Workspace `hd` claim makes
-# Google's email_verified strong enough to take over an existing account.
+# Google is authoritative for these mailboxes; for any other domain, only a Workspace `hd` claim that
+# names the email's own domain makes Google's email_verified strong enough to take over an account.
 _GOOGLE_MAIL_DOMAINS = ("gmail.com", "googlemail.com")
 
 
@@ -83,8 +83,11 @@ def _email_linkable(claims) -> bool:
     if not google_auth.email_verified(claims):
         return False
     domain = claims["email"].rsplit("@", 1)[-1].lower()
+    if domain in _GOOGLE_MAIL_DOMAINS:
+        return True
     hd = claims.get("hd")
-    return domain in _GOOGLE_MAIL_DOMAINS or (isinstance(hd, str) and bool(hd.strip()))
+    # A mismatched hd (e.g. hd=corp.com on alice@other.com) proves nothing about the email's domain.
+    return isinstance(hd, str) and hd.strip().lower() == domain
 
 
 def _sign_in_with(provider: str, claims) -> tuple[User, bool]:
@@ -172,6 +175,8 @@ def delete_account():
     ShareListing.query.filter(ShareListing.item_id.in_(item_ids)).delete(synchronize_session=False)
     ShareListing.query.filter_by(claimed_by=uid).update({"claimed_by": None})
     ShareListing.query.filter_by(recipient_id=uid).update({"recipient_id": None})
+    mine = db.select(HelpRequest.id).where(HelpRequest.author_id == uid)
+    RequestAudience.query.filter(RequestAudience.request_id.in_(mine)).delete(synchronize_session=False)
     HelpRequest.query.filter_by(author_id=uid).delete()
     HelpRequest.query.filter_by(fulfilled_by=uid).update({"status": "open", "fulfilled_by": None})
     Friendship.query.filter((Friendship.user_id == uid) | (Friendship.friend_id == uid)

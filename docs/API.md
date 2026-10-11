@@ -44,8 +44,9 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
      a. that user already has a google identity with a different `sub` → `409 identity_conflict`
         (one Google identity per user), nothing written;
      b. else, auto-link only when `email_verified` is true **and** (the email domain is `gmail.com` or
-        `googlemail.com`, case-insensitive, **or** the token has a non-empty `hd` claim, i.e. a Google
-        Workspace account) → a new google identity is linked and the user signed in (`200`); a password
+        `googlemail.com`, case-insensitive, whatever `hd` says, **or** the token's `hd` claim (Google
+        Workspace domain) is a string equal to the email's domain, case-insensitive and trimmed; an `hd`
+        naming any other domain, or a non-string / empty `hd`, does not count) → a new google identity is linked and the user signed in (`200`); a password
         account keeps its password;
      c. otherwise → `409 account_exists_use_password` ("log in with your email and password"),
         nothing written;
@@ -278,32 +279,64 @@ case-insensitive and ignores spaces/dashes.
 - ✅ `GET /groups/:id` → `200 {group}`; `404` unknown, **`403` not a member**.
 - ✅ `POST /groups/join` `{invite_code}` → `200 {group}`; `404` bad code, `409 already_member`.
 - ✅ `POST /groups/:id/leave` → `200 {left: true}`; `404` unknown, `403` not a member. If the owner
-  leaves, the longest-standing member becomes owner. The leaver's open listings and requests in that
-  group are cancelled. A group whose last member leaves is kept but unreachable.
+  leaves, the longest-standing member becomes owner. The leaver's open listings in that group are
+  cancelled. Each of the leaver's **open** requests with this group as an audience loses only that
+  audience; one whose only audience was this group is cancelled instead (its audience row is kept as
+  history). Closed requests and other members' requests are untouched. A group whose last member
+  leaves is kept but unreachable.
 - ✅ `GET /groups/:id/pantry` → `200 {items}` — the group's active items by `predicted_expiry`, each
   an item plus `added_by` (display name). `404` unknown, `403` not a member.
 
 ## Request board
-`request` = `{id, author_id, author_name, group_id, group_name, text, status (open|fulfilled|
-cancelled), fulfilled_by, fulfilled_by_name, created_at, source: {type: "me"|"friend"|"group",
-name}}` — `source` drives the sticky-note header (`me` → your display name, `friend` → author's name,
-`group` → group name).
-- ✅ `POST /requests` `{text (1-280 chars), group_id?}` → `201 {request}`. No `group_id` = visible to
-  your friends. `403` not a member of `group_id`, `404` unknown group, `400` bad text.
-- ✅ `GET /requests` → `200 {requests}` — open only, newest first: your own, friends' non-group
-  requests, and requests in your groups.
+A request is one sticky note posted to one or more **audiences**: the author's accepted friends
+and/or any groups the author is in. It is stored once and shows once on every audience's board.
+
+`request` = `{id, author_id, author_name, text, status (open|fulfilled|cancelled), fulfilled_by,
+fulfilled_by_name, created_at, audiences, source, group_id, group_name}`:
+- `audiences` = `{friends: bool, groups: [{id, name}], hidden_count: int}`, **filtered to the
+  caller**: `friends` is true only when the request has a friends audience and the caller is the
+  author or one of the author's accepted friends; `groups` lists only audience groups the caller is
+  currently in, sorted by name (case-insensitive) then id; every other audience is counted in
+  `hidden_count` and never named or identified. The author normally sees everything
+  (`hidden_count: 0`).
+- `source` drives the sticky-note header: `me` (author, your display name); else `group` with the
+  first group in `audiences.groups` when the caller sees any group audience; else `friend` (author's
+  name).
+- `group_id`, `group_name`: **deprecated** (kept one release for older clients): the first group in
+  `audiences.groups`, or `null`.
+
+- ✅ `POST /requests` `{text (1-280 chars after trimming), audiences: {friends?: bool (default false),
+  group_ids?: [uuid] (default [], max 50)}}` → `201 {request}`.
+  - At least one audience: `friends: true` or a non-empty `group_ids`, else `400 validation_error`.
+    `400` also for a non-object `audiences`, a non-bool `friends`, a non-list (or `null`) `group_ids`,
+    an entry that is not a UUID, more than 50 entries, or a body with both `audiences` and `group_id`.
+  - `group_ids` is deduplicated (same UUID in any spelling counts once; first-seen order kept).
+  - You must currently be a member of every group in `group_ids`: an unknown group **or** one you are
+    not in is `404 not_found` (same answer, so group ids do not leak); nothing is written.
+  - `friends: true` is allowed with zero friends (the note is visible to you until you have some).
+  - **Deprecated (one release):** a body without `audiences` uses the old field: no `group_id` (or
+    `null`) = `{friends: true}`; `group_id` = `{group_ids: [group_id]}` with the old errors (`404`
+    unknown group, `403` not a member, `400` malformed).
+- ✅ `GET /requests` → `200 {requests}` — open only, each request **once**, newest first (`created_at`
+  desc, then id). Visible = the union of: your own; requests with a friends audience whose author is
+  your **accepted** friend; requests with an audience group you are currently in. A fixed number of
+  queries whatever the board size (your groups, your friends, the rows with authors, all their
+  audiences in one query).
 - ✅ `POST /requests/:id/fulfil` → `200 {request}` (`status=fulfilled`, `fulfilled_by` = you). `404`
-  if you cannot see it, `403` your own, `409 request_closed` if not open.
+  if you cannot see it (same visibility union), `403` your own, `409 request_closed` if not open.
+  One fulfilment per request, whichever audience the fulfiller saw it through.
 - ✅ `DELETE /requests/:id` → `200 {request}` (`status=cancelled`). Author only: `403` for a viewer
   who can see it, `404` invisible/unknown, `409 request_closed` if not open.
 
 ## Visibility rules (security core)
-- Friend-scoped things (friends-listings, group-less requests) are visible only to **accepted**
-  friends of the author, plus the author. Pending requests grant nothing; unfriending revokes at once.
+- Friend-scoped things (friends-listings, requests with a friends audience) are visible only to
+  **accepted** friends of the author, plus the author. A request with several audiences is visible
+  to the union of them, and its `audiences` field never names a group the caller is not in. Pending requests grant nothing; unfriending revokes at once.
 - Group-scoped things are visible only to current members of that group.
 - **Resource ids** (listing, request) you may not see return **`404`**, same as nonexistent, so
   existence does not leak. **Group-addressed endpoints** (`/groups/:id…`, a `group_id` in a body)
-  return `404` for an unknown group and **`403`** for a group you are not in.
+  return `404` for an unknown group and **`403`** for a group you are not in. Exception:
+  `audiences.group_ids` on `POST /requests` returns `404` for both, since it is a list.
 - Acting on a visible resource you lack the right for (cancel someone else's listing/request) is `403`.
 
 ## Recipes, impact, tips
@@ -351,9 +384,22 @@ name}}` — `source` drives the sticky-note header (`me` → your display name, 
   - Computed from `food_events` (`event_type='remove'`) on every request, never stored totals; money/kg/
     co2e rounded to 2 dp. A fixed number of queries, independent of data size (5 for `week`/`month`,
     including the window-start lookup; 4 for `all`). Zero data → zeros.
-- ✅ `GET /tips` → `200 {tips: [{code, message}]}`. Based on the last 90 days of `thrown_out` events
-  (top reason, most-wasted item, most-wasted category) plus items expiring within 2 days. Zero data
-  → one `getting_started` tip.
+- ✅ `GET /tips` → `200 {tips: [{code, message}]}` (shape unchanged). Every `message` is a single
+  line of at most 100 characters stating a fact about the caller's own data, never advice or an
+  imperative. Event-based tips use the last **30 days** (rolling, same as `/impact?range=month`; was 90)
+  of the caller's `remove` events; item names are trimmed to 30 characters (lists to 20 each, up to 3
+  names then "and N more"). In this order, each only when it has data:
+  | code | from | example |
+  |---|---|---|
+  | `past_expiry` | active items with `predicted_expiry` before today | "Ham is past the expiry date and still logged as in stock." |
+  | `expiring_soon` | active items expiring today..today+2 | "Yogurt and Milk expire within 2 days." |
+  | `top_wasted_item` | most thrown-out item name (case-insensitive) | "Cilantro went in the bin 3 times in the last 30 days." |
+  | `top_reason_<reason>` | most common `waste_reason` | "3 of the 4 items you threw out in the last 30 days had expired." |
+  | `top_wasted_category` | most thrown-out category, with money when known | "Leafy produce was thrown out most in the last 30 days: 3 items, about $10.50." |
+  | `saved_recent` | `used` + `donated` count | "You used or donated 2 items in the last 30 days." |
+  | `getting_started` | only when none of the above apply | "Nothing used, donated or thrown out in the last 30 days." |
+  Ties: item by name, reason and category alphabetically. `top_reason_*` codes are unchanged
+  (`expired`, `forgot`, `didnt_like`, `other`); `past_expiry` and `saved_recent` are new codes.
 
 ## Gemini usage logging
 Every Gemini call (`parse_text`, `detect`, `recipes`, `shelf_life`) writes one INFO line on the

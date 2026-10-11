@@ -144,66 +144,135 @@ def get_impact():
     )
 
 
-_REASON_TIPS = {
-    "expired": "Most of your waste is food that expired. Check the 'expiring soon' list when you shop.",
-    "forgot": "Most of your waste is food you forgot about. Keep older items at the front of the shelf.",
-    "didnt_like": "Most of your waste is food you didn't like. Try buying smaller amounts of new things.",
-    "other": "Most of your waste has 'other' reasons. Add notes next time to spot a pattern.",
+# Tips are one-line, factual observations about the caller's own data. No advice, no imperatives.
+TIP_WINDOW_DAYS = 30  # matches /impact?range=month (rolling 30 days)
+TIP_MAX_LEN = 100  # every message is one short line
+NAME_MAX = 30
+_WINDOW = f"{TIP_WINDOW_DAYS} days"
+_IN_WINDOW = f"in the last {TIP_WINDOW_DAYS} days"
+
+# (singular, plural) predicate per waste reason: "<n> of the <total> items you threw out ... <pred>."
+_REASON_PRED = {
+    "expired": ("had expired", "had expired"),
+    "forgot": ("was forgotten", "were forgotten"),
+    "didnt_like": ("was food you didn't like", "were food you didn't like"),
+    "other": ("was marked 'other'", "were marked 'other'"),
+}
+_CATEGORY_LABEL = {
+    "produce_leafy": "Leafy produce", "produce_hardy": "Hardy produce", "dairy": "Dairy",
+    "meat": "Meat", "seafood": "Seafood", "bakery": "Bakery", "eggs": "Eggs",
+    "leftovers": "Leftovers", "pantry_dry": "Dry pantry goods", "frozen": "Frozen food",
+    "other": "Other food",
 }
 
-_BY_REASON = text("""
-SELECT waste_reason, count(*) AS n FROM food_events
+_BY_REASON = text(f"""
+SELECT waste_reason, count(*) AS n, sum(count(*)) OVER () AS total FROM food_events
 WHERE user_id = :uid AND event_type = 'remove' AND outcome = 'thrown_out'
-  AND time >= now() - interval '90 days'
+  AND time >= now() - interval '{_WINDOW}'
 GROUP BY waste_reason ORDER BY n DESC, waste_reason
 """)
-_BY_ITEM = text("""
-SELECT i.name, e.waste_reason, count(*) AS n
+_BY_ITEM = text(f"""
+SELECT min(i.name) AS name, count(*) AS n
 FROM food_events e JOIN items i ON i.id = e.item_id
 WHERE e.user_id = :uid AND e.event_type = 'remove' AND e.outcome = 'thrown_out'
-  AND e.time >= now() - interval '90 days'
-GROUP BY lower(i.name), i.name, e.waste_reason ORDER BY n DESC, i.name LIMIT 1
+  AND e.time >= now() - interval '{_WINDOW}'
+GROUP BY lower(i.name) ORDER BY n DESC, min(i.name) LIMIT 1
 """)
-_BY_CATEGORY = text("""
+_BY_CATEGORY = text(f"""
 SELECT category, count(*) AS n, coalesce(sum(est_price),0) AS money FROM food_events
 WHERE user_id = :uid AND event_type = 'remove' AND outcome = 'thrown_out'
-  AND time >= now() - interval '90 days'
+  AND time >= now() - interval '{_WINDOW}'
 GROUP BY category ORDER BY n DESC, category LIMIT 1
 """)
+_SAVED = text(f"""
+SELECT count(*) AS n FROM food_events
+WHERE user_id = :uid AND event_type = 'remove' AND outcome IN ('used','donated')
+  AND time >= now() - interval '{_WINDOW}'
+""")
+
+
+def _times(n: int) -> str:
+    return {1: "once", 2: "twice"}.get(n, f"{n} times")
+
+
+def _items(n: int) -> str:
+    return f"{n} item" if n == 1 else f"{n} items"
+
+
+def _short(name: str, n: int = NAME_MAX) -> str:
+    name = " ".join(str(name).split())
+    return name if len(name) <= n else name[:n - 1].rstrip() + "\u2026"
+
+
+def _name_list(names, k: int) -> str:
+    """'A', 'A and B', 'A, B and C', 'A, B and 2 more': the first k names, the rest counted."""
+    shown = [_short(x, 20) for x in names[:k]]
+    rest = len(names) - len(shown)
+    if rest > 0:
+        return f"{', '.join(shown)} and {rest} more"
+    return shown[0] if len(shown) == 1 else f"{', '.join(shown[:-1])} and {shown[-1]}"
+
+
+def _fit(names, tail: str) -> str:
+    """'<names> <tail>' with as many names (up to 3) as fit in TIP_MAX_LEN."""
+    for k in (3, 2, 1):
+        msg = f"{_name_list(names, k)} {tail}"
+        if len(msg) <= TIP_MAX_LEN:
+            return msg
+    return msg
+
+
+def build_tips(uid) -> list:
+    """Every tip is a short observation from the caller's own items and food_events (no advice)."""
+    params = {"uid": uid}
+    tips = []
+    today = date.today()
+    soon = (Item.query.filter(Item.owner_id == uid, Item.removed_at.is_(None),
+                              Item.predicted_expiry <= today + timedelta(days=2))
+            .order_by(Item.predicted_expiry, Item.added_at).all())
+    past = [i.name for i in soon if i.predicted_expiry < today]
+    upcoming = [i.name for i in soon if i.predicted_expiry >= today]
+    if past:
+        verb = "is" if len(past) == 1 else "are"
+        tips.append({"code": "past_expiry",
+                     "message": _fit(past, f"{verb} past the expiry date and still logged as in stock.")})
+    if upcoming:
+        verb = "expires" if len(upcoming) == 1 else "expire"
+        tips.append({"code": "expiring_soon",
+                     "message": _fit(upcoming, f"{verb} within 2 days.")})
+    top_item = db.session.execute(_BY_ITEM, params).first()
+    if top_item:
+        tips.append({"code": "top_wasted_item",
+                     "message": f"{_short(top_item.name)} went in the bin {_times(int(top_item.n))} {_IN_WINDOW}."})
+    top_reason = db.session.execute(_BY_REASON, params).first()
+    if top_reason:
+        n, total = int(top_reason.n), int(top_reason.total)
+        one, many = _REASON_PRED[top_reason.waste_reason]
+        msg = (f"The one item you threw out {_IN_WINDOW} {one}." if total == 1 else
+               f"{n} of the {total} items you threw out {_IN_WINDOW} {one if n == 1 else many}.")
+        tips.append({"code": f"top_reason_{top_reason.waste_reason}", "message": msg})
+    top_cat = db.session.execute(_BY_CATEGORY, params).first()
+    if top_cat:
+        label = _CATEGORY_LABEL.get(top_cat.category, top_cat.category.replace("_", " ").capitalize())
+        money = float(top_cat.money)
+        cost = f", about ${money:.2f}" if money > 0 else ""
+        tips.append({"code": "top_wasted_category",
+                     "message": f"{label} was thrown out most {_IN_WINDOW}: "
+                                f"{_items(int(top_cat.n))}{cost}."})
+    saved = int(db.session.execute(_SAVED, params).scalar() or 0)
+    if saved:
+        tips.append({"code": "saved_recent",
+                     "message": f"You used or donated {_items(saved)} {_IN_WINDOW}."})
+    if not tips:
+        tips.append({"code": "getting_started",
+                     "message": f"Nothing used, donated or thrown out {_IN_WINDOW}."})
+    return tips
 
 
 @bp.get("/tips")
 @require_auth
 def get_tips():
-    uid = {"uid": g.user.id}
-    tips = []
-    soon = (Item.query.filter(Item.owner_id == g.user.id, Item.removed_at.is_(None),
-                              Item.predicted_expiry <= date.today() + timedelta(days=2))
-            .order_by(Item.predicted_expiry).all())
-    if soon:
-        names = ", ".join(i.name for i in soon[:3])
-        tips.append({"code": "expiring_soon",
-                     "message": f"{len(soon)} item(s) expire within 2 days: {names}. Use them first."})
-    top_reason = db.session.execute(_BY_REASON, uid).first()
-    if top_reason:
-        tips.append({"code": f"top_reason_{top_reason.waste_reason}",
-                     "message": _REASON_TIPS[top_reason.waste_reason]})
-    top_item = db.session.execute(_BY_ITEM, uid).first()
-    if top_item:
-        verb = "forgotten" if top_item.waste_reason == "forgot" else "thrown out"
-        tips.append({"code": "top_wasted_item",
-                     "message": f"{top_item.name} is the item you've {verb} most "
-                                f"({top_item.n}x in 90 days). Buy less of it or plan a meal around it."})
-    top_cat = db.session.execute(_BY_CATEGORY, uid).first()
-    if top_cat:
-        tips.append({"code": "top_wasted_category",
-                     "message": f"{top_cat.category.replace('_', ' ').title()} is your biggest waste "
-                                f"category ({top_cat.n} thrown out, about ${float(top_cat.money):.2f})."})
-    if not tips:
-        tips.append({"code": "getting_started",
-                     "message": "Add what's in your fridge and mark things used, donated or thrown "
-                                "out. Your personalised tips appear as you do."})
-    return jsonify(tips=tips)
+    return jsonify(tips=build_tips(g.user.id))
 
 
 def _num_in(v, hi):
