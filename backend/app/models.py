@@ -182,7 +182,7 @@ class HelpRequest(db.Model):
     __tablename__ = "requests"
     id = _uuid_pk()
     author_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id"), nullable=True)
+    # Who sees it lives in `request_audiences` (migration 0006 dropped requests.group_id).
     text = db.Column(db.Text, nullable=False)
     status = db.Column(db.Text, nullable=False, default="open")
     fulfilled_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
@@ -193,4 +193,30 @@ class HelpRequest(db.Model):
         CheckConstraint("char_length(text) BETWEEN 1 AND 280", name="ck_requests_text_len"),
         CheckConstraint("(status = 'fulfilled') = (fulfilled_by IS NOT NULL)",
                         name="ck_requests_fulfilled_iff_by"),
+    )
+
+
+AUDIENCE_KINDS = ("friends", "group")
+
+
+class RequestAudience(db.Model):
+    """One audience of a request: the author's accepted friends (kind='friends', group_id null) or
+    one group (kind='group'). A request has at least one; it shows once on each audience's board."""
+    __tablename__ = "request_audiences"
+    id = _uuid_pk()
+    request_id = db.Column(UUID(as_uuid=True), db.ForeignKey("requests.id", ondelete="CASCADE"),
+                           nullable=False)
+    kind = db.Column(db.Text, nullable=False)
+    group_id = db.Column(UUID(as_uuid=True), db.ForeignKey("groups.id", ondelete="CASCADE"), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('friends','group')", name="ck_request_audiences_kind"),
+        CheckConstraint("(kind = 'group') = (group_id IS NOT NULL)",
+                        name="ck_request_audiences_group_iff_kind"),
+        Index("uq_request_audiences_friends", "request_id", unique=True,
+              postgresql_where=text("kind = 'friends'")),
+        Index("uq_request_audiences_group", "request_id", "group_id", unique=True,
+              postgresql_where=text("kind = 'group'")),
+        Index("ix_request_audiences_group_id", "group_id"),
     )
