@@ -2,6 +2,20 @@
 
 Newest first. Each entry: date, decision, why, alternatives considered.
 
+## 2026-10-11 — iOS screen build rulings (parallel screen group, canvas v53/v54)
+- **LogIn never reveals whether an email has an account.** The backend already returns `401 invalid_credentials` for an
+  unknown email and a wrong password alike. The app shows one generic message under the password field for every
+  non-network login failure, and has no "no account with that email" copy. *Why:* that copy would be an account-enumeration
+  oracle if the server ever returned 404. SignUp's `409 email_taken` stays, as the backend contract defines it.
+- **Home's tip sits directly below the header**, as the v53 artboard draws it (the build notes had said "at the top"). It is
+  still one observation, dismissible, and the dismissal persists.
+- **Photo-review Toss sends `waste_reason: expired`.** There is no `spoiled` reason in the API, which matches the 2026-10-11
+  feedback-round ruling.
+- **Cross-screen links land as closures.** Home exposes `onOpenImpact`, `onOpenSettings` and `onOpenServerSettings` as no-ops
+  until those screens merge. Impact is reached by the DEBUG flag `-UITestOpenImpact` until then.
+- **Round 4 (v54, #91):** ItemShared's primary "Given to <name>" opens the normal RemoveSheet prefilled with Shared it + the
+  claimer (`.default`, `recipient_id` omitted per #78). Approved by `food-main`.
+
 ## 2026-10-11 — Photo enrichment with Gemini (PR #79, FrankinstyLe; rulings recorded by food-orch)
 - **Crops only on the YOLO path.** When YOLO produced boxes, each detection is cut from the photo (512 px JPEG, metadata dropped, nothing stored) and sent to Gemini. On the Gemini-vision fallback there are no boxes, so the call is text-only. *Why:* the fallback has already looked at the photo, and a crop is the least data that still lets the model see the food.
 - **Model knowledge only, no grounding.** Expiry days and nutrition come from the model's own knowledge, with no search or retrieval. They are estimates: `nutrition.estimated` is always true, and dates reuse `expiry_source: "gemini"`, clamped to 0..2 x the table default + 3. *Why:* grounding adds latency and cost for no demo value.
