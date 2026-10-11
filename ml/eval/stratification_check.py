@@ -15,7 +15,9 @@ against the files on disk and against an independent session reconstruction (300
 PASS only if: every required cell has held-out > 0 and train >= 50% (images and boxes); every
 not-measurable cell has held-out = val = 0; every cell >= 10 images that is absent from held-out is
 listed not-measurable by the report AND has < 2 independent sessions of >= min_session_images by my own
-count; no session (my reconstruction) spans train/val/held-out; report == manifest == disk.
+count; no timestamped session (my reconstruction, unmerged) spans train/val/held-out; no pHash near-duplicate pair
+straddles splits inside a merged unit (the merge, capped at the builder's max_unit_images, only feeds the count of
+independent units); report == manifest == disk.
 """
 from __future__ import annotations
 
@@ -43,36 +45,56 @@ def image_cells(root: Path, split: str, p: Path):
     return {(names[str(c)], {0: "fresh", 1: "spoiled", 2: "semi_fresh"}[f]) for c, f in zip(cls, fr)}
 
 
-def _merge_by_phash(root: Path, rows: list) -> None:
-    """Independence units = sessions/series merged across pHash <= 6 neighbours within a source (the same rule the
-    builder applies; ML-21). Computed here from the images, not read from dataset_report.json. Without this a source
-    whose near-duplicate shots span capture sessions (MeatScan beef, all one cut across 3 days) looks like 5
-    independent sessions and the check disagrees with the ruled, correct single unit."""
+def _merge_by_phash(root: Path, rows: list, max_unit: int = 600) -> dict:
+    """Sets r["unit"] (and r["unit_ts"], True if any merged session is timestamped): sessions/series merged across
+    pHash <= 6 neighbours within a source, for the measurability count ONLY (ML-21; r["session"] is left untouched, and
+    the span rule runs on it). Mirrors prepare_dataset.merge_near_duplicates: a component of more than `max_unit` images
+    is NOT merged (its sessions stay separate units). Returns the cross-split near-duplicate pairs inside merged units
+    (ML-60: those units span splits because of the pair, a gate failure), computed here from the images."""
     import numpy as np
     from leakage_check import hash_images, PHASH_T
     pop = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
     by_src = defaultdict(list)
     for i, r in enumerate(rows):
         by_src[r["src"]].append(i)
+    pairs, oversized = [], 0
     for src, idx in by_src.items():
         paths = [root / "images" / rows[i]["split"] / rows[i]["name"] for i in idx]
         hs = hash_images(paths, None)
         h = np.array([hs[p.name][0] for p in paths], dtype=np.uint64)
         parent = {rows[i]["session"]: rows[i]["session"] for i in idx}
+        has_ts = {}
+        for i in idx:
+            has_ts[rows[i]["session"]] = has_ts.get(rows[i]["session"], False) or rows[i]["ts"] is not None
 
         def find(x):
             while parent[x] != x:
                 parent[x] = parent[parent[x]]
                 x = parent[x]
             return x
+        near = []
         for a in range(len(idx) - 1):
             d = pop[(h[a] ^ h[a + 1:]).view(np.uint8).reshape(-1, 8)].sum(axis=1)
             for b in np.nonzero(d <= PHASH_T)[0]:
-                ra, rb = find(rows[idx[a]]["session"]), find(rows[idx[a + 1 + int(b)]]["session"])
+                ia, ib = idx[a], idx[a + 1 + int(b)]
+                ra, rb = find(rows[ia]["session"]), find(rows[ib]["session"])
                 if ra != rb:
                     parent[ra] = rb
+                    has_ts[rb] = has_ts[rb] or has_ts[ra]      # the flag travels with the union
+                if rows[ia]["split"] != rows[ib]["split"]:
+                    near.append((ia, ib, int(d[b])))
+        size = Counter(find(rows[i]["session"]) for i in idx)
+        big = {c for c, n in size.items() if n > max_unit}
+        oversized += len(big)
         for i in idx:
-            rows[i]["session"] = find(rows[i]["session"])
+            root_id = find(rows[i]["session"])
+            merged = root_id not in big
+            rows[i]["unit"] = root_id if merged else rows[i]["session"]
+            rows[i]["unit_ts"] = has_ts[root_id] if merged else has_ts[rows[i]["session"]]
+        pairs += [{"unit": find(rows[ia]["session"]), "a": rows[ia]["name"], "a_split": rows[ia]["split"], "b": rows[ib]["name"],
+                   "b_split": rows[ib]["split"], "hamming": d}
+                  for ia, ib, d in near if find(rows[ia]["session"]) not in big]
+    return {"max_unit_images": max_unit, "oversized_components_not_merged": oversized, "cross_split_pairs": pairs}
 
 
 def check(root: Path, phash_merge: bool = True) -> dict:
@@ -97,17 +119,27 @@ def check(root: Path, phash_merge: bool = True) -> dict:
             last = t
     for i, r in enumerate(rows):
         r["session"] = sess.get(i, f"{r['src']}/s:{r['key']}")
+    # explicit per-session flag (does the session contain any timestamped row); never parsed from the id string
+    ts_sessions = {r["session"] for r in rows if r["ts"] is not None}
+    for r in rows:
+        r["session_ts"] = r["session"] in ts_sessions
+        r["unit"], r["unit_ts"] = r["session"], r["session_ts"]
+    merge = None
     if phash_merge:
-        _merge_by_phash(root, rows)
+        try:
+            nd = json.loads((root / "dataset_report.json").read_text()).get("grouping", {}).get("near_duplicates") or {}
+        except (OSError, ValueError):
+            nd = {}
+        merge = _merge_by_phash(root, rows, int(nd.get("max_unit_images", 600)))
     by_cell = defaultdict(lambda: {"images": Counter(), "sessions": set(), "sources": Counter()})
     for r in rows:
         for c in r["cells"]:
             k = f"{c[0]}/{c[1]}"
             by_cell[k]["images"][r["split"]] += 1
-            by_cell[k]["sessions"].add(r["session"])
+            by_cell[k]["sessions"].add(r["unit"])
             by_cell[k]["sources"][r["src"]] += 1
     out = {"_rows": rows, "cells": {}, "missing_from_heldout_required": [], "single_session_not_measurable": [],
-           "small_not_measurable": [], "never_trained_cells": []}
+           "small_not_measurable": [], "never_trained_cells": [], "phash_merge": merge}
     for k, v in sorted(by_cell.items()):
         n = sum(v["images"].values())
         out["cells"][k] = {"train": v["images"]["train"], "val": v["images"]["val"], "heldout": v["images"]["heldout"],
@@ -191,7 +223,7 @@ def verify(root: Path, out: dict) -> dict:
         by_sess = Counter()
         for r in out["_rows"]:
             if tuple(k.split("/")) in r["cells"]:
-                by_sess[r["session"]] += 1
+                by_sess[r["unit"]] += 1
         mine_big = sum(1 for v in by_sess.values() if v >= min_s)
         info["decision_table"][k] = {"decision": d["decision"], "train/val/heldout_images": [c["train"], c["val"], c["heldout"]],
                                      "train_pct_images": round(100 * c["train"] / n, 1), "train_pct_boxes": round(100 * b["train"] / max(1, bn), 1),
@@ -222,14 +254,29 @@ def verify(root: Path, out: dict) -> dict:
     # the legacy key now follows the report's decisions (what the Colab gate reads)
     out["missing_from_heldout_required"] = [k for k, c in out["cells"].items()
                                             if dec.get(k, {}).get("decision") == "required_in_heldout" and c["heldout"] == 0]
-    # timestamped sessions spanning splits (my reconstruction); stem groups reported as info
-    span = defaultdict(set)
+    # span rule on the UNMERGED sessions (merging must never hide a span): a session with any timestamped row that
+    # spans splits fails; untimestamped stem groups are info (ML-59)
+    span, sess_ts = defaultdict(set), {}
     for r in out["_rows"]:
         span[r["session"]].add(r["split"])
-    ts_span = [s for s, v in span.items() if len(v) > 1 and "/t" in s.split("/")[-1][:2]]
-    stem_span = [s for s, v in span.items() if len(v) > 1 and "/s:" in s]
+        sess_ts[r["session"]] = r["session_ts"]
+    ts_span = [s for s, v in span.items() if len(v) > 1 and sess_ts[s]]
+    stem_span = [s for s, v in span.items() if len(v) > 1 and not sess_ts[s]]
     if ts_span:
         fails.append(f"{len(ts_span)} timestamped sessions span more than one split: {ts_span[:3]}")
+    # a merged unit that spans splits because of a cross-split pHash pair is a failure (ML-60)
+    pm = out.get("phash_merge") or {}
+    pairs = pm.get("cross_split_pairs", [])
+    if pairs:
+        for p in pairs[:5]:
+            fails.append(f"merged unit {p['unit']} spans splits {p['a_split']}/{p['b_split']} because of pHash near-duplicate "
+                         f"pair {p['a']} ({p['a_split']}) ~ {p['b']} ({p['b_split']}), hamming {p['hamming']}")
+        if len(pairs) > 5:
+            fails.append(f"... {len(pairs) - 5} more cross-split pHash pairs inside merged units")
+    info["timestamped_sessions_spanning_splits"] = len(ts_span)
+    info["phash_cross_split_pairs"] = len(pairs)
+    info["phash_oversized_components_not_merged"] = pm.get("oversized_components_not_merged", 0)
+    info["phash_max_unit_images"] = pm.get("max_unit_images")
     info["stem_groups_spanning_splits"] = len(stem_span)
     info["stem_group_examples"] = stem_span[:5]
     for kk, v in out["report_vs_manifest"].items():
@@ -253,6 +300,9 @@ if __name__ == "__main__":
         print(f"  {k:22s} {t['decision'][:12]:12s} {t['train/val/heldout_images']!s:18s} {t['train_pct_images']:5.1f}/{t['train_pct_boxes']:5.1f}  mine={t['my_sessions_ge_min']} report={t['report_units']}")
     print("required cells with no val image:", v["info"]["val_missing_for_required"])
     print("required cells that rely on pooling (I count < 2 sessions >= min):", v["info"]["required_cells_relying_on_pooling"])
+    print("timestamped sessions spanning splits:", v["info"]["timestamped_sessions_spanning_splits"],
+          "| pHash cross-split pairs in merged units:", v["info"]["phash_cross_split_pairs"],
+          "| oversized components left unmerged:", v["info"]["phash_oversized_components_not_merged"])
     print("stem groups spanning splits (info):", v["info"]["stem_groups_spanning_splits"], v["info"]["stem_group_examples"])
     print("spoiled from exactly one source:", r["spoiled_single_source"], "| no spoiled at all:", r["no_spoiled_at_all"])
     print("FAILURES:", json.dumps(v["failures"], indent=1) if v["failures"] else "none")
