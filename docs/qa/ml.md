@@ -674,3 +674,115 @@ Changes checked on #54:
 - **(c) model fallback.** `gemini_structure` falls back to `gemini-3.8-flash` (`receipt_pipeline.py:289`) when neither an argument nor `GEMINI_MODEL` is set. I updated three assertions in `ml/eval/tests/test_gemini_structuring.py` from `gemini-flash-latest` to `gemini-3.8-flash`: `test_model_default_alias` (line 126), `test_model_empty_env_falls_back` (line 139) and `test_ocr_request_uses_env_model_and_default` (line 249). That file has 63 passed.
 
 **Note:** `clean_structured` still passes negative prices (coupon lines) through. The backend now drops them (BE-14, `docs/qa/backend.md`), so this is not an ML bug.
+
+# 2026-10-10: ML QA of the three new sources (meatscan, dafif, food_spoilage_status), dataset `fwr_data_new3`
+
+Dataset is the prepared three-source set only (`ml/yolo/prepare_dataset.py --sources .../sources.new3.json`), read-only. Evidence under `ml/eval/results/` (gitignored): `leak_new3.json|txt`, `strat_new3.json|txt`, `ms_pairs_0|1.jpg`, `ms_fresh40|spoiled40.jpg`, `df_cross.jpg`, `df_fresh|spoiled.jpg`, `fss_boxes.jpg`, `fss_neighbors.jpg`, `fss_siblings.jpg`. I installed `imagehash` into `.venv-ml` only (`uv pip install -p .venv-ml/bin/python imagehash`).
+
+## Verdict: **FAIL for food_spoilage_status (leakage); meatscan and dafif are leak-free but carry named risks**
+The Colab run is safe with `meatscan` and `dafif` (train-only / documented). `food_spoilage_status` must **not** be included until it is regrouped by parent image (ML-50). Metrics from a split that contains it fail the gate and must not be quoted.
+
+## 0. The gates were blind to these sources (ML-48, ML-49)
+First run of `leakage_check.py` printed **PASS with 0 held-out originals**: `SOURCES` was hard-coded to the five old sources, so none of the new ones was checked (and `stratification_check.py` crashed with `KeyError: 'dafif'`). Fixed in `ml/eval/leakage_check.py:28` (new sources added). Second blind spot: `stamp()` only knew `Screen_Shot_..._at_8_31_22_PM` with underscores, but Roboflow sanitises to `Screen-Shot-2018-06-08-at-5-09-10-PM` / `WhatsApp-Image-2020-11-07-at-11-35-36-PM`; added the hyphen form (`_HYPHEN`). After both fixes the gate is meaningful. `ml/eval` suite: 152 passed. The builder's own parser has the same blind spot (ML-50).
+
+## 1. Gate results per source (after the fixes)
+| Source | held-out originals | timestamped | within 60 s | within 300 s | min gap | pHash <= 6 (held-out -> train+val) | dHash (info) | complete-session assertion |
+|---|---|---|---|---|---|---|---|---|
+| meatscan | 0 (all 600 in train) | n/a | n/a | n/a | n/a | n/a (nothing held out) | n/a | ok |
+| dafif | 88 (tuna_s2) | 0 (no capture time in names) | n/a | n/a | n/a | **0 / 88 = 0.0%** | 2 (2.3%, see 3) | ok |
+| food_spoilage_status | 46 | 27 | **18 (66.7%)** | **21 (77.8%)** | **0 s** | 0 / 46 = 0.0% | 1 (2.2%) | **FAIL** (7 fragments) |
+
+`ML-21 timestamp+pHash criterion: FAIL` (food_spoilage_status only). Identity pHash is 0% for it because the near-duplicates are rotated, flipped or cropped copies, which the identity hash cannot see.
+
+`stratification_check.py`: 3 failures, none is a leak. (a) beef x2: "report says not measurable but I count 5 sessions >= 10 images" is the timestamp-session count against the builder's pHash-merged unit; ruled below, the merged unit is right. (b) `potato/fresh` is declared not measurable (whole cell to train, `dataset_report` boxes 51/0/49) yet 5 held-out images / 49 boxes sit in held-out (ML-53). The 18 "report vs manifest" failures of the first run were my harness comparing `None` with `0` on a subset dataset (ML-54, fixed at `stratification_check.py:117`).
+
+| Cell (new sources) | images / sessions | decision | train / val / held-out images |
+|---|---|---|---|
+| beef fresh, beef spoiled | 300 / 1 unit each | not measurable on held-out | 300 / 0 / 0 each |
+| fish fresh | 300 | required in held-out (pooled) | 200 / 60 / 40 |
+| fish spoiled | 300 | required in held-out (pooled) | 204 / 48 / 48 |
+| bitter_melon spoiled | 33 / 3 | not measurable | 33 / 0 / 0 |
+| other produce cells (food_spoilage_status) | 11-39 each | required, pooled | see `strat_new3.txt` |
+
+## 2. Beef (MeatScan): the one-unit merge is correct, beef stays train-only
+pHash <= 6 on the 600 originals: **1,168 pairs, 501 of 600 images have at least one partner, 100% same class (0 cross-class)**; 372 pairs same day, 784 different day, 12 within 300 s. I looked at 12 pairs (6 fresh, 6 spoiled; 4 different-day, 4 same-day more than 300 s apart, 4 within 300 s; `ms_pairs_0.jpg`, `ms_pairs_1.jpg`):
+- **12 of 12 are "same shot / same cut".** Fresh pairs across 14, 15 and 16 Feb show the identical cut, the same incision and the same bone fragment, re-framed by a few degrees (d = 4); same-day fresh pairs 1.5 h apart are the same tray of meat. All six spoiled pairs show the same single object (below).
+- Ruling recommendation: **grouping is right (true leak, not domain similarity)**. Whole source to train, beef "not measurable on held-out" with N/A metrics and counts stated (600 images, 1 unit). Do not split it by capture time: the specimen reappears across days. No evidence this fails the gate; the gate is satisfied precisely because nothing is held out.
+- **Label-sanity (ML-52):** I viewed 10+40 images per class. **Every spoiled image is one pale pink, glossy piece of meat lying in a black plastic bag on dried leaves** (a single specimen, different crops and distances). Fresh is a small set of red cuts on a butcher's table. So the class is perfectly confounded with the scene: the model can learn "black bag = spoiled". The piece does look off compared with the red fresh cuts (pale, wet, grey-green at the edge), so the label is plausible, but it is one object. Recommend the data owner either caps beef (for example <= 30 per class), or keeps it train-only and records "beef spoiled = 1 specimen, scene-confounded" as a named risk in `docs/ML.md`. This is not a leakage bug.
+
+## 3. Fish (DaFiF)
+- **No species+session batch straddles splits.** Train = mackerel s1, s2 and tilapia s1, s2 (404). Val = tuna s1 (108). Held-out = tuna s2 (88). Each batch holds both fresh and spoiled (days 1-3 or 2-3 vs 9-11), so day-grouping across freshness is intact.
+- **Correction to the expected framing (ML-51):** held-out fish metrics are **not** "same species, different batch". Train has **no tuna at all**; held-out is a species the model never trained on (and tuna s1 sits alone in val, so val and held-out share the species). Label it "unseen species (tuna), same tray and camera setup", a harder and more honest test, but one species and one batch (88 images, CIs wide).
+- **Flagged pairs by eye:** pHash <= 6 finds 15 pairs, all within one batch (same fish photographed across days, same grouping unit), and 2 cross-batch pairs, both train/train (mackerel s2 vs tilapia s2, tilapia s2 vs s1; different species, same green tray; not leakage). dHash flags 2 held-out/val pairs (tuna s2 vs s1, d = 6; `df_cross.jpg`): same species, same tray, **different individual fish** (body outline, fin and mark positions differ). Class: "same scene, different contents" = domain similarity, not a shared shot. The gate passes (pHash 0%). Report fish separately and label it "single tray, single camera".
+- **Label sanity (ML-55):** 10 per class across days. Fresh (days 1-3) looks like silvery intact fish; spoiled (days 9-11) looks dull, greyish, sunken eyes, plausibly spoiled; no visibly wrong label in the 20. Day-based borderline: day 9 spoiled fish are not obviously worse than day 3 fresh in several frames. **Confound:** tray colour. By border colour, **296 of 300 spoiled fish are on a green tray; 105 fresh fish are on pink or red trays (35% of fresh), and no spoiled fish is**. The model can learn "pink or red tray = fresh".
+
+## 4. food_spoilage_status
+- **Polygon -> box conversion is correct** (6 images drawn with the raw polygon in red and the produced box in green: `fss_boxes.jpg`; boxes tightly enclose bananas, orange, bitter gourd, capsicum). 428 raw polygon labels -> 428 prepared boxes; the one empty-label image is dropped (`empty_label_file`).
+- **Class and freshness mapping matches `data.yaml`** (programmatic, not only the sample): fresh 260 / spoiled 168 in both; per class apple 39/19, banana 23/32, capsicum 28/22, orange 37/24, potato 100/38, bitter gourd 33/33.
+- **Session grouping is wrong (ML-50, high).** Of the 276 files, many are Roboflow's own augmentations of one web photo: `rotated_by_15_`, `translation_`, `vertical_flip_`, `saltandpepper_`, and crops `X-jpg_0_<n>`. (a) `group_key` (`ml/yolo/prepare_dataset.py:80-88`) groups by the file's own stem, so each crop of one parent is its own group; **6 parents straddle splits and 12 of 46 held-out originals (26%) have a train or val sibling** (`parent_sibling_check.py`). Eyeballed (`fss_siblings.jpg`): the bitter gourd and the capsicum are the **same specimen, same shot, rotated or cropped differently**, in held-out, val and train: a true leak. (b) `_RX_SCREENSHOT` (`prepare_dataset.py:96`) needs `at` flanked by space or underscore and `.` or `:` time separators, so the Roboflow names `Screen-Shot-2018-06-08-at-5-09-10-PM` and `WhatsApp-Image-...-at-11-30-47-PM` are not parsed: **21 of 27 stamped held-out images are within 300 s of a train or val image (18 within 60 s, min gap 0 s)**. For the screenshots, `fss_neighbors.jpg` shows different web images from the same search session (mouldy orange next to mouldy orange, apple next to apple): "same scene, different contents", but the 300 s rule is explicit for timestamped images. The only correct timestamps (`20190809_165458`, 6 held-out) are 264,430 s from train, fine.
+- **Domain note:** the images are white-background web product shots with baked-in augmentation, not fridge photos; label the source separately.
+- **Fix (builder):** accept `-` as the separator in `_RX_SCREENSHOT`; strip `_AUG_PREFIX` and the `-(jpg|png)_<n>_<n>` crop suffix to a **parent key** for `group_key`; better still, honour the rule "exclude a release's own augmented copies" and keep only the unaugmented originals. Re-run `ml/eval/parent_sibling_check.py` (must print 0) and `leakage_check.py`.
+
+## Bugs
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-48 | high | `leakage_check.py` / `stratification_check.py` `SOURCES` hard-coded: new sources invisible, first gate run was a vacuous PASS (0 held-out originals), strat check crashed | fixed in `ml/eval/leakage_check.py:28` |
+| ML-49 | high | `stamp()` misses hyphenated Roboflow screenshot / WhatsApp names | fixed in `ml/eval/leakage_check.py` (`_HYPHEN`) |
+| ML-50 | high (blocks inclusion) | food_spoilage_status: own augmentations and crops of one photo straddle splits (12/46 held-out), and hyphenated screenshot times unparsed (21/27 within 300 s); `prepare_dataset.py:80-88` and `:96` | **open (builder)**; new check `ml/eval/parent_sibling_check.py` |
+| ML-51 | medium | DaFiF held-out is an unseen species (tuna), not "same species, different batch"; one batch of 88 images | open: label it so in the metrics; optionally put one tuna batch in train |
+| ML-52 | medium | MeatScan spoiled is one specimen in a black bag; class equals scene | open: cap or label as named risk (data-owner ruling) |
+| ML-53 | low | `potato/fresh` "not measurable, whole cell to train" but 5 images / 49 boxes are in held-out (boxes 51/0/49) | open (builder) |
+| ML-54 | low | `stratification_check.py:117` compared `None` with 0 on subset datasets | fixed |
+| ML-55 | medium | DaFiF tray colour leaks the label (pink or red tray only for fresh; 296/300 spoiled on green) | open: named risk, consider tray-colour augmentation or hue jitter |
+
+## What I could not check
+Capture times for DaFiF (names have none, so only the pHash and batch rules apply); whether MeatScan's three days include more than a handful of physical specimens (judged from images only); dihedral and rotation duplicates for MeatScan and DaFiF beyond the identity pHash (the rotated Roboflow copies show the gap is real); no model was trained.
+
+## Re-verification after the ML-50 fix (same day, `fwr_data_new3` re-prepared: train 1216 / val 119 / held-out 140)
+Run independently with my own gates, not the builder's output.
+- **ML-50: fixed.** `leakage_check.py`: **ML-21 PASS**. food_spoilage_status: 52 held-out, 15 timestamped, **0 within 60 s, 0 within 300 s, min gap 7,612 s**, identity pHash 0 / 52, dHash 0, complete-session assertion ok, 0 fragments. dafif unchanged (pHash 0 / 88, dHash 2, see above). meatscan: nothing held out. `parent_sibling_check.py`: 0 parents straddle, **0 of 52** held-out with a train/val sibling; the six former offenders (bitter-gourd-1, capsicum3_0/1/2, both WhatsApp parents) now sit in one split each. `variant_dup_check.py` (report only, rotation-aware): food_spoilage_status 0.0% same-class, 0 pairs straddling splits. `ml/eval` suite 152 passed.
+- **Stratification check still FAILS, 5 items, none a leak** (`strat_new3b.txt`):
+  1. `beef/*` "I count 5 sessions": check counts capture-time sessions, builder uses the pHash-merged unit. Ruled right in section 2; this is a check-vs-ruling mismatch, ignore.
+  2. **ML-53 reproduces, and widens to `apple/spoiled`** (13/0/6 images) and `potato/fresh` (11/0/5 images, 51/0/49 boxes): the report says "not measurable, whole cell goes to train" while held-out images of that cell exist. **It is a `prepare_dataset.py` bug, not the check.** The "whole cell to train" pass at `ml/yolo/prepare_dataset.py:555` skips `pinned` groups (`g not in pinned`, set at `:462` when a group is moved to held-out to satisfy a required cell), so groups pinned earlier stay in held-out after the cell is demoted at `:558` / `:617`. I checked the held-out apple/spoiled images: they are pure single-cell images, so this is not co-occurrence with another cell. Effect: not leakage; the report says N/A but images are there, so the metrics for these cells would be quoted on 6 and 5 images against the rule. Fix: when a cell is demoted, also unpin and move its groups (or pin-aware: do not demote, keep the cell required).
+  3. **ML-56 (medium): `potato/spoiled` train share 46.2% (< 50%)** (6 / 3 / 4 images): violates "Train keeps >= 50% of every measurable cell" (QA.md ML-23). Same root cause family (coupled potato cells; `enforce_majority` ends with the cell still in violation).
+  4. Informational: required cells with no val image: `bell_pepper/fresh`, `bitter_melon/fresh` (ML-28 family, last.pt rule covers it).
+- **How to call the sibling check as a gate** (item 2; exit code 1 on any sibling): `python ml/eval/parent_sibling_check.py /path/to/fwr_data all` after `leakage_check.py` and `stratification_check.py`. It now loops every source in `leakage_check.SOURCES` (new3 sources included). Per source: `... <data> food_spoilage_status`.
+
+## Recommendations on the named risks (for the orchestrator)
+| Risk | Recommendation |
+|---|---|
+| ML-51 fish held-out = one unseen species, one batch (88 images) | **Include dafif in the Colab run, labelled.** Report fish as "unseen species (tuna), single tray and camera", with Wilson CIs, never pooled silently. Optional improvement, not a blocker: move one tuna batch (s1 from val) into train so held-out is "same species, new batch" and let val hold another species. |
+| ML-52 beef spoiled = one specimen in a black bag, class = scene, train-only | **Include with a cap, labelled.** Cap beef to about 30 per class (or 30 spoiled, 60 fresh) so a single scene does not dominate train (600 of 1,216 train images now, 49%), and record "beef spoiled = 1 specimen, scene-confounded, not measurable" in `docs/ML.md`. If the owner does not want a cap, the fallback is to drop beef spoiled rather than ship an uncapped shortcut. Beef contributes no held-out metric either way. |
+| ML-55 DaFiF tray colour tracks the label (296/300 spoiled on green; pink or red only fresh) | **Include, with a mitigation or label.** Cheapest: hue jitter or a green-tray tint on pink or red fresh images in train (record as synthetic), and list "tray colour shortcut" as a named risk; the held-out tuna set is mostly green for both classes (so the held-out number does not expose the shortcut). Not a reason to drop the source. |
+
+## Verdict: safe to include in the Colab run?
+- **meatscan: yes** (train-only, capped per above, risk labelled). **dafif: yes** (leak-free, risks labelled).
+- **food_spoilage_status: yes for leakage** (ML-21 gate PASS, 0 siblings, rotation-aware report 0.0%), **but the stratification check still FAILS on ML-53 / ML-56** (a cell declared N/A with held-out images, and potato/spoiled train share 46.2%). Those break the ML-23 coverage rules, not the leakage rule, so no metric is contaminated; the Colab run can proceed if the orchestrator accepts that apple/spoiled, potato/fresh and potato/spoiled held-out numbers are reported N/A (not quoted) until the builder fixes `prepare_dataset.py:555`. Strict reading of "stratification check must pass": **CONDITIONAL PASS**, not clean PASS.
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| ML-50 | high | food_spoilage_status parent/crop siblings and unparsed hyphenated times | **fixed, verified** |
+| ML-53 | medium | cells demoted to "not measurable" keep pinned groups in held-out (apple/spoiled, potato/fresh); `prepare_dataset.py:555` | open (builder) |
+| ML-56 | medium | `potato/spoiled` train share 46.2% < 50% | open (builder) |
+
+## Final re-verification after the ML-53 fix and the data-owner ruling (same day, `fwr_data_new3` re-prepared: train 1,236 / val 119 / held-out 120)
+Data-owner ruling (from the builder): MeatScan, DaFiF and food_spoilage_status all go into the Colab run with the risks labelled, beef uncapped (recorded in `docs/PIPELINE.md` "Named risks"). I do not rule on that; it supersedes my cap recommendation for ML-52, and the risk stays named.
+
+**Check fix (`ml/eval/stratification_check.py`, new `_merge_by_phash`):** independence units are now capture sessions/series merged across **pHash <= 6 neighbours within a source**, computed from the images themselves (not read from `dataset_report.json`), the same rule the builder uses. Beef now counts 1 unit (matches my eyeball ruling). `--no-phash-merge` restores the old timestamp-only count. This is what notebook cell 4 asserts on (`not st["failures"]`).
+
+**All gates on `fwr_data_new3`, run by me:**
+| Gate | Result |
+|---|---|
+| `leakage_check.py` | **ML-21 PASS**. meatscan: 0 held-out (train-only). dafif: 88 held-out, pHash 0 / 88, no timestamps. food_spoilage_status: 32 held-out, 10 timestamped, 0 within 60 s and 300 s, min gap 2,501,674 s, pHash 0 / 32; complete-session assertion ok for all |
+| `stratification_check.py` | **PASS, FAILURES: none** |
+| `parent_sibling_check.py <DATA> all` | exit 0; 0 straddling parents; 0 / 88 dafif and 0 / 32 food_spoilage_status held-out with a sibling |
+| `ml/eval` pytest | 152 passed |
+
+- **ML-53 verified fixed:** every not-measurable cell is train-only (apple/spoiled 19/0/0, potato/fresh 16/0/0, banana, orange/spoiled, bell_pepper/spoiled, bitter_melon/spoiled all N/A in train).
+- **ML-56 verified fixed:** `potato/spoiled` train share 61.5% (images), 8 / 3 / 2.
+- ML-50, ML-48, ML-49, ML-54 remain fixed and verified. ML-51, ML-52, ML-55 stay open as named risks (labelled, not fixed).
+
+**Consequence to quote correctly (not a failure):** with the demotions, held-out spoiled is measurable only for **fish (48 images, one unseen-species batch) and potato (2 images)**. Produce spoiled cells apple, banana, bell_pepper, orange and bitter_melon are N/A. So the pooled spoiled-recall gate (>= 0.85) is carried almost entirely by tuna, and per-source recall must be reported with Wilson CIs (a potato figure on 2 images is not usable). Held-out produce fresh cells with images: apple 10, bell_pepper 2, bitter_melon 13, orange 5.
+
+## Final verdict: safe to include in the Colab run? **YES (PASS), with named risks labelled**
+No leakage on any of the three sources; every gate passes. The risks that must be labelled in any quoted metric: ML-51 (fish held-out = unseen species tuna, one batch, one tray), ML-52 (beef spoiled = one specimen in a black bag, scene-confounded, uncapped, 49% of train before the new sources are counted against the rest, no held-out metric), ML-55 (DaFiF tray colour tracks the label), plus: food_spoilage_status is white-background web product shots with baked-in augmentation (separate domain), and spoiled-recall evidence is thin outside fish (above).

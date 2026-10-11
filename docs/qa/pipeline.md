@@ -87,3 +87,44 @@ Also noted, not logged as bugs: `run-all` always runs the augmentation step (wit
 - The 3 skipped semi_fresh / pineapple / bitter_melon tests, until PR A merges. Re-run the full suite and `qa_pipeline.py` after it does; the 2-class QA tests will skip themselves and the builder's semi tests will switch on.
 - Real GLM-OCR (no GPU), and the AgriFreshNET dataset itself (synthetic stand-ins only). The result figures in `PIPELINE.md` for the 3-class run are from the original branch and were not reproduced.
 - Near-duplicate / same-specimen leakage between splits (needs the real data and Jose's answer on specimens).
+
+---
+
+# 2026-10-10: MeatScan + DaFiF sources (branch `feat/datasets-spoilage-meat-fish`)
+
+## Verdict: PASS (3 findings: PL-5 medium, PL-6 and PL-7 low; none blocking, no leakage found)
+
+## Tests
+`pipeline/tests/qa_new_sources.py`: 92 tests, 88 pass, 4 strict xfail (PL-5, PL-6 x2, PL-7). Offline; network, `unrar` and range reads injected; synthetic data under `tmp_path`. Whole `pipeline/tests` (default collection, incl. the builder's 18 in `test_new_sources.py`): 163 passed. With `qa_pipeline.py` added: 107 passed, 2 skipped, 4 xfailed. Run in `.venv`.
+
+| Area | Checked |
+|---|---|
+| DaFiF names | 14 real-style names (typos `Muajir`, `t(Tongkol`, `Tongkol_Sesi2`, `sesi 2`, spaces, lower-case `rekap`) map to the right date/day/species/session; unknown species and junk return `None`. |
+| DaFiF plan/fetch | Days 1-3 fresh, 9-11 spoiled, 4-8 dropped (exact boundaries); unknown-species workbook listed in `unparsed_workbooks`, its images and orphans not downloaded; cap is per freshness, spread evenly over species x session x day; plan is deterministic; SHA mismatch is reported and not written, re-run retries only that file; downscale to `max_side`; only `fish__fresh` / `fish__spoiled` dirs. |
+| MeatScan fetch | Empty QuickOpen index -> `RuntimeError`; truncated member -> header-mismatch `RuntimeError`; `curl_range` short read -> `RuntimeError`, exact inclusive range; decompress (CRC) failure propagates; `wrap_single_file` blocks have valid CRC32 and order; vint round-trip to 25 GB; plan never picks augmented copies and goes one-per-bucket first; CRLF CSV. Real `MeatScan_Metadata.csv` (read-only): 6,995 rows (3,487 / 3,508), all timestamped. |
+| Ingest hooks | `agrifreshnet` / `folders` have no hooks, report has no `adapter_setup` / exclusions, staged name unchanged. MeatScan: no CSV keeps all and untimestamped; adapter state does not leak between ingests or into other adapters; re-ingest is idempotent; BOM + CRLF CSV works; `--max-per-cell` spreads over sessions. |
+| Taxonomy | All 9 new aliases resolve to `beef` / `fish`; `ALIASES` has no conflicting duplicate key (AST scan); adapters reject non-class dirs. |
+| Leakage via real `prepare_dataset.main` | Synthetic MeatScan (112, timestamped sessions) + DaFiF (108, 3 species x 2 sessions x 6 days), 3 seeds, 25% heldout/val: no DaFiF species+session batch spans splits (fresh and spoiled of a batch share one); every MeatScan pair within 300 s shares a split; classes are exactly `beef` and `fish`; sidecar freshness counts correct (meat 56/56, fish 54/54); train, val, heldout all non-empty. |
+| Notebook / sources | JSON valid, cells 1 and 3 parse; cell 1 pins `unrar-cffi==0.2.2`, `DATA_VER` = sha256 of `sources.json`[:8] used in `CACHE_DIR` before use; cell 3 runs `fetch-meatscan` (`--per-class 450`) / `fetch-dafif` then `ingest-dataset --dir ... --adapter ... --max-per-cell 300`; Roboflow filter (evaluated on the real file and on edge cases) skips `pending` and version-less entries and keeps pinned ones. `sources.json`: all entries have `license` + `url`; new entries have `class_map`; both Roboflow picks `pending: true`, version null; `prepare_dataset.collect` and `main` skip them even when `root` points at a real folder. |
+| CLI | `fetch-dafif --help`, `fetch-meatscan --help` exit 0 with all flags; `--out` required (exit 2); `ingest-dataset` lists `meatscan`, `dafif`; bad adapter exit 2; day lists parse and pass through. |
+
+## Bugs
+| ID | Severity | Summary | Repro | Status |
+|---|---|---|---|---|
+| PL-5 | medium | The 300 s chained session rule (no span cap, ML-21) collapses the real sampled MeatScan into ~4-5 split units. The 6,995 originals chain into 3 units (one per day); the fetch plan (450 per class) then the ingest cap (300 per cell) leaves 4-5 units of 90-208 images for ~600 images. Heldout and val will each be one whole day-segment, so beef heldout metrics rest on 1-2 sessions and the cell may fail the ">= 2 sessions" rule. No leakage, but weak evaluation. `ml/yolo/prepare_dataset.py` `assign_sessions` (owner: ML builder); consider a per-source session gap or a market/hour key for MeatScan. | `test_real_csv_sampled_set_has_enough_split_units` (strict xfail, needs the downloaded CSV) | open |
+| PL-6 | low | An impossible date in a workbook name (`31-02-2024(Makarel).xlsx`, `Rekap Makarel 45 Sesi 1.xlsx`) raises `ValueError` from `date(...)` in `pipeline/ingestion/fetch.py` `parse_workbook_name` (line 83, and the Rekap branch) instead of returning `None`; one bad name would abort `dafif_plan`. Real names are valid. | `test_workbook_impossible_date_is_none` (strict xfail) | open |
+| PL-7 | low | An archive with no `*.csv` member makes `fetch_meatscan` end in a bare `StopIteration` (`next(e for e in entries if ...csv)`, `fetch.py:324`), not a clear error like the empty-index one. | `test_fetch_meatscan_missing_csv_is_a_clear_error` (strict xfail) | open |
+
+Noted, not logged: `fetch_dafif` accepts a file silently when the API gives no `sha256_hash`; an image with a matching hash that cannot be decoded aborts the whole fetch (not reported per file); `save_downscaled` writes straight to the final path, so an interrupted write leaves a truncated JPEG that the next run treats as cached; staged DaFiF names carry no freshness (by design, so fresh and spoiled of a batch share a group), so the class dir and the manifest are the only freshness record. With default `--min-session-images 10`, sessions under 10 images all land in train (prepare's pooling rule); the real data has 90+ per session so this does not apply.
+
+## Not tested
+Real downloads (builder fetch running), real `unrar-cffi` decompression, real Mendeley file list (workbook-per-folder assumption), a full-size `prepare` on the real sampled sets, Colab execution of the notebook.
+
+## Re-verification 2026-10-10 (fixes for PL-6, PL-7 and the noted items)
+- **PL-6 fixed:** impossible dates in both name branches now return `None` (test no longer xfail).
+- **PL-7 fixed:** a missing metadata CSV raises `RuntimeError("... no metadata CSV ...")` (test matches the message).
+- **Atomic write fixed:** `save_downscaled` writes `.part` then renames; a failed save leaves no destination file and no `.part` (new test).
+- **Undecodable DaFiF image fixed:** recorded in the report's `failed` list, the fetch continues, `sha_mismatch` holds only SHA failures (2 new tests).
+- Not changed: a missing API SHA is still accepted (Mendeley lists one per file today). **PL-5 stays open** (orchestrator).
+- Results: `qa_new_sources.py` 95 tests, 94 pass, 1 strict xfail (PL-5). Whole `pipeline/tests` (default collection): 163 passed. `qa_pipeline.py`: 19 passed, 2 skipped.
+- Verdict unchanged: PASS.

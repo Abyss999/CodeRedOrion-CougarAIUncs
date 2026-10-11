@@ -43,7 +43,39 @@ def image_cells(root: Path, split: str, p: Path):
     return {(names[str(c)], {0: "fresh", 1: "spoiled", 2: "semi_fresh"}[f]) for c, f in zip(cls, fr)}
 
 
-def check(root: Path) -> dict:
+def _merge_by_phash(root: Path, rows: list) -> None:
+    """Independence units = sessions/series merged across pHash <= 6 neighbours within a source (the same rule the
+    builder applies; ML-21). Computed here from the images, not read from dataset_report.json. Without this a source
+    whose near-duplicate shots span capture sessions (MeatScan beef, all one cut across 3 days) looks like 5
+    independent sessions and the check disagrees with the ruled, correct single unit."""
+    import numpy as np
+    from leakage_check import hash_images, PHASH_T
+    pop = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
+    by_src = defaultdict(list)
+    for i, r in enumerate(rows):
+        by_src[r["src"]].append(i)
+    for src, idx in by_src.items():
+        paths = [root / "images" / rows[i]["split"] / rows[i]["name"] for i in idx]
+        hs = hash_images(paths, None)
+        h = np.array([hs[p.name][0] for p in paths], dtype=np.uint64)
+        parent = {rows[i]["session"]: rows[i]["session"] for i in idx}
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+        for a in range(len(idx) - 1):
+            d = pop[(h[a] ^ h[a + 1:]).view(np.uint8).reshape(-1, 8)].sum(axis=1)
+            for b in np.nonzero(d <= PHASH_T)[0]:
+                ra, rb = find(rows[idx[a]]["session"]), find(rows[idx[a + 1 + int(b)]]["session"])
+                if ra != rb:
+                    parent[ra] = rb
+        for i in idx:
+            rows[i]["session"] = find(rows[i]["session"])
+
+
+def check(root: Path, phash_merge: bool = True) -> dict:
     files = originals(root)
     rows = []  # (split, src, cells, ts or None, key)
     for s in SPLITS:
@@ -65,6 +97,8 @@ def check(root: Path) -> dict:
             last = t
     for i, r in enumerate(rows):
         r["session"] = sess.get(i, f"{r['src']}/s:{r['key']}")
+    if phash_merge:
+        _merge_by_phash(root, rows)
     by_cell = defaultdict(lambda: {"images": Counter(), "sessions": set(), "sources": Counter()})
     for r in rows:
         for c in r["cells"]:
@@ -117,7 +151,7 @@ def check(root: Path) -> dict:
     for s in SOURCES:
         rs = rep["source_by_split"].get(s, {})
         for k in ("train/images", "val/images", "heldout/images"):
-            chk[f"report.source_by_split[{s}][{k}] == disk"] = (rs.get(k), sbs[s][k])
+            chk[f"report.source_by_split[{s}][{k}] == disk"] = (rs.get(k, 0), sbs[s][k])  # ML-54: report omits zero entries
     out["report_vs_manifest"] = {k: {"report": a, "actual": b, "ok": a == b} for k, (a, b) in chk.items()}
     return out
 
@@ -208,9 +242,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
     ap.add_argument("--json")
+    ap.add_argument("--no-phash-merge", action="store_true", help="count independence on timestamps/series only")
     a = ap.parse_args()
     root = Path(a.root)
-    r = check(root)
+    r = check(root, phash_merge=not a.no_phash_merge)
     v = verify(root, r)
     r.pop("_rows", None)
     print("CELLS: decision, train/val/heldout images, train% (images/boxes), my >=min sessions vs report units")
