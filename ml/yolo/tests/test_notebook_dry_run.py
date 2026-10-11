@@ -47,7 +47,7 @@ def test_train_py_speed_flags_reach_both_stages():
     import train
     src = Path(train.__file__).read_text()
     assert 'speed = dict(cache=False if a.cache == "none" else a.cache, val=not a.no_epoch_val)' in src
-    assert src.count("**speed)") == 2
+    assert src.count("**speed)") == 1 and "**cls_speed)" in src and "cls_speed = dict(speed, cache=False)" in src
 
 
 def test_train_py_plumbs_semi_fresh_threshold(monkeypatch):
