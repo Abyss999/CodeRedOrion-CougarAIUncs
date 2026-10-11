@@ -21,7 +21,7 @@
 | iOS app | `ios/` | SwiftUI, XcodeGen. Talks only to the Flask API through an `APIClient` protocol (mock impl for previews/tests). |
 | API | `backend/` | Flask app factory, blueprints per area, services wrap every external call. Stateless; JWT auth. |
 | DB | Docker `db` service | `timescale/timescaledb` (pinned tag). One database. Migrations via Flask-Migrate. |
-| ML service | `ml/serve/` | Flask: `POST /detect` (YOLO26 food-name detector, then a fresh/spoiled crop classifier), `POST /ocr` (GLM-OCR, then the deterministic receipt parser), `GET /health`. Runs where there's a GPU, with fake backends for CPU tests. Backend reaches it at `ML_SERVICE_URL`. **If it's unset or returns an error, `/items/from-photo` falls back to Gemini vision**, so the demo never depends on a GPU being up. Receipts have no fallback. It has no auth, so keep it on loopback or a tunnel. Details: `docs/ML.md`. |
+| ML service | `ml/serve/` | Flask: `POST /detect` (YOLO26 food-name detector, then a fresh / semi_fresh / spoiled crop classifier), `POST /ocr` (GLM-OCR, then the deterministic receipt parser), `GET /health`. Runs where there's a GPU, with fake backends for CPU tests. Backend reaches it at `ML_SERVICE_URL`. **If it's unset or returns an error, `/items/from-photo` falls back to Gemini vision**, so the demo never depends on a GPU being up. Receipts have no fallback. It has no auth, so keep it on loopback or a tunnel. Details: `docs/ML.md`. |
 | Gemini | external | One service module (`backend/app/services/gemini.py`). Model id pinned in `.env` (`GEMINI_MODEL`) and recorded in `DECISIONS.md`. |
 
 ## Key flows
