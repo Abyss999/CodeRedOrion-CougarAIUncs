@@ -94,7 +94,10 @@ def leftovers(s):
     bad = []
     for i, line in enumerate(s.splitlines(), 1):
         for h in HEX.findall(line):
-            if h.upper() in LIGHT_ONLY: bad.append((i, "#"+h, "light-only token never mapped (positional arg or concatenation?)"))
+            # Every colour the converter handles carries MARK, so any plain hex here was never seen:
+            # a positional argument, a concatenation or an unknown key. Fail on all of them, dark-looking ones too.
+            bad.append((i, "#"+h, "colour never handled (positional arg, concatenation or unknown key?)"))
+        for h in re.findall(r"#[0-9A-Fa-f]{8}\b", line): bad.append((i, h, "8-digit hex is not supported; use rgba()"))
         for h in re.findall(r"#[0-9A-Fa-f]{3}\b", line): bad.append((i, h, "short hex"))
         for c in re.findall(r"(?:color|background|fill|stroke|border)[\w-]*\s*[:=]\s*['\"]?(white|ivory|snow|whitesmoke|beige)\b", line, re.I):
             bad.append((i, c, "named light colour"))
