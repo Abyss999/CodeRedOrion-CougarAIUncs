@@ -869,3 +869,35 @@ Re-check of the four PR #79 bugs against main at `02b06e8` (builder fix `d6b0a52
 Nothing needed restoring. The extra strictness lives in `test_qa_be19_22.py`.
 
 **Runs (targeted):** `test_qa_be19_22.py`, `test_qa_pr79_crops.py`, `test_qa_pr79_gemini.py`, `test_qa_pr79_contract.py`, `test_enrich_gemini.py`, `test_crops.py` and `test_recipes_focus.py`: 301 passed. No failures, so no full-suite run. No new bugs (highest id stays BE-22; `gh pr list` shows no open PRs).
+
+## Friend QR codes + share pickup spot (feat/friend-qr-pickup, migration 0008) - food-qa
+
+New files: `backend/tests/test_qa_friend_qr.py` (48), `test_qa_pickup.py` (about 85, 1 skip), `test_qa_pickup_migration.py` (2). Design as built: opaque `token_urlsafe(12)` codes in `friend_codes` (10-minute TTL), pickup object `{note, lat, lng, place_name}`.
+
+**Run:** my three files 140 passed, 1 skipped, 1 failed (test-side: the server trims whitespace around a code; fixed). Full suite `--cov=app`: 2362 passed, 4 skipped, 5 failed, coverage 98%. Of the 5, one is BE-32 (now a non-strict xfail) and four are older tests that the builder's change makes stale (below). No live Gemini: `conftest.py` removes the key and every Gemini test stubs `genai.Client`.
+
+**Verified**
+- Codes: 16 chars, URL safe, `url` = `bitedown://friend/<code>`, TTL 10 minutes, no user id or email (not base64-decodable), a fresh code per GET, a different code per user.
+- Scan: 201 new, 200 pending-either-direction becomes accepted (one row), 200 idempotent for existing friends, own code 400, expired row rejected while still present, replay after expiry rejected, expiry boundary, deleted issuer 400, account delete with live codes OK.
+- 14 bad-code variants (unknown, tampered first/last, truncated, extended, swapcase, expired, URL form, 5000 chars, unicode, SQL-ish, percent, dashes): all 400 `invalid_code`, byte-identical bodies. A tampered code for an existing friend gets the same 400 (no friendship oracle).
+- Exactly one of email/code; the email flow is unchanged (201/409/400/404, `already_friends` 409 on the email path).
+- Pickup: about 30 invalid inputs all 400 with nothing written; notes trimmed; boundary values inclusive (lat 90, lng 180, 120 characters); PATCH owner only (viewer 403, hidden 404, unknown or malformed id 404), only while open (cancelled or fulfilled 409 `listing_closed`), allowed on a claimed open listing, PATCH replaces rather than merges, `null` clears every column.
+- Leak crawl: a canary note, place and lat/lng planted, then 14 read endpoints (`/share`, `/items`, `/groups/*`, pantry, `/requests`, `/people/reachable`, `/friends`, `/impact`, `/auth/me`, `/tips`) fetched as friend, friend-of-friend, stranger, pending requester, group mate and ex-member. Zero leaks. The claimer sees pickup in the claim response and in `GET /share`; after the friend is removed, or the claimer leaves the group, the claimer loses all visibility; error bodies (403/404/409) carry no pickup.
+- Pickup never changes `food_events` or Impact (week/month/all snapshots before and after set, patch, claim, clear and rejected patches); remove/restore and batch remove/restore keep it; forced failure on create and on PATCH rolls back; constant query counts (2 vs 12 listings, batch 2 vs 10).
+- Migration 0008 round trip on a populated DB: old listings get null pickup, CHECK constraints reject lat without lng, out-of-range values and over-long text at DB level, downgrade drops the columns and `friend_codes`, `friend_codes` cascades on user delete.
+
+**Bugs** (IDs from BE-32; BE-26 to BE-31 belong to other PRs)
+| ID | Severity | Summary | Repro |
+|---|---|---|---|
+| BE-32 | low-medium | A code scan that races an email request for the same pair loses the insert (IntegrityError), re-reads the pending row and returns it with `status: pending`, never accepting it. The user scanned in person but ends up pending. The two inserts can also coexist as two rows (A to B pending, B to A accepted) because the primary key is directional. | `test_concurrent_email_request_and_scan_leave_one_row` (xfail non-strict, fails about 5 in 6). Fix: in the IntegrityError branch set `existing.status = "accepted"` and commit, and lock or order the pair. |
+| BE-33 | low | `GET /friends/code` has no cap or rate limit and rows are pruned only when a new code is issued after expiry, so one user can mint unbounded rows within 10 minutes. | Loop the GET. Suggest a per-user cap (about 20 live codes) or reuse a live code. |
+
+**Stale older tests, caused by this change and owned by the builder** (QA did not edit them): `test_qa_pr79_migration.py::test_single_alembic_head_and_linear_chain` and `::test_upgrade_with_existing_data_gives_null_and_loses_nothing` assume head is `0007_items_nutrition`; `test_wave2_item_share.py::test_open_listing` and `::test_claimed_listing_shows_claimer` compare `item.share` exactly and now see the new `pickup` key. Update them to head `0008_share_pickup` and to include `pickup`.
+
+**Notes (not bugs)**
+- No unclaim endpoint exists, so that test skips. `docs/API.md` line 322 says "unclaiming keeps it"; change to "cancelling and restore keep it".
+- One code can be scanned by several people within the TTL (multi-use, fits a QR on a screen).
+- Code lookup is a DB primary-key get plus `hmac.compare_digest`; with 96 random bits a timing attack is infeasible. Surrounding whitespace in a code is trimmed and accepted by design.
+- `BE-32` cause is from reading `friends.py::_add_by_code`; I did not instrument it.
+
+**Verdict: FAIL until the builder fixes BE-32 (or the owner rules it acceptable) and updates the four stale tests.** The leak and Impact security checks all pass.
