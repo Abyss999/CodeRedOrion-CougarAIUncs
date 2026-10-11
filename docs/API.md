@@ -13,7 +13,7 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
 | 403 | `forbidden` | Authenticated but not your item / not a member of that group / not the owner or author |
 | 404 | `not_found` | Not found (also for removed items on `PATCH`) |
 | 405 | `method_not_allowed` | |
-| 409 | `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed` | Conflict |
+| 409 | `not_removed`, `restore_window_expired`, `already_removed`, `already_shared`, `email_taken`, `already_friends`, `request_pending`, `already_member`, `already_claimed`, `listing_closed`, `request_closed` | Conflict |
 | 413 | `payload_too_large` | Upload over 10 MB |
 | 500 | `internal_error` | Unhandled error |
 | 502 | `upstream_unavailable` | Gemini / ML service / Open Food Facts unavailable or not configured |
@@ -26,13 +26,33 @@ UUID path ids that are malformed return 404. Numeric money/weight fields seriali
   `409 email_taken`. Emails are case-insensitive.
 - ✅ `POST /auth/login` `{email, password}` → `200 {token, user}`; `401 invalid_credentials`.
 - `user` = `{id, email, display_name, created_at}`.
+- ✅ `DELETE /auth/me` (Bearer) → `204` (App Store account deletion). One transaction. **Deleted:** the
+  user, their items (including ones in group pantries), every listing on those items and their own
+  listings, friendships (both directions), group memberships, requests they wrote. **Detached:** listings
+  they claimed/received elsewhere get `claimed_by`/`recipient_id` null (open again); requests they
+  fulfilled are reopened; ownership of groups they owned passes to the longest-standing remaining
+  member and `groups.created_by` becomes null (`created_by: null` in group responses). **Anonymised:**
+  their `food_events` keep every number but `user_id` becomes the nil UUID
+  `00000000-0000-0000-0000-000000000000`, so aggregates survive with no personal link. The same JWT
+  then fails with `401 unauthorized`; login fails with `401 invalid_credentials`.
 
 ## Items
 An **item** is `{id, owner_id, group_id, name, category, storage, quantity, unit, est_weight_kg,
 est_price, source, added_at, predicted_expiry (date), expiry_source, removed_at, outcome,
-waste_reason, removed_after_expiry}`. `category` ∈ `produce_leafy, produce_hardy, dairy, meat,
+waste_reason, removed_after_expiry, freshness, freshness_checked_at, confidence, share}`
+(`expiry_source` ∈ `default|gemini|ml|user`). `category` ∈ `produce_leafy, produce_hardy, dairy, meat,
 seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fridge|pantry|freezer`;
 `source` ∈ `photo|single_photo|text|barcode|receipt|manual`.
+- `freshness` (`fresh|semi_fresh|spoiled|null`) and `freshness_checked_at` (timestamp of the last
+  assessment, null iff `freshness` is null): stored when a create payload carries `freshness`
+  (validated via `candidates.normalize_freshness`: variants such as `rotten` map, unknown strings become
+  `fresh` with a WARNING, a non-string is `400`); `freshness_checked_at` = now. `confidence` is the
+  detector's 0..1 score (create only; `400` outside 0..1), null for manual items. All three are on
+  every item response.
+- `share` is present on the **owner's own** items (`GET /items`, also with `group_by`; create, `PATCH`,
+  `remove`, `restore` responses) and is `{id, status (open|fulfilled), claimed_by: {id, name} | null}` for
+  the item's most recent **non-cancelled** listing, else `null`. Loaded with a single query for the whole
+  list (no N+1). The group pantry (`GET /groups/:id/pantry`) and other users' views do **not** include it.
 
 - ✅ `GET /items?storage=fridge|pantry|freezer&include_removed=false` → `200 {items}` sorted by
   `predicted_expiry`, then `added_at`. Only the caller's **personal** items (`group_id` null; group-pantry items are listed by `GET /groups/:id/pantry`). Invalid `storage` → 400.
@@ -43,8 +63,16 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   backend predicts it: Gemini batch estimate when configured (`expiry_source=gemini`), else the
   default shelf-life table (`default`); a client-supplied expiry is stored as `user`.
   `est_weight_kg` is estimated from quantity/unit/category when absent.
-- ✅ `PATCH /items/:id` — body may contain `name, quantity, unit, storage, category,
-  predicted_expiry, est_price, est_weight_kg` (unknown fields → 400). Changing the expiry sets
+  **Candidate round trip:** post a candidate back as-is, including `expiry_source`
+  (`default|gemini|ml`), and that source is **kept** when `predicted_expiry` is sent. Edit detection is
+  client-driven and the server trusts the enum: the client sends `expiry_source: "user"` (or omits the
+  field, which defaults to `user`) once the person changed the date. Invalid value → `400`; a
+  `expiry_source` sent without `predicted_expiry` is ignored (the backend predicts and sets it).
+  `freshness` and `confidence` from the candidate are stored (see above).
+- ✅ `PATCH /items/:id` — body may contain `name, quantity, unit, storage, category, food_group,
+  predicted_expiry, est_price, est_weight_kg, freshness` (unknown fields → 400, so `confidence` is not
+  editable). `freshness` set → stored and `freshness_checked_at` = now; `freshness: null` clears **both**
+  (null means "never assessed"). Changing the expiry sets
   `expiry_source=user`. Changing quantity/unit/category re-estimates `est_weight_kg` unless sent.
   → `200 {item}`; `403` other user's item; `404` unknown or already removed.
 - ✅ `POST /items/:id/remove` — **the core endpoint**
@@ -63,6 +91,15 @@ seafood, bakery, eggs, leftovers, pantry_dry, frozen, other`; `storage` ∈ `fri
   the item's `group_id`, so impact is credited to whoever removed it. Personal items of other users
   stay `403`; non-members of the group get `403`. `PATCH` stays owner-only. If the item's open
   listing was claimed and `recipient_id` is omitted, the claimer becomes `recipient_id`.
+
+- ✅ `POST /items/:id/restore` (no body) → `200 {item}`. Undoes a removal made less than **10 minutes**
+  ago (same permission as remove: owner, or any member for a group-pantry item). `409 not_removed` if
+  the item is active, `409 restore_window_expired` after 10 minutes, `403`/`404` as for remove. One
+  transaction under the row lock: clears `removed_at`, `outcome`, `waste_reason`,
+  `removed_after_expiry`; **deletes the item's `remove` event** (by id + time) so `/impact`, `/tips` and
+  any other event query are automatically correct; and if the removal fulfilled a listing
+  (`fulfilled_at == removed_at`) the listing goes back to `open` with `fulfilled_at` and `recipient_id`
+  cleared (`claimed_by` kept). The `share` event from listing creation is untouched.
 
 ## Food groups (`food_group`)
 `food_group` is the user-facing grouping: `protein | veggies | fruit | dairy | grains | pantry |
@@ -104,7 +141,8 @@ post it straight back.
   and `rotten`/`stale`/`moldy`/`overripe`/`decayed`/… → `spoiled` (case/hyphen/space-insensitive; the word
   lists mirror `SEMI_WORDS`/`SPOILED_WORDS` in `ml/yolo/taxonomy.py`, and `ripe` is fresh in both); anything unknown or
   missing becomes `fresh` and logs a WARNING (`freshness_fallback raw=… source=yolo|gemini`). It is
-  informational only: not stored, and it does not change `predicted_expiry`.
+  informational on the candidate and does not change `predicted_expiry`; post it back with
+  `POST /items` to store it on the item (`freshness`, `freshness_checked_at`).
 - ✅ `POST /items/from-receipt` multipart `image` → `200 {candidates: [{name, quantity, price}], total}`
   via `ML_SERVICE_URL`/ocr; `502` when unset or failing. `quantity` defaults to 1.
 - ✅ `GET /items/barcode/:code` (6-14 digits, else 400) → `200 {candidate}` (Open Food Facts, adds

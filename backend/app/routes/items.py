@@ -6,10 +6,11 @@ from sqlalchemy import func
 from ..auth import require_auth
 from ..errors import ApiError, not_found, upstream_unavailable, validation_error
 from ..extensions import db
-from ..models import (CATEGORIES, FOOD_GROUPS, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
+from ..models import (CATEGORIES, EXPIRY_SOURCES, FOOD_GROUPS, OUTCOMES, SOURCES, STORAGES, WASTE_REASONS, FoodEvent, Item,
                       ShareListing, User)
 from ..services import barcode, candidates, expiry, food_group, gemini, impact, ml, social
-from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item)
+from ._util import (json_body, parse_date, parse_number, parse_uuid, path_uuid, serialize_item,
+                    share_summaries)
 
 bp = Blueprint("items", __name__, url_prefix="/items")
 
@@ -40,6 +41,13 @@ def _removable(item_id) -> Item:
     raise ApiError(403, "forbidden", "This item belongs to another user.")
 
 
+def _owner_view(item) -> dict:
+    """Serialise for the caller; `share` is only included for the owner's own items."""
+    if item.owner_id != g.user.id:
+        return serialize_item(item, include_share=False)
+    return serialize_item(item, share_summaries([item.id]).get(item.id))
+
+
 def _event(item, event_type, user_id=None, **extra):
     """`user_id` is the actor (defaults to the owner); a member removing a group item passes theirs."""
     return FoodEvent(time=datetime.now(timezone.utc), user_id=user_id or item.owner_id, item_id=item.id,
@@ -50,6 +58,19 @@ def _event(item, event_type, user_id=None, **extra):
 
 # Section order follows the Fridge design (Protein, Veggies, Fruit, Dairy), then the rest of the enum.
 SECTION_ORDER = FOOD_GROUPS
+
+
+def _check_freshness(value):
+    if not isinstance(value, str):
+        raise validation_error("freshness must be a string (fresh, semi_fresh or spoiled) or null.")
+    return candidates.normalize_freshness(value, "client")
+
+
+def _check_confidence(value):
+    c = parse_number(value, "confidence")
+    if c > 1:
+        raise validation_error("confidence must be between 0 and 1.")
+    return float(c)
 
 
 def _check_food_group(value):
@@ -76,14 +97,15 @@ def list_items():
     if group_by is not None and group_by != "food_group":
         raise validation_error("group_by must be food_group.")
     items = q.order_by(Item.predicted_expiry.asc().nulls_last(), Item.added_at).all()
+    shares = share_summaries(i.id for i in items)  # one query for all listings (also with group_by)
     if group_by == "food_group":
         buckets = {}
         for i in items:
-            ser = serialize_item(i)
+            ser = serialize_item(i, shares.get(i.id))
             buckets.setdefault(ser["food_group"], []).append(ser)
         return jsonify(sections=[{"food_group": fg, "items": buckets[fg]}
                                  for fg in SECTION_ORDER if fg in buckets])
-    return jsonify(items=[serialize_item(i) for i in items])
+    return jsonify(items=[serialize_item(i, shares.get(i.id)) for i in items])
 
 
 def _validate_new(raw: dict) -> dict:
@@ -106,7 +128,7 @@ def _validate_new(raw: dict) -> dict:
         raise validation_error("unit must be a non-empty string.")
     fg = raw.get("food_group")
     fg = _check_food_group(fg) if fg is not None else food_group.derive(category, name)
-    return {
+    out = {
         "name": name.strip(), "category": category, "food_group": fg, "storage": storage, "source": source,
         "quantity": parse_number(raw.get("quantity", 1), "quantity", positive=True),
         "unit": unit.strip(),
@@ -115,6 +137,20 @@ def _validate_new(raw: dict) -> dict:
         "predicted_expiry": (parse_date(raw["predicted_expiry"], "predicted_expiry")
                              if raw.get("predicted_expiry") else None),
     }
+    # Candidate round trip. A client-supplied expiry keeps the candidate's expiry_source (default |
+    # gemini | ml) unless it is omitted (then `user`). The client sends `user` (or omits it) once the
+    # person edited the date; the server trusts the enum. Ignored when no predicted_expiry is sent.
+    es = raw.get("expiry_source")
+    if es is not None and es not in EXPIRY_SOURCES:
+        raise validation_error(f"expiry_source must be one of {', '.join(EXPIRY_SOURCES)}.")
+    if es is not None and out["predicted_expiry"] is not None:
+        out["expiry_source"] = es
+    if raw.get("confidence") is not None:
+        out["confidence"] = _check_confidence(raw["confidence"])
+    if raw.get("freshness") is not None:
+        out["freshness"] = _check_freshness(raw["freshness"])
+        out["freshness_checked_at"] = datetime.now(timezone.utc)
+    return out
 
 
 @bp.post("")
@@ -167,7 +203,7 @@ def create_items():
     for item in created:
         db.session.add(_event(item, "add"))
     db.session.commit()
-    return jsonify(items=[serialize_item(i) for i in created]), 201
+    return jsonify(items=[serialize_item(i, None) for i in created]), 201
 
 
 @bp.patch("/<item_id>")
@@ -178,7 +214,7 @@ def patch_item(item_id):
     if item.removed_at is not None:
         raise not_found("Item not found.")
     allowed = {"name", "quantity", "unit", "storage", "category", "food_group", "predicted_expiry",
-               "est_price", "est_weight_kg"}
+               "est_price", "est_weight_kg", "freshness"}
     unknown = set(body) - allowed
     if unknown:
         raise validation_error(f"Cannot edit: {', '.join(sorted(unknown))}.")
@@ -210,13 +246,19 @@ def patch_item(item_id):
         item.est_weight_kg = parse_number(body["est_weight_kg"], "est_weight_kg", allow_none=True)
     if ("quantity" in body or "unit" in body or "category" in body) and "est_weight_kg" not in body:
         item.est_weight_kg = impact.estimate_weight_kg(item.category, item.quantity, item.unit)
+    if "freshness" in body:
+        if body["freshness"] is None:  # cleared: "never assessed", so the timestamp goes too
+            item.freshness = item.freshness_checked_at = None
+        else:
+            item.freshness = _check_freshness(body["freshness"])
+            item.freshness_checked_at = datetime.now(timezone.utc)
     if "predicted_expiry" in body:
         new = parse_date(body["predicted_expiry"], "predicted_expiry")
         if new != item.predicted_expiry:
             item.expiry_source = "user"
         item.predicted_expiry = new
     db.session.commit()
-    return jsonify(item=serialize_item(item))
+    return jsonify(item=_owner_view(item))
 
 
 @bp.post("/<item_id>/remove")
@@ -261,7 +303,47 @@ def remove_item(item_id):
                 recipient_id = listing.claimed_by
             listing.status, listing.fulfilled_at, listing.recipient_id = "fulfilled", now, recipient_id
     db.session.commit()
-    return jsonify(item=serialize_item(item))
+    return jsonify(item=_owner_view(item))
+
+
+RESTORE_WINDOW = timedelta(minutes=10)
+
+
+@bp.post("/<item_id>/restore")
+@require_auth
+def restore_item(item_id):
+    """Undo a removal made less than 10 minutes ago (same permissions as remove).
+
+    The `remove` event is DELETED (by id + time), not compensated: impact, tips and every other
+    query read food_events directly, so deleting keeps them all correct with no query changes and
+    no event-type/exclusion logic to forget. The cost (food_events is no longer strictly
+    append-only) is bounded to this one 10-minute undo of the same actor's own action. Everything
+    runs in one transaction under the item row lock.
+    """
+    item = _removable(item_id)
+    if item.removed_at is None:
+        raise ApiError(409, "not_removed", "Item has not been removed.")
+    now = datetime.now(timezone.utc)
+    if now - item.removed_at > RESTORE_WINDOW:
+        raise ApiError(409, "restore_window_expired", "Items can only be restored within 10 minutes of removal.")
+    removed_at = item.removed_at
+    # The event is written a few ms after removed_at; the time bound prunes hypertable chunks.
+    ev = (FoodEvent.query.filter(FoodEvent.item_id == item.id, FoodEvent.event_type == "remove",
+                                 FoodEvent.time >= removed_at - timedelta(minutes=1))
+          .order_by(FoodEvent.time.desc()).first())
+    if ev is not None:
+        db.session.query(FoodEvent).filter(FoodEvent.id == ev.id, FoodEvent.time == ev.time
+                                           ).delete(synchronize_session=False)
+    # A donation that fulfilled a listing (fulfilled_at == removed_at) goes back to open.
+    # claimed_by stays; recipient_id was set by the removal, so it is cleared.
+    ShareListing.query.filter(ShareListing.item_id == item.id, ShareListing.status == "fulfilled",
+                              ShareListing.fulfilled_at == removed_at
+                              ).update({"status": "open", "fulfilled_at": None, "recipient_id": None},
+                                       synchronize_session=False)
+    item.removed_at = item.outcome = item.waste_reason = item.removed_after_expiry = None
+    db.session.commit()
+    db.session.refresh(item)
+    return jsonify(item=_owner_view(item))
 
 
 # ---- adding food: parse / photo / receipt / barcode -------------------------------------------
