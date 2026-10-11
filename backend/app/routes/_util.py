@@ -122,17 +122,72 @@ def share_summaries(item_ids) -> dict:
                     if l.group_id else {"friends": True, "groups": []})
         out[iid] = {"id": str(l.id), "status": l.status,
                     "claimed_by": {"id": str(uid), "name": name} if uid else None,
-                    "audience": audience}
+                    "audience": audience, "pickup": pickup_view(l)}
     return out
 
 
-def serialize_listing(l) -> dict:
+PICKUP_MAX = 120
+
+
+def pickup_view(l) -> dict | None:
+    """The pickup spot as the API shows it to someone allowed to see it; None when unset."""
+    if l.pickup_note is None and l.pickup_lat is None:
+        return None
+    return {"note": l.pickup_note, "lat": l.pickup_lat, "lng": l.pickup_lng,
+            "place_name": l.pickup_place}
+
+
+def parse_pickup(raw) -> dict | None:
+    """Validate a `pickup` object -> column values, or None when absent/null. Needs a note or a
+    lat+lng pair (both or neither); strings are trimmed, <=120 chars."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise validation_error("pickup must be an object or null.")
+
+    def text(key):
+        v = raw.get(key)
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise validation_error(f"pickup.{key} must be a string.")
+        v = v.strip()
+        if len(v) > PICKUP_MAX:
+            raise validation_error(f"pickup.{key} must be at most {PICKUP_MAX} characters.")
+        return v or None
+
+    note, place = text("note"), text("place_name")
+    lat, lng = raw.get("lat"), raw.get("lng")
+    if (lat is None) != (lng is None):
+        raise validation_error("pickup.lat and pickup.lng must be given together.")
+    if lat is not None:
+        for name, v, bound in (("lat", lat, 90), ("lng", lng, 180)):
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+                raise validation_error(f"pickup.{name} must be a number.")
+            if not -bound <= v <= bound:
+                raise validation_error(f"pickup.{name} must be between -{bound} and {bound}.")
+        lat, lng = float(lat), float(lng)
+    if note is None and lat is None:
+        raise validation_error("pickup needs a note or a lat and lng.")
+    return {"pickup_note": note, "pickup_lat": lat, "pickup_lng": lng, "pickup_place": place}
+
+
+def set_pickup(l, cols) -> None:
+    for k in ("pickup_note", "pickup_lat", "pickup_lng", "pickup_place"):
+        setattr(l, k, cols[k] if cols else None)
+
+
+def serialize_listing(l, viewer_id=None) -> dict:
+    """`pickup` only for the owner and the claimer; everyone else gets null + `pickup_set`."""
+    can_see = viewer_id is not None and viewer_id in (l.owner_id, l.claimed_by)
     return {
         "id": str(l.id), "item_id": str(l.item_id), "owner_id": str(l.owner_id),
         "group_id": str(l.group_id) if l.group_id else None, "status": l.status,
         "recipient_id": str(l.recipient_id) if l.recipient_id else None,
         "claimed_by": str(l.claimed_by) if l.claimed_by else None,
         "created_at": iso(l.created_at), "fulfilled_at": iso(l.fulfilled_at),
+        "pickup": pickup_view(l) if can_see else None,
+        "pickup_set": pickup_view(l) is not None,
     }
 
 

@@ -11,7 +11,7 @@ from sqlalchemy import text
 from app.extensions import db
 
 MIG = str(Path(__file__).resolve().parents[1] / "migrations")
-PREV, REV = "0006_request_audiences", "0007_items_nutrition"
+PREV, REV, HEAD = "0006_request_audiences", "0007_items_nutrition", "0008_share_pickup"
 NUT = '{"basis":"per_100g","kcal":52,"protein_g":0.3,"carbs_g":13.8,"fat_g":0.2,"estimated":true}'
 
 
@@ -56,13 +56,13 @@ def _col():
 
 def test_single_alembic_head_and_linear_chain(app):
     sd = ScriptDirectory(MIG)
-    assert sd.get_heads() == [REV]
-    chain, rev = [], sd.get_revision(REV)
+    assert sd.get_heads() == [HEAD]
+    chain, rev = [], sd.get_revision(HEAD)
     while rev is not None:
         chain.append(rev.revision)
         assert isinstance(rev.down_revision, (str, type(None))), "no merge points / tuples in the chain"
         rev = sd.get_revision(rev.down_revision) if rev.down_revision else None
-    assert chain[:2] == [REV, PREV] and len(chain) == len(set(chain))
+    assert chain[:3] == [HEAD, REV, PREV] and len(chain) == len(set(chain))
 
 
 def test_upgrade_with_existing_data_gives_null_and_loses_nothing(app, at_head):
@@ -84,7 +84,7 @@ def test_upgrade_with_existing_data_gives_null_and_loses_nothing(app, at_head):
         after = [tuple(r) for r in q("SELECT id, name, predicted_expiry, outcome, confidence, freshness FROM items ORDER BY name")]
         assert after == before
         assert q("SELECT count(*) FROM food_events").scalar() == ev
-        assert q("SELECT version_num FROM alembic_version").scalar() == REV
+        assert q("SELECT version_num FROM alembic_version").scalar() == HEAD
 
 
 def test_downgrade_with_nutrition_data_drops_cleanly(app, at_head):
