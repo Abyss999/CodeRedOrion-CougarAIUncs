@@ -73,6 +73,11 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
   (`pepper` mapped to `bell_pepper`, `tomatoes` to `tomato`, `eggs` to `egg`).
 - **Hien_Fridge** - Roboflow Universe, workspace `gracelearning`,
   https://universe.roboflow.com/gracelearning/hien_fridge-tathx . Licence CC BY 4.0. Dropped: the `others` class.
+- **AgriFreshNET Freshness and Shelf-Life Image Dataset** - Risdin, Salauddin, Tufa, Hossain; Mendeley Data,
+  v1, DOI 10.17632/42m5tb7yv9.1, https://data.mendeley.com/datasets/42m5tb7yv9 . Licence CC BY 4.0. Changes:
+  relabelled into our taxonomy (bitter melon -> `bitter_melon`; cucumber, papaya, pineapple, banana, orange, tomato,
+  eggplant), semi-fresh stage kept as `semi_fresh`, day-range suffixes dropped, re-split by inferred specimen.
+  Ingestion code ported from @LemurTech22's pipeline (#21 -> #26).
 
 **Status 2026-10-10 (feat/ml-full-data): all four sources are downloaded and enabled** (no `pending`), under
 `mldata/raw/`:
@@ -82,6 +87,7 @@ into train/val/heldout (plus synthetic low/warm-light copies of held-out images)
 | `fridge_objects` | Roboflow **v1**, exported yolov5pytorch (YOLO txt) | 963 (731/125/107) | CC BY 4.0 | names avocado, bacon, butter, cheese, eggs, lemon, milk, pepper, tomatoes, yogurt match the class_map; all boxes assumed fresh |
 | `hien_fridge` | Roboflow **v12**, yolov8 | 1,912 (1378/363/171; 1,763 kept) | CC BY 4.0 | names apple, egg, milk_carton, others, soda_can, yogurt_container match; `others` dropped; assumed fresh |
 | `fresh_stale_fruits_veg` | Kaggle raghavrpotdar (no version number; downloaded 2026-10-10) | 14,683 files, folder-per-class | **CC0 1.0** | stale -> spoiled, capsicum -> bell_pepper, bitter_gourd dropped (whole image); **`max_per_class: 250`** images per class x freshness (about 2,500 kept, so it does not swamp VegQual 3.2k / fridge 2.9k; chosen by a deterministic hash). Files are augmentations (`name.jpg_0_1039.jpg`) of far fewer originals; `Screen Shot <date> at <time>` names give capture times. |
+| `agrifreshnet` | Mendeley Data **v1**, DOI 10.17632/42m5tb7yv9.1 (`Processed Data.zip`, 348 MB, downloaded 2026-10-10) | 14,185 (24 folders x 591: 8 produce x fresh / semi_fresh / rotten) | CC BY 4.0 | ingested with `python -m pipeline ingest-dataset --adapter agrifreshnet` (#26); **same specimens assumed across shelf-life stages** -> grouped by inferred specimen before splitting (PR A2). The uniform 591 per folder suggests augmented/balanced copies; QA checks near-duplicates. |
 Kaggle in the notebook uses the `KAGGLE_API_TOKEN` secret as a Bearer token against the Kaggle REST API
 (`/api/v1/datasets/download/<owner>/<dataset>`).
 
