@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark: Claimed item</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;color:#E8F0DA}
+a{color:#B9D871}a:hover{color:#E8F0DA}
+
+body{background:#0F1A12}</style>
+</helmet>
+<main style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1A12; padding: 56px 20px 34px; display: flex; flex-direction: column; gap: 14px">
+  <header style="display: flex; align-items: center">
+    <a href="FoodPantry.dark.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: #18261B; box-shadow: inset 0 0 0 1px #34483A">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+  </header>
+
+  <section style="display: flex; align-items: center; gap: 14px">
+    <div style="width: 56px; height: 56px; border-radius: 16px; background: #33290F; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#E8C46A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11a4 4 0 0 1 1-7h12a4 4 0 0 1 1 7v9H5zM9 11v5M15 11v5"></path></svg>
+    </div>
+    <div style="flex: 1; min-width: 0">
+      <h1 style="margin: 0; font-family: Outfit, sans-serif; font-size: 26px; font-weight: 600; line-height: 1.15; color: #E8F0DA">Sourdough, half loaf</h1>
+      <p style="margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 14px; color: #9DB09F">From Theo Nguyen<span style="font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #24361F; color: #B9D871; white-space: nowrap">2–3 days</span></p>
+    </div>
+  </section>
+
+  <div role="status" style="display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 14px; border-radius: 12px; background: #24361F; color: #B9D871; font-size: 16px; font-weight: 600">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="10" cy="8" r="4"></circle><path d="M2.5 21c0-4 3.4-7 7.5-7 1.6 0 3 .4 4.2 1.2M15 19l2 2 4-4"></path></svg>You claimed this</div>
+
+  <section aria-labelledby="cl-pickup" style="background: #18261B; border-radius: 16px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px">
+    <h2 id="cl-pickup" style="margin: 0; font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600; color: #E8F0DA">Pickup spot</h2>
+    <div style="height: 170px; width: 100%; border-radius: 12px; overflow: hidden; background: #223024; flex-shrink: 0"><svg width="100%" height="100%" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Apple Maps preview: pin at Cougar Village 2, lobby" fill="none" stroke-linecap="round"><path d="M-10 46H330M-10 118H330M64 -10V180M184 -10V180M262 -10V180" stroke="#13261A" stroke-width="9"></path><path d="M-10 152L120 76L330 20M124 46V118M184 82H262" stroke="#13261A" stroke-width="4"></path><path d="M150 50c-11 0-20 8.6-20 19.5C130 84 150 104 150 104s20-20 20-34.5C170 58.6 161 50 150 50z" fill="#B9D871"></path><circle cx="150" cy="69" r="7" fill="#13261A"></circle></svg></div>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 16px; font-weight: 600; color: #E8F0DA">Cougar Village 2, lobby</span>
+      <span style="font-size: 15px; line-height: 1.35; color: #C9D6BC">Paper bag on the lobby shelf, says Theo</span>
+    </div>
+  </section>
+
+  <div style="margin-top: auto">
+    <button type="button" aria-label="Open Cougar Village 2, lobby in Maps" style="width: 100%; height: 56px; border: 0; border-radius: 16px; background: #B9D871; color: #13261A; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: Outfit, sans-serif; font-weight: 600; font-size: 17px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"></path></svg>Open in Maps</button>
+  </div>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
