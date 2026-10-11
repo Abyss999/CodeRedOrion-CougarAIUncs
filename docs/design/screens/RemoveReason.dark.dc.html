@@ -31,10 +31,10 @@ body{background:#0F1A12}</style>
     <ul aria-labelledby="rr-title" style="list-style: none; margin: 0; padding: 0; background: #18261B; border-radius: 16px; overflow: hidden">
       <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
         <li style="{{r.rowStyle}}">
-          <button style="width: 100%; min-height: 56px; border: 0; background: transparent; padding: 8px 16px; display: flex; align-items: center; gap: 14px; text-align: left; color: #E8F0DA">
-            <span style="width: 36px; height: 36px; border-radius: 10px; background: #24361F; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{r.icon}}"></path></svg></span>
-            <span style="font-family: Outfit, sans-serif; font-size: 17px; font-weight: 600">{{r.label}}</span>
+          <button style="width: 100%; min-height: 68px; border: 0; background: transparent; padding: 12px 16px; display: flex; align-items: center; gap: 14px; text-align: left; color: #E8F0DA">
+            <span style="width: 40px; height: 40px; border-radius: 12px; background: #24361F; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B9D871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{r.icon}}"></path></svg></span>
+            <span style="font-family: Outfit, sans-serif; font-size: 18px; font-weight: 600">{{r.label}}</span>
           </button>
         </li>
       </sc-for>

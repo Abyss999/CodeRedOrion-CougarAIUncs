@@ -9,7 +9,7 @@ in [`screens/`](screens/) and are **awaiting team approval** (see `README.md`).
 2. **No helper captions.** Labels say it. Explanations go in VoiceOver hints or on detail screens.
 3. **Predictions read as estimates.** An estimated expiry 2+ days out shows a range ending at the predicted date ("2–3 days", "4–5 days", "6–7 days", "1–2 weeks" for 8–14, "2–3 weeks" for 15–21, "3+ weeks" for 22 or more). Today / Tomorrow / Expired and user-entered dates stay exact. Never show data we don't have, e.g. freshness for an item no photo has assessed.
 4. **Units follow Settings** (default US: lb / oz). The API stays metric, and the client converts.
-5. **Home routes to Settings (avatar) and Impact (saved pill), and every tab reaches Home in one tap.** Fridge, Recipes and Social don't repeat those buttons.
+5. **Home routes to Settings (a gear; no profile picture) and Impact (saved pill), and every tab reaches Home in one tap.** Fridge, Recipes and Social don't repeat those buttons.
 6. **Prefer inline choices over chained alerts** (e.g. spoiled items in Photo review get Toss it / Keep it buttons in place).
 
 ## Color
@@ -143,7 +143,7 @@ Tokens `Theme.Motion.quick / standard / emphasized`, plus a 40 ms stagger capped
 | `SpoilageFlag` | Fridge | No separate flag: spoiled shows as the urgent badge "Looks off" (Principle 1) |
 | `StorageSegmented` | Fridge | Fridge / Pantry / Freezer |
 | `RemoveSheet` | Remove | 3 outcome tiles, all outlined on `surface`; the selected one (Shared it, with its Given-to row) fills `limeTint`. *Used it* acts in one tap |
-| `WasteReasonList` | Remove | A grouped list of four 56 pt one-tap rows (icon + title): Expired, Forgot about it, Didn't like it, Other |
+| `WasteReasonList` | Remove | A grouped list of four 68 pt one-tap rows (icon + title): Expired, Forgot about it, Didn't like it, Other |
 | `AddSheet` | Add | Hero tile (fridge photo) + 2×2 tiles (one item, type/say, barcode, receipt) |
 | `PantryWidget` | Social | `lime` card: 3 food tiles (group icon + name, no quantities) plus a "+N more" tile. The whole card is a link that pushes Food Pantry (row 18) |
 | `RequestNote` | Social | Sticky note: source header, text, who/when, an **Offer** button that opens the Offer confirmation |

@@ -33,8 +33,6 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       </div>
       <span aria-label="Expires tomorrow" style="font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 10px; background: #FBE3CF; color: #8A3B0E; white-space: nowrap; flex-shrink: 0">Tomorrow</span>
     </header>
-    <p style="margin: 0; font-size: 16px; font-weight: 600">What happened to it?</p>
-
     <div role="group" aria-label="What happened to it?" style="display: flex; flex-direction: column; gap: 10px">
       <button type="button" style="display: flex; align-items: center; gap: 14px; min-height: 68px; padding: 12px 16px; border: 0; border-radius: 16px; background: #FFFFFF; color: #13261A; text-align: left; box-shadow: inset 0 0 0 1px #D3E0BF">
         <span style="width: 40px; height: 40px; border-radius: 12px; background: #EEF5D6; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
@@ -55,12 +53,28 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       </a>
     </div>
 
+    <div style="position: relative">
     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 4px 6px 4px 16px; border-radius: 14px; background: #FFFFFF; box-shadow: inset 0 0 0 1px #D3E0BF">
       <span id="given-label" style="font-size: 16px; color: #13261A">Given to</span>
       <button id="given-menu" aria-haspopup="menu" aria-expanded="true" aria-labelledby="given-label given-value" style="min-height: 44px; min-width: 44px; max-width: 230px; border: 0; border-radius: 10px; background: transparent; padding: 0 10px; display: flex; align-items: center; gap: 6px; color: #1F4D2B; font-size: 16px; font-weight: 600">
+        <span aria-hidden="true" style="display: flex; flex-shrink: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 11l2 2 4-4"></path></svg></span>
         <span id="given-value" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{givenTo}}</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg>
       </button>
+    </div>
+
+    <ul role="menu" aria-labelledby="given-label" style="position: absolute; right: 0; bottom: calc(100% + 8px); width: 248px; z-index: 2; list-style: none; margin: 0; padding: 4px 0; background: #FFFFFF; border-radius: 14px; box-shadow: 0 12px 32px rgba(19,38,26,0.22), inset 0 0 0 1px #E6EDD6">
+      <sc-for list="{{people}}" as="o" hint-placeholder-count="4">
+        <li role="none" style="{{o.rowStyle}}">
+          <button role="menuitemradio" aria-checked="{{o.checked}}" style="width: 100%; min-height: 44px; border: 0; background: transparent; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 8px; text-align: left; color: #13261A; font-size: 16px">
+            <span style="width: 18px; display: flex; flex-shrink: 0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{o.checkStroke}}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg></span>
+            <span style="flex: 1; min-width: 0">{{o.name}}</span>
+            <sc-if value="{{o.claimer}}" hint-placeholder-val="{{ false }}"><span role="img" aria-label="Claimed it" style="display: flex; color: #1F4D2B; flex-shrink: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 11l2 2 4-4"></path></svg></span></sc-if>
+          </button>
+        </li>
+      </sc-for>
+    </ul>
     </div>
 
     <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
@@ -68,17 +82,6 @@ a{color:#1F4D2B}a:hover{color:#13261A}
       <button style="height: 48px; border: 0; border-radius: 14px; background: #1F4D2B; color: #F4F8E8; font-size: 16px; font-weight: 600">Done</button>
     </div>
 
-    <ul role="menu" aria-labelledby="given-label" style="position: absolute; right: 20px; bottom: 170px; width: 248px; list-style: none; margin: 0; padding: 4px 0; background: #FFFFFF; border-radius: 14px; box-shadow: 0 12px 32px rgba(19,38,26,0.22), inset 0 0 0 1px #E6EDD6">
-      <sc-for list="{{people}}" as="o" hint-placeholder-count="4">
-        <li role="none" style="{{o.rowStyle}}">
-          <button role="menuitemradio" aria-checked="{{o.checked}}" style="width: 100%; min-height: 44px; border: 0; background: transparent; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 8px; text-align: left; color: #13261A; font-size: 16px">
-            <span style="width: 18px; display: flex; flex-shrink: 0">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{o.checkStroke}}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg></span>
-            <span style="flex: 1; min-width: 0">{{o.name}}</span>
-          </button>
-        </li>
-      </sc-for>
-    </ul>
   </section>
 </div>
 </x-dc>
@@ -86,11 +89,11 @@ a{color:#1F4D2B}a:hover{color:#13261A}
 class Component extends DCLogic {
 renderVals() {
 const hair = 'border-bottom: 1px solid #E6EDD6';
-const p = (name, checked, rowStyle) => ({ name, checked: checked ? 'true' : 'false', checkStroke: checked ? '#1F4D2B' : 'transparent', rowStyle });
+const p = (name, checked, rowStyle, claimer) => ({ claimer: !!claimer, name, checked: checked ? 'true' : 'false', checkStroke: checked ? '#1F4D2B' : 'transparent', rowStyle });
 return {
-givenTo: 'Marcus Ojeda (claimed it)',
+givenTo: 'Marcus Ojeda',
 people: [
-p('Marcus Ojeda (claimed it)', true, hair),
+p('Marcus Ojeda', true, hair, true),
 p('Dana Whitfield', false, hair),
 p('Theo Nguyen', false, 'border-bottom: 6px solid #E6EDD6'),
 p('Someone not on BiteDown', false, 'border-bottom: 0')
